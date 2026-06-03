@@ -5,6 +5,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
+import redis.asyncio as aioredis
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -16,6 +17,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+# httpx за замовчуванням пише повний URL у INFO. Memory кличе Ollama embeddings
+# без секретів у URL, але уніфікуємо рівень логування з gateway/tools — менше шуму.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("jarvis.memory")
 
 
@@ -45,10 +49,19 @@ class HistoryRequest(BaseModel):
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.db = DB(settings.dsn)
     await app.state.db.connect()
-    app.state.embedder = Embedder(settings.ollama_host, settings.embed_model)
-    logger.info("Memory up. embed_model=%s", settings.embed_model)
+    app.state.redis = aioredis.from_url(
+        settings.redis_url, encoding="utf-8", decode_responses=True
+    )
+    app.state.embedder = Embedder(
+        settings.ollama_host,
+        settings.embed_model,
+        redis=app.state.redis,
+        cache_ttl=settings.embed_cache_ttl,
+    )
+    logger.info("Memory up. embed_model=%s (redis cache on)", settings.embed_model)
     yield
     await app.state.embedder.aclose()
+    await app.state.redis.aclose()
     await app.state.db.close()
 
 

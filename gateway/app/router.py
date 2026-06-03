@@ -10,6 +10,7 @@ from .auth import is_allowed
 from .orchestrator import Orchestrator
 from .ratelimit import RateLimiter
 from .telegram import TelegramClient
+from .tts_client import TtsClient
 from .whisper import WhisperClient
 
 logger = logging.getLogger("jarvis.router")
@@ -48,6 +49,7 @@ async def handle_update(
     orch: Orchestrator,
     stt: WhisperClient,
     limiter: RateLimiter,
+    tts: TtsClient | None = None,
 ) -> None:
     message = _extract_message(update)
     if message is None:
@@ -95,3 +97,10 @@ async def handle_update(
         }
     )
     await tg.send_message(chat_id, reply)
+
+    # Голосова відповідь: якщо ввімкнено і користувач писав голосом — додатково шлемо аудіо.
+    # Текст уже надіслано вище, тож збій TTS не лишає користувача без відповіді.
+    if tts is not None and source == "voice" and reply:
+        audio = await tts.synthesize(reply)
+        if audio:
+            await tg.send_voice(chat_id, audio)

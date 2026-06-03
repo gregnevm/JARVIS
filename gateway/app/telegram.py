@@ -70,3 +70,15 @@ class TelegramClient:
         resp = await self._client.get(f"{self._files}/{file_path}")
         resp.raise_for_status()
         return resp.content
+
+    async def send_voice(self, chat_id: int, audio: bytes, caption: str | None = None) -> None:
+        """Надсилає голосове (OGG/Opus). Помилки логуються, не кидаються."""
+        data: dict[str, str] = {"chat_id": str(chat_id)}
+        if caption:
+            data["caption"] = caption[:1024]
+        files = {"voice": ("voice.ogg", audio, "audio/ogg")}
+        try:
+            resp = await self._client.post(f"{self._api}/sendVoice", data=data, files=files)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.error("sendVoice failed: %s", exc)

@@ -85,7 +85,8 @@ def test_parse_ddg_respects_limit():
 def test_schemas_default_excludes_code_exec(monkeypatch):
     monkeypatch.setattr(settings, "enable_code_exec", False)
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
-    assert names == ["calc", "web_search", "web_fetch"]
+    assert names == ["calc", "web_search", "web_fetch", "take_note", "recall_notes"]
+    assert "code_exec" not in names
 
 
 def test_schemas_include_code_exec_when_enabled(monkeypatch):

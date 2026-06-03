@@ -11,11 +11,17 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     allowed_user_ids: str = ""
     telegram_api_base: str = "https://api.telegram.org"
+    # Секрет вебхука: Telegram шле його у заголовку X-Telegram-Bot-Api-Secret-Token.
+    # Порожньо = перевірка вимкнена (бекв-сумісно). Став разом із setWebhook secret_token.
+    telegram_webhook_secret: str = ""
 
     # Внутрішні сервіси
     n8n_webhook_url: str = "http://n8n:5678/webhook/agent"
     whisper_url: str = "http://whisper:9000"
     whisper_language: str = ""  # порожньо = автовизначення мови
+    tts_url: str = "http://tts:8300"
+    # Голосова відповідь (TTS) на голосові повідомлення. Вимкнено за замовчуванням.
+    enable_voice_reply: bool = False
     redis_url: str = "redis://redis:6379/0"
     # Агент-луп на CPU повільний (кілька викликів Ollama) — тримаємо запас.
     orchestrator_timeout: float = 300.0

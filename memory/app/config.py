@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     short_term_limit: int = 10
 
+    # Redis — кеш ембедингів (необов'язковий; fail-open якщо недоступний).
+    redis_url: str = "redis://redis:6379/0"
+    embed_cache_ttl: int = 86400  # 24 год
+
     @property
     def dsn(self) -> str:
         return (

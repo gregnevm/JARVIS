@@ -18,6 +18,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+# httpx за замовчуванням пише повний URL у INFO. Tools кличе memory/Ollama
+# без секретів, але уніфікуємо з gateway (де через httpx тік Telegram-токен).
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("jarvis.tools.main")
 
 

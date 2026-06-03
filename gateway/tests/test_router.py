@@ -8,17 +8,29 @@ from app.config import settings
 class FakeTG:
     def __init__(self, file_path: str = "", content: bytes = b"") -> None:
         self.sent: list[tuple[int, str]] = []
+        self.voices: list[tuple[int, bytes]] = []
         self._file_path = file_path
         self._content = content
 
     async def send_message(self, chat_id, text, parse_mode=None):
         self.sent.append((chat_id, text))
 
+    async def send_voice(self, chat_id, audio, caption=None):
+        self.voices.append((chat_id, audio))
+
     async def get_file_path(self, file_id):
         return self._file_path
 
     async def download_file(self, file_path):
         return self._content
+
+
+class FakeTts:
+    def __init__(self, audio: bytes = b"OGG") -> None:
+        self._audio = audio
+
+    async def synthesize(self, text):
+        return self._audio
 
 
 class FakeOrch:
@@ -120,3 +132,35 @@ async def test_voice_unrecognized(monkeypatch):
     )
     assert any("розпізнати" in t.lower() for _, t in tg.sent)
     assert orch.calls == []
+
+
+async def test_voice_reply_when_enabled(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_user_ids", "42")
+    tg = FakeTG(file_path="voice/f.ogg", content=b"audio")
+    orch = FakeOrch("ВІДПОВІДЬ")
+    await router.handle_update(
+        _msg(voice={"file_id": "abc"}), tg, orch, FakeSTT("розпізнано"), FakeLimiter(True),
+        FakeTts(b"OGGDATA"),
+    )
+    assert tg.voices and tg.voices[-1] == (5, b"OGGDATA")  # голосове надіслано
+    assert any(t == "ВІДПОВІДЬ" for _, t in tg.sent)  # текст теж (надійність)
+
+
+async def test_no_voice_reply_for_text_source(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_user_ids", "42")
+    tg = FakeTG()
+    orch = FakeOrch("ВІДПОВІДЬ")
+    await router.handle_update(
+        _msg(text="привіт"), tg, orch, FakeSTT(), FakeLimiter(True), FakeTts(),
+    )
+    assert tg.voices == []  # на текстове повідомлення голосом не відповідаємо
+
+
+async def test_voice_reply_skipped_when_tts_none(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_user_ids", "42")
+    tg = FakeTG(file_path="voice/f.ogg", content=b"audio")
+    orch = FakeOrch("ВІДПОВІДЬ")
+    await router.handle_update(
+        _msg(voice={"file_id": "abc"}), tg, orch, FakeSTT("розпізнано"), FakeLimiter(True), None,
+    )
+    assert tg.voices == []  # tts=None → лише текст

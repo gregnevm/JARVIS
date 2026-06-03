@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # Сусідні сервіси
     memory_url: str = "http://memory:8100"
 
+    # Шлях до даних (персональні нотатки тощо) — том ./data:/data у compose.
+    data_dir: str = "/data"
+
     # Безпека / ліміти
     enable_code_exec: bool = False
     http_timeout: float = 20.0          # web_fetch / web_search

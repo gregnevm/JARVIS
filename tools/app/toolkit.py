@@ -12,6 +12,8 @@ import logging
 import re
 import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -191,6 +193,48 @@ def code_exec(code: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# take_note / recall_notes — персональні нотатки користувача (файл у /data)
+# --------------------------------------------------------------------------- #
+def _notes_file(user_id: int) -> Path:
+    d = Path(settings.data_dir) / "notes"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{int(user_id)}.jsonl"
+
+
+def take_note(text: str, user_id: int) -> str:
+    text = (text or "").strip()
+    if not text:
+        return "Порожня нотатка."
+    try:
+        rec = {"ts": int(time.time()), "text": text[:2000]}
+        with _notes_file(user_id).open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        return f"Не вдалося зберегти нотатку: {exc}"
+    return "Нотатку збережено ✅"
+
+
+def recall_notes(user_id: int, limit: int = 10) -> str:
+    limit = max(1, min(limit, 50))
+    p = _notes_file(user_id)
+    if not p.is_file():
+        return "Нотаток поки немає."
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return f"Не вдалося прочитати нотатки: {exc}"
+    out: list[str] = []
+    for ln in lines[-limit:]:
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError:
+            continue
+        ts = datetime.fromtimestamp(int(rec.get("ts", 0))).strftime("%Y-%m-%d %H:%M")
+        out.append(f"• [{ts}] {rec.get('text', '')}")
+    return "\n".join(out) if out else "Нотаток поки немає."
+
+
+# --------------------------------------------------------------------------- #
 # Схеми інструментів (OpenAI function format) + диспетчер для агент-лупа
 # --------------------------------------------------------------------------- #
 def _schema(name: str, desc: str, props: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -213,6 +257,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             {"query": {**_STR, "description": "пошуковий запит"}}, ["query"]),
     _schema("web_fetch", "Завантажити сторінку за URL і повернути її текст.",
             {"url": {**_STR, "description": "повний http(s) URL"}}, ["url"]),
+    _schema("take_note", "Зберегти персональну нотатку користувача на майбутнє.",
+            {"text": {**_STR, "description": "текст нотатки"}}, ["text"]),
+    _schema("recall_notes", "Показати останні збережені нотатки користувача.",
+            {}, []),
 ]
 
 _CODE_SCHEMA = _schema(
@@ -229,8 +277,11 @@ def agent_tool_schemas() -> list[dict[str, Any]]:
     return schemas
 
 
-async def dispatch(name: str, arguments: dict[str, Any]) -> str:
-    """Викликає інструмент за іменем. Помилки повертаються текстом (модель їх читає)."""
+async def dispatch(name: str, arguments: dict[str, Any], user_id: int = 0) -> str:
+    """Викликає інструмент за іменем. Помилки повертаються текстом (модель їх читає).
+
+    user_id потрібен персональним інструментам (нотатки) — пробрасується з агент-лупа.
+    """
     try:
         if name == "calc":
             return calc(str(arguments.get("expression", "")))
@@ -242,6 +293,15 @@ async def dispatch(name: str, arguments: dict[str, Any]) -> str:
             return parse_file(str(arguments.get("path", "")))
         if name == "code_exec":
             return await asyncio.to_thread(code_exec, str(arguments.get("code", "")))
+        if name == "take_note":
+            return take_note(str(arguments.get("text", "")), user_id)
+        if name == "recall_notes":
+            raw_limit = arguments.get("limit", 10)
+            try:
+                limit = int(raw_limit)
+            except (TypeError, ValueError):
+                limit = 10
+            return recall_notes(user_id, limit)
     except Exception as exc:  # noqa: BLE001
         logger.exception("tool %s failed", name)
         return f"Інструмент {name} впав: {exc}"

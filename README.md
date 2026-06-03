@@ -60,8 +60,28 @@ ollama pull nomic-embed-text         # EMBED_MODEL — ембединги (768 �
 > триває хвилини. Для CPU став non-thinking instruct, напр.:
 > `ollama pull qwen2.5:3b-instruct` і `OLLAMA_MODEL_CHAT=qwen2.5:3b-instruct`.
 
+### AMD GPU без ROCm — через Vulkan (експериментально, але працює)
+
+ROCm на Windows для Ollama підтримує тільки **RDNA2/RDNA3** (RX 6000/7000). Старіші
+карти (RDNA1 — RX 5700 XT тощо) офіційно «не підтримуються». **Обхід — `OLLAMA_VULKAN=1`**:
+
+```powershell
+# зупинити поточну Ollama (якщо крутиться):
+Get-Process ollama -EA SilentlyContinue | Stop-Process -Force
+# стартувати з Vulkan-бекендом:
+$env:OLLAMA_VULKAN=1; $env:OLLAMA_HOST="0.0.0.0:11434"; ollama serve
+```
+
+Перевірено наживо на **AMD Radeon RX 5700 XT (8 ГБ VRAM)**: qwen2.5:7b-instruct
+дає ~50-60 tok/s — **~8× швидше за CPU** на тій самій машині. Vulkan працює на
+будь-якому сучасному GPU включно з RDNA1, тож це найпростіший шлях оживити
+не-NVIDIA залізо. На NVIDIA Ollama використовує CUDA автоматично — Vulkan не потрібен.
+
 Моделі можна змінити у `.env`. Але якщо міняєш `EMBED_MODEL` на модель з **іншою
 розмірністю** вектора — треба синхронізувати `vector(768)` у `db/init.sql` (це міграція).
+
+> **Зміна `.env` уже після старту:** `docker compose restart <svc>` **НЕ** перечитує
+> `env_file`. Щоб новий env підхопився — `docker compose up -d <svc>` (recreate).
 
 ---
 
@@ -96,6 +116,9 @@ docker compose ps                     # статуси + healthcheck
 1. **Токен:** напиши [@BotFather](https://t.me/BotFather) → `/newbot` → отримаєш `TELEGRAM_BOT_TOKEN`.
 2. **Свій user_id:** напиши [@userinfobot](https://t.me/userinfobot) — він поверне твій числовий ID.
    Впиши його в `ALLOWED_USER_IDS` (кілька — через кому). Бот ігнорує всіх, кого нема у списку.
+3. **Секрет вебхука:** згенеруй `python -c "import secrets;print(secrets.token_hex(24))"` →
+   у `.env` `TELEGRAM_WEBHOOK_SECRET=...`. Gateway перевіряє заголовок
+   `X-Telegram-Bot-Api-Secret-Token` і відкидає підроблені апдієти (403). Порожньо = вимкнено.
 
 ### Вебхук назовні через cloudflared (безкоштовно, без домену)
 
@@ -104,12 +127,24 @@ Telegram має достукатися до твого `gateway:8000`. Найп�
 ```bash
 # одноразовий тимчасовий тунель (видає випадковий https-домен)
 cloudflared tunnel --url http://localhost:8000
+```
 
-# отриманий https://<random>.trycloudflare.com реєструємо як вебхук:
+Реєстрація вебхука — скриптом (читає токен+секрет із `.env`, додає `secret_token`):
+
+```powershell
+# Windows:
+powershell -File scripts/set_webhook.ps1 -Url https://<random>.trycloudflare.com
+powershell -File scripts/set_webhook.ps1 -Info     # показати поточний стан
+```
+
+Або вручну (без секрету — менш безпечно):
+```bash
 curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https://<random>.trycloudflare.com/webhook"
 ```
 
-Альтернатива для постійного домену — Nginx + TLS (закоментований блок `nginx` у compose).
+> Quick-тунель дає **новий URL при кожному перезапуску** → треба заново реєструвати вебхук.
+> Для стабільної адреси — named tunnel (`cloudflared tunnel create`) або Nginx+TLS
+> (закоментований блок `nginx` у compose). Деталі — у `ROADMAP.md` (M2).
 
 ---
 

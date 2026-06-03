@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
@@ -23,16 +24,37 @@ SYSTEM_CHAT = "Ти JARVIS — лаконічний помічник. Відпо
 SYSTEM_AGENT = (
     "Ти JARVIS — помічник з інструментами. Користуйся ними, коли треба порахувати, "
     "знайти свіжу інформацію або відкрити сторінку. Не вигадуй фактів — перевіряй "
-    "інструментами. Фінальну відповідь дай українською, стисло, звичайним текстом."
+    "інструментами. Аргументи інструментів передавай мовою оригіналу (українською) — "
+    "НЕ транслітеруй. Фінальну відповідь дай українською, стисло, звичайним текстом."
 )
 
 _URL_RE = re.compile(r"https?://", re.IGNORECASE)
 _MATH_RE = re.compile(r"\d\s*[-+*/^]\s*\d")
 _KW_RE = re.compile(
     r"(знайд|пошук|загугл|google|search|погод|\bкурс\b|новин|обчисл|пораху|"
-    r"скільки буде|calculate|відкрий\s+http)",
+    r"скільки буде|calculate|відкрий\s+http|нотатк|запиши|занотуй|нагадай)",
     re.IGNORECASE,
 )
+
+# Деякі моделі (qwen2.5 в Ollama) інколи емітять tool call як текст
+# <tool_call>{"name":..., "arguments":{...}}</tool_call> замість поля tool_calls.
+# Ловимо такий inline-JSON як фолбек, щоб не зливати «сирий» виклик користувачу.
+_INLINE_TOOL_RE = re.compile(
+    r'\{\s*"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*(\{.*?\})\s*\}',
+    re.DOTALL,
+)
+
+
+def _parse_inline_tool_calls(content: str) -> list[dict[str, Any]]:
+    """Витягує tool calls, які модель помилково віддала текстом, а не у tool_calls."""
+    out: list[dict[str, Any]] = []
+    for m in _INLINE_TOOL_RE.finditer(content or ""):
+        try:
+            args = json.loads(m.group(2))
+        except json.JSONDecodeError:
+            args = {}
+        out.append({"function": {"name": m.group(1), "arguments": args}})
+    return out
 
 
 def decide_mode(text: str, agent_mode: str) -> str:
@@ -70,7 +92,7 @@ class AgentRunner:
         if mode == "chat":
             answer, iters = await self._chat(text, ctx), 0
         else:
-            answer, iters = await self._agent(text, ctx)
+            answer, iters = await self._agent(text, ctx, user_id)
 
         await self._mem.store(user_id, text, role="user")
         if answer:
@@ -87,7 +109,7 @@ class AgentRunner:
         )
         return (msg.get("content") or "").strip()
 
-    async def _agent(self, text: str, ctx: str) -> tuple[str, int]:
+    async def _agent(self, text: str, ctx: str, user_id: int) -> tuple[str, int]:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": _sys_with_ctx(SYSTEM_AGENT, ctx)},
             {"role": "user", "content": text},
@@ -97,13 +119,17 @@ class AgentRunner:
             msg = await self._ollama.chat(settings.ollama_model_agent, messages, tools=tools)
             messages.append(_assistant_msg(msg))
             calls = msg.get("tool_calls") or []
+            content = msg.get("content") or ""
             if not calls:
-                return (msg.get("content") or "").strip(), i
+                # Фолбек: модель могла віддати tool call текстом (inline XML/JSON).
+                calls = _parse_inline_tool_calls(content)
+            if not calls:
+                return content.strip(), i
             for call in calls:
                 fn = call.get("function") or {}
                 name = str(fn.get("name", ""))
                 args = coerce_args(fn.get("arguments"))
-                result = await dispatch(name, args)
+                result = await dispatch(name, args, user_id)
                 logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
                 messages.append({"role": "tool", "content": f"[{name}] {result}"})
 
