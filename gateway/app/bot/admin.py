@@ -39,7 +39,8 @@ async def load_pending(redis: aioredis.Redis, user_id: int, code: str | None = N
     raw = await redis.get(_pending_key(user_id))
     if not raw:
         return None
-    stored_code, _, action = raw.partition(":")
+    text = raw.decode() if isinstance(raw, (bytes, bytearray)) else str(raw)
+    stored_code, _, action = text.partition(":")
     if code is not None and stored_code != code.lower().strip():
         return None
     return action
@@ -143,7 +144,7 @@ async def handle_admin_command(
         )
         return True
 
-    action: str | None = None
+    action = None
     if len(parts) >= 2 and parts[1] == "reset":
         action = "mode:reset"
     elif len(parts) >= 3 and parts[1] == "mode" and parts[2] in ("chat", "agent", "hybrid"):

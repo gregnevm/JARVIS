@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import httpx
 
 from jarvis_core.llm.interface import LLMInterface
@@ -22,7 +24,7 @@ class KoboldAdapter(LLMInterface):
         results = resp.json().get("results") or []
         return str(results[0].get("text", "")) if results else ""
 
-    def stream(self, prompt: str, max_tokens: int = 512):
+    def stream(self, prompt: str, max_tokens: int = 512) -> Iterator[str]:
         with self._client.stream(
             "POST",
             f"{self._url}/api/extra/generate/stream",
@@ -60,7 +62,7 @@ class OllamaAdapter(LLMInterface):
         resp.raise_for_status()
         return str(resp.json().get("response", ""))
 
-    def stream(self, prompt: str, max_tokens: int = 512):
+    def stream(self, prompt: str, max_tokens: int = 512) -> Iterator[str]:
         with self._client.stream(
             "POST",
             f"{self._url}/api/generate",

@@ -3,3 +3,6 @@
 mypy>=1.8
 pytest>=8.0
 pytest-asyncio>=0.24
+# pydantic потрібен mypy-плагіну (pyproject: plugins=["pydantic.mypy"]) у CI-джобі
+# jarvis_core, де він інакше не ставиться як транзитивна залежність.
+pydantic>=2
