@@ -11,8 +11,12 @@
 ## Прогрес (оновлено 2026-06-03)
 
 - ✅ **M1** Persistent Ollama (Vulkan+keep_alive 24h, автозапуск) — зроблено, verified.
-- ⏸️ **M2** Named tunnel — потребує Cloudflare-акаунта (інструкція нижче), за користувачем.
-- ✅ **M3** Webhook secret_token — зроблено, verified (403/200), `scripts/set_webhook.ps1`.
+- ✅ **M2** Long polling (getUpdates) як дефолт — **без публічного URL/тунелю**, переживає
+  рестарти сам. Прибрано quick-tunnel машинерію (cloudflared/`tunnel`/хостові скрипти).
+  `TELEGRAM_INGEST_MODE=polling|webhook`.
+- ⏸️ **M2b** Webhook-режим для прода — named tunnel / домен + reverse proxy,
+  `TELEGRAM_INGEST_MODE=webhook` + одноразовий setWebhook. За потреби.
+- ✅ **M3** Webhook secret_token — `/webhook` перевіряє `X-Telegram-Bot-Api-Secret-Token` (403/200).
 - ⏸️ **M4** Ротація токена — за користувачем (@BotFather).
 - ✅ **N4** Кеш ембедингів у Redis — зроблено, verified (кеш-хіт 0.01с).
 - ✅ **N5** Log rotation — зроблено (≤50 МБ/контейнер).
@@ -45,32 +49,45 @@ TG-запит < 5с (модель уже в VRAM).
 
 ---
 
-### M2. Cloudflare named tunnel замість quick tunnel
-**Зараз:** `cloudflared tunnel --url http://localhost:8000` дає одноразовий
-`<random>.trycloudflare.com`. При перезапуску URL змінюється → треба оновлювати
-Telegram webhook руками. Якщо тунель упав посеред дня — бот мовчить.
+### M2. Long polling замість webhook+тунель ✅
+**Було:** `cloudflared tunnel --url http://localhost:8000` дає одноразовий
+`<random>.trycloudflare.com`; при перезапуску URL змінюється → webhook протухає,
+530, бот мовчить. Спроба автоматизувати quick tunnel (сервіс `tunnel` + хостовий
+cloudflared + парсинг URL із логів) виявилась крихкою: `api.trycloudflare.com`
+у мережі періодично недоступний, URL нестабільний.
 
-**Зробити:** іменований тунель `cloudflared tunnel create jarvis`, CNAME на
-свій домен (або безкоштовний `.cf` через Cloudflare Zero Trust), `cloudflared
-service install` як Windows service. Webhook ставимо **один раз** на постійну
-адресу.
+**Зроблено:** gateway отримує апдейти через **getUpdates (long polling)** —
+`TELEGRAM_INGEST_MODE=polling` (дефолт). Жодного публічного URL, тунелю чи домену;
+потрібен лише вихідний HTTPS до `api.telegram.org`. На старті gateway сам знімає
+старий webhook. Quick-tunnel код/скрипти видалені.
+
+**Чому це не блокує масштаб:** Telegram віддає апдейти лише одному споживачу на
+токен — webhook теж «один прийом». Масштабована вісь — обробка, не прийом:
+*ingestion → черга (Redis) → N воркерів* (див. нижче, S1). Перехід на webhook у
+проді — це `TELEGRAM_INGEST_MODE=webhook` + одноразовий setWebhook, без змін логіки.
 
 **Перевірка:** ребут хоста → бот відповідає без жодного ручного кроку.
 
+### S1. Масштаб обробки: ingestion → черга → воркери (коли знадобиться)
+**Ідея (YAGNI — не зараз):** `router.handle_update(update, ...)` уже приймає чистий
+dict, тож джерело прийому відв'язане від обробки. Коли навантаження виросте:
+ingestion (polling **або** webhook) кладе апдейт у Redis-чергу; N stateless-воркерів
+споживають і обробляють паралельно. Це і є «винести модуль у сервіс без
+рефакторингу логіки» з DESIGN. Зараз конкурентність дає `asyncio.create_task`
+на апдейт у межах одного процесу — достатньо для особистого бота.
+
 ---
 
-### M3. setWebhook у скрипт + secret_token
-**Зараз:** webhook ставився вручну, без secret_token → будь-хто з URL може
-надсилати фейкові апдейти на `/webhook`.
+### M3. webhook secret_token (лише webhook-режим) ✅
+**Контекст:** актуально тільки коли `TELEGRAM_INGEST_MODE=webhook`. У дефолтному
+polling публічного `/webhook` не існує як вектора атаки (Telegram не шле POST).
 
-**Зробити:**
-1. Додати у `.env` секретний `TELEGRAM_WEBHOOK_SECRET=...`.
-2. `setWebhook` передає `secret_token=$SECRET`, Telegram потім шле
-   заголовок `X-Telegram-Bot-Api-Secret-Token: $SECRET`.
-3. У `gateway/app/main.py` `/webhook` перевіряє заголовок; якщо не збігається — 401.
-4. Скрипт `scripts/set_webhook.sh` що читає `.env` і ставить webhook.
+**Зроблено:**
+1. `.env`: `TELEGRAM_WEBHOOK_SECRET=...`.
+2. `setWebhook` передає `secret_token`, Telegram шле `X-Telegram-Bot-Api-Secret-Token`.
+3. `gateway/app/main.py` `/webhook` звіряє заголовок (`hmac.compare_digest`); не збігся → 403.
 
-**Перевірка:** `curl <tunnel>/webhook` без заголовка → 401. Реальний бот працює.
+**Перевірка:** `curl <url>/webhook` без заголовка → 403. Реальний бот працює.
 
 ---
 

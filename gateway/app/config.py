@@ -13,8 +13,14 @@ class Settings(BaseSettings):
     # Адміни: /admin та небезпечні дії лише з підтвердженням. Порожньо = усі з whitelist.
     admin_user_ids: str = ""
     telegram_api_base: str = "https://api.telegram.org"
-    # Секрет вебхука: Telegram шле його у заголовку X-Telegram-Bot-Api-Secret-Token.
-    # Порожньо = перевірка вимкнена (бекв-сумісно). Став разом із setWebhook secret_token.
+    # Спосіб отримання апдейтів:
+    #   polling — gateway сам опитує Telegram (getUpdates). Нуль інфраструктури,
+    #             переживає рестарти, не треба публічний URL/тунель. Дефолт.
+    #   webhook — Telegram шле POST /webhook (потрібен стабільний публічний HTTPS,
+    #             напр. named tunnel / домен). Вмикати лише в проді з фіксованим URL.
+    telegram_ingest_mode: str = "polling"
+    # Секрет вебхука (лише для webhook-режиму): Telegram шле його у заголовку
+    # X-Telegram-Bot-Api-Secret-Token. Порожньо = перевірка вимкнена.
     telegram_webhook_secret: str = ""
 
     # Tools — агент-луп (DESIGN: без n8n-проксі)

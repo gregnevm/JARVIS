@@ -1,6 +1,8 @@
 """JARVIS Gateway — точка входу FastAPI."""
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hmac
 import logging
 from contextlib import asynccontextmanager
@@ -27,6 +29,9 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("jarvis.gateway")
 
+# Апдейти, які нас цікавлять (інші Telegram навіть не присилає → менше шуму/трафіку).
+ALLOWED_UPDATES = ["message", "edited_message", "callback_query"]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -37,13 +42,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.redis = aioredis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
     app.state.limiter = RateLimiter(app.state.redis, settings.rate_limit_per_min)
     app.state.tts = TtsClient(settings.tts_url) if settings.enable_voice_reply else None
+
+    mode = settings.telegram_ingest_mode.strip().lower()
+    poll_task: asyncio.Task[None] | None = None
+    if mode == "polling":
+        poll_task = asyncio.create_task(_poll_loop(app))
+
     logger.info(
-        "Gateway up. Whitelist: %s | rate_limit=%s/min | voice_reply=%s",
+        "Gateway up. ingest=%s | Whitelist: %s | rate_limit=%s/min | voice_reply=%s",
+        mode,
         sorted(settings.allowed_ids) or "ПОРОЖНІЙ (нікого не пускає!)",
         settings.rate_limit_per_min,
         settings.enable_voice_reply,
     )
     yield
+
+    if poll_task is not None:
+        poll_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await poll_task
     await app.state.tg.aclose()
     await app.state.tools.aclose()
     await app.state.svc.aclose()
@@ -51,6 +68,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await app.state.redis.aclose()
     if app.state.tts is not None:
         await app.state.tts.aclose()
+
+
+async def _poll_loop(app: FastAPI) -> None:
+    """Long polling: gateway сам тягне апдейти. Без публічного URL/вебхука/тунелю.
+
+    Telegram віддає апдейти лише одному споживачу на токен, тож webhook і getUpdates
+    взаємовиключні — на старті знімаємо webhook. Кожен апдейт обробляється конкурентно
+    (asyncio task); масштаб «вшир» — це винесення обробки в чергу+воркери (ROADMAP).
+    """
+    tg = app.state.tg
+    await tg.delete_webhook(drop_pending=False)
+    offset: int | None = None
+    backoff = 1.0
+    logger.info("Long polling started (getUpdates)")
+    while True:
+        try:
+            updates = await tg.get_updates(
+                offset=offset, timeout=30, allowed_updates=ALLOWED_UPDATES
+            )
+            backoff = 1.0
+            for update in updates:
+                offset = int(update["update_id"]) + 1
+                asyncio.create_task(_process(update, app))
+        except asyncio.CancelledError:
+            logger.info("Long polling stopped")
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("getUpdates failed: %s — retry in %.0fs", exc, backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 30.0)
 
 
 app = FastAPI(title="JARVIS Gateway", lifespan=lifespan)
@@ -79,6 +126,11 @@ async def _process(update: dict[str, Any], app: FastAPI) -> None:
 
 @app.post("/webhook")
 async def webhook(request: Request, background: BackgroundTasks) -> dict[str, bool]:
+    """Прийом апдейтів у webhook-режимі (потрібен публічний HTTPS-URL).
+
+    У дефолтному polling-режимі не використовується, але лишається готовим для прода
+    зі стабільним доменом (TELEGRAM_INGEST_MODE=webhook).
+    """
     # Перевірка секрету вебхука (якщо налаштований) — захист від підроблених апдейтів.
     secret = settings.telegram_webhook_secret
     if secret:

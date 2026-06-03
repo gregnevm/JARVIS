@@ -119,35 +119,46 @@ docker compose ps                     # статуси + healthcheck
 1. **Токен:** напиши [@BotFather](https://t.me/BotFather) → `/newbot` → отримаєш `TELEGRAM_BOT_TOKEN`.
 2. **Свій user_id:** напиши [@userinfobot](https://t.me/userinfobot) — він поверне твій числовий ID.
    Впиши його в `ALLOWED_USER_IDS` (кілька — через кому). Бот ігнорує всіх, кого нема у списку.
-3. **Секрет вебхука:** згенеруй `python -c "import secrets;print(secrets.token_hex(24))"` →
-   у `.env` `TELEGRAM_WEBHOOK_SECRET=...`. Gateway перевіряє заголовок
-   `X-Telegram-Bot-Api-Secret-Token` і відкидає підроблені апдієти (403). Порожньо = вимкнено.
 
-### Вебхук назовні через cloudflared (безкоштовно, без домену)
+### Як заходять апдейти (long polling — за замовчуванням)
 
-Telegram має достукатися до твого `gateway:8000`. Найпростіше — тунель Cloudflare:
+Gateway сам опитує Telegram через `getUpdates` (**long polling**). Це означає:
+
+- ✅ **нічого не треба налаштовувати** — підняв стек, бот працює;
+- ✅ **не потрібен публічний URL, тунель, домен чи сертифікат**;
+- ✅ переживає будь-який рестарт сам — жодного ручного `setWebhook`;
+- потрібен лише **вихідний** HTTPS до `api.telegram.org`.
 
 ```bash
-# одноразовий тимчасовий тунель (видає випадковий https-домен)
-cloudflared tunnel --url http://localhost:8000
+docker compose up -d
+docker compose logs -f gateway   # "Long polling started (getUpdates)"
 ```
 
-Реєстрація вебхука — скриптом (читає токен+секрет із `.env`, додає `secret_token`):
+На старті gateway сам знімає будь-який старий webhook (бо `getUpdates` і webhook
+взаємовиключні для одного токена).
 
-```powershell
-# Windows:
-powershell -File scripts/set_webhook.ps1 -Url https://<random>.trycloudflare.com
-powershell -File scripts/set_webhook.ps1 -Info     # показати поточний стан
+### Webhook-режим (опціонально, для прода)
+
+Якщо є стабільний публічний HTTPS-домен (reverse proxy / named tunnel) — можна
+перейти на push-модель. У `.env`:
+
+```env
+TELEGRAM_INGEST_MODE=webhook
+TELEGRAM_WEBHOOK_SECRET=<token_hex(24)>   # захист /webhook від підробок (403)
 ```
 
-Або вручну (без секрету — менш безпечно):
+Потім один раз зареєструвати адресу (URL не змінюється → робиться раз):
+
 ```bash
-curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https://<random>.trycloudflare.com/webhook"
+curl -X POST "https://api.telegram.org/bot$TOKEN/setWebhook" \
+  -d url="https://your-domain/webhook" \
+  -d secret_token="$TELEGRAM_WEBHOOK_SECRET" \
+  -d allowed_updates='["message","edited_message","callback_query"]'
 ```
 
-> Quick-тунель дає **новий URL при кожному перезапуску** → треба заново реєструвати вебхук.
-> Для стабільної адреси — named tunnel (`cloudflared tunnel create`) або Nginx+TLS
-> (закоментований блок `nginx` у compose). Деталі — у `ROADMAP.md` (M2).
+> Масштаб «вшир» (багато воркерів) не залежить від polling vs webhook: Telegram
+> віддає апдейти одному споживачу на токен. Масштабована вісь — обробка:
+> *ingestion → черга (Redis) → N воркерів*. Див. `ROADMAP.md`.
 
 ---
 
@@ -161,7 +172,7 @@ curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https://<random>.t
 ├── pyproject.toml          # конфіг mypy (strict) + pytest
 ├── requirements-dev.txt    # dev/CI-залежності (mypy, pytest)
 ├── .github/workflows/      # CI: mypy + pytest (matrix) + compose-validate
-├── gateway/                # FastAPI: вебхук, auth, роутинг + tests/ (Фаза 2)
+├── gateway/                # FastAPI: long polling (getUpdates) + /webhook, auth, роутинг + tests/
 ├── whisper/                # STT (готовий образ, без коду)
 ├── memory/                 # RAG: embeddings + retrieval + tests/   (Фаза 4)
 ├── tools/                  # агентські інструменти + tests/         (Фаза 6)

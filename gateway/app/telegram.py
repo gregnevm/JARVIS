@@ -49,6 +49,33 @@ class TelegramClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def delete_webhook(self, drop_pending: bool = False) -> None:
+        """Знімає webhook. Потрібно перед getUpdates (вони взаємовиключні)."""
+        try:
+            await self._call("deleteWebhook", {"drop_pending_updates": drop_pending})
+        except httpx.HTTPError as exc:
+            logger.error("deleteWebhook failed: %s", exc)
+
+    async def get_updates(
+        self,
+        offset: int | None = None,
+        timeout: int = 30,
+        allowed_updates: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Long poll getUpdates. Запит висить до `timeout` с або до першого апдейту."""
+        payload: dict[str, Any] = {"timeout": timeout}
+        if offset is not None:
+            payload["offset"] = offset
+        if allowed_updates is not None:
+            payload["allowed_updates"] = allowed_updates
+        # read-timeout має перевищувати long-poll timeout, інакше httpx обірве сам.
+        resp = await self._client.post(
+            f"{self._api}/getUpdates", json=payload, timeout=timeout + 15
+        )
+        resp.raise_for_status()
+        result = resp.json().get("result")
+        return result if isinstance(result, list) else []
+
     async def send_message(
         self,
         chat_id: int,

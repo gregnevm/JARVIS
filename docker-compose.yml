@@ -10,11 +10,14 @@ x-logging: &default-logging
 
 services:
   # ---------------------------------------------------------
-  # Gateway — FastAPI: Telegram webhook, auth, роутинг
+  # Gateway — FastAPI + Telegram long polling (getUpdates), auth, роутинг.
+  # За замовчуванням НЕ потрібен публічний URL/тунель: gateway сам опитує Telegram.
+  # Для webhook-режиму (прод зі стабільним доменом): TELEGRAM_INGEST_MODE=webhook.
   # ---------------------------------------------------------
   gateway:
     build: ./gateway
     env_file: .env
+    # Порт потрібен лише для webhook-режиму та /health. У polling можна не публікувати.
     ports:
       - "8000:8000"
     volumes:
@@ -256,7 +259,8 @@ services:
 
   # =========================================================
   # --- OPTIONAL (Фаза 2): Nginx reverse proxy + TLS ---
-  # Альтернатива без домену/сертифіката — cloudflared tunnel (див. README).
+  # Потрібен лише для webhook-режиму (TELEGRAM_INGEST_MODE=webhook) у проді.
+  # Дефолтний polling публічного URL не потребує.
   # =========================================================
   # nginx:
   #   image: nginx:alpine
