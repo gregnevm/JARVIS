@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(docker --version)",
+      "PowerShell(docker compose version)",
+      "PowerShell($paths = @\\(\"$env:ProgramFiles\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe\", \"$env:ProgramFiles\\\\Docker\\\\Docker\\\\Docker Desktop.exe\"\\); foreach \\($p in $paths\\) { if \\(Test-Path $p\\) { Write-Output \"FOUND: $p\" } else { Write-Output \"MISSING: $p\" } }; Write-Output \"--- ollama ---\"; if \\(Get-Command ollama -ErrorAction SilentlyContinue\\) { ollama --version } else { Write-Output \"ollama not on PATH\" }; Write-Output \"--- ollama api ---\"; try { \\(Invoke-WebRequest -Uri \"http://localhost:11434/api/tags\" -UseBasicParsing -TimeoutSec 3\\).Content } catch { Write-Output \"ollama API not responding: $\\($_.Exception.Message\\)\" })"
+    ]
+  }
+}

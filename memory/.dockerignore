@@ -1,0 +1,10 @@
+# Build-контекст цього сервісу = ./memory. Тримаємо його малим і чистим.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+tests/
+conftest.py
+*.md
+.env
+.env.*

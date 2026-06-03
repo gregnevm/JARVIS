@@ -1,0 +1,62 @@
+{
+  "name": "agent_loop",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "jarvis-agent"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.TOOLS_URL }}/agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_id: $json.body.user_id, text: $json.body.text }) }}",
+        "options": {
+          "timeout": 280000
+        }
+      },
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: ($('Agent').item.json.text && $('Agent').item.json.text.trim().length) ? $('Agent').item.json.text : 'Порожня відповідь від агента.' }) }}",
+        "options": {}
+      },
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Agent", "type": "main", "index": 0 }]]
+    },
+    "Agent": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "meta": {},
+  "tags": []
+}

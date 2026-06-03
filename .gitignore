@@ -1,0 +1,21 @@
+# Секрети
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Кеші інструментів (mypy/pytest)
+.mypy_cache/
+.pytest_cache/
+
+# Завантаження користувача
+data/uploads/*
+!data/uploads/.gitkeep
+
+# Логи / тимчасові
+*.log
+.DS_Store

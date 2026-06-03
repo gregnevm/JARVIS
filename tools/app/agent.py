@@ -1,0 +1,115 @@
+"""Агент-луп: маршрутизація CHAT/AGENT + tool-calling на AGENT-моделі.
+
+- AGENT_MODE=chat   → завжди легка CHAT-модель, без інструментів.
+- AGENT_MODE=agent  → завжди AGENT-модель з тул-лупом.
+- AGENT_MODE=hybrid → евристика: математика / URL / пошукові ключі → agent, інакше chat.
+"""
+from __future__ import annotations
+
+import logging
+import re
+from typing import Any
+
+from .config import settings
+from .memory_client import MemoryClient
+from .ollama import OllamaClient
+from .toolkit import agent_tool_schemas, coerce_args, dispatch
+
+logger = logging.getLogger("jarvis.tools.agent")
+
+FALLBACK = "Не зміг сформувати відповідь. Спробуй переформулювати."
+
+SYSTEM_CHAT = "Ти JARVIS — лаконічний помічник. Відповідай українською, стисло і по суті."
+SYSTEM_AGENT = (
+    "Ти JARVIS — помічник з інструментами. Користуйся ними, коли треба порахувати, "
+    "знайти свіжу інформацію або відкрити сторінку. Не вигадуй фактів — перевіряй "
+    "інструментами. Фінальну відповідь дай українською, стисло, звичайним текстом."
+)
+
+_URL_RE = re.compile(r"https?://", re.IGNORECASE)
+_MATH_RE = re.compile(r"\d\s*[-+*/^]\s*\d")
+_KW_RE = re.compile(
+    r"(знайд|пошук|загугл|google|search|погод|\bкурс\b|новин|обчисл|пораху|"
+    r"скільки буде|calculate|відкрий\s+http)",
+    re.IGNORECASE,
+)
+
+
+def decide_mode(text: str, agent_mode: str) -> str:
+    mode = (agent_mode or "hybrid").lower()
+    if mode in ("chat", "agent"):
+        return mode
+    t = text or ""
+    if _URL_RE.search(t) or _MATH_RE.search(t) or _KW_RE.search(t):
+        return "agent"
+    return "chat"
+
+
+def _assistant_msg(msg: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {"role": "assistant", "content": msg.get("content") or ""}
+    if msg.get("tool_calls"):
+        out["tool_calls"] = msg["tool_calls"]
+    return out
+
+
+def _sys_with_ctx(base: str, ctx: str) -> str:
+    return base + (f" Релевантний контекст з памʼяті: {ctx}" if ctx else "")
+
+
+class AgentRunner:
+    def __init__(self, ollama: OllamaClient, memory: MemoryClient) -> None:
+        self._ollama = ollama
+        self._mem = memory
+
+    async def run(self, user_id: int, text: str) -> dict[str, Any]:
+        """Повертає {'text': ..., 'mode': 'chat'|'agent', 'iters': N}."""
+        results = await self._mem.search(user_id, text, top_k=5)
+        ctx = " | ".join(str(r.get("content", "")) for r in results)
+        mode = decide_mode(text, settings.agent_mode)
+
+        if mode == "chat":
+            answer, iters = await self._chat(text, ctx), 0
+        else:
+            answer, iters = await self._agent(text, ctx)
+
+        await self._mem.store(user_id, text, role="user")
+        if answer:
+            await self._mem.store(user_id, answer, role="assistant")
+        return {"text": answer or FALLBACK, "mode": mode, "iters": iters}
+
+    async def _chat(self, text: str, ctx: str) -> str:
+        msg = await self._ollama.chat(
+            settings.ollama_model_chat,
+            [
+                {"role": "system", "content": _sys_with_ctx(SYSTEM_CHAT, ctx)},
+                {"role": "user", "content": text},
+            ],
+        )
+        return (msg.get("content") or "").strip()
+
+    async def _agent(self, text: str, ctx: str) -> tuple[str, int]:
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": _sys_with_ctx(SYSTEM_AGENT, ctx)},
+            {"role": "user", "content": text},
+        ]
+        tools = agent_tool_schemas()
+        for i in range(1, settings.max_agent_iters + 1):
+            msg = await self._ollama.chat(settings.ollama_model_agent, messages, tools=tools)
+            messages.append(_assistant_msg(msg))
+            calls = msg.get("tool_calls") or []
+            if not calls:
+                return (msg.get("content") or "").strip(), i
+            for call in calls:
+                fn = call.get("function") or {}
+                name = str(fn.get("name", ""))
+                args = coerce_args(fn.get("arguments"))
+                result = await dispatch(name, args)
+                logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
+                messages.append({"role": "tool", "content": f"[{name}] {result}"})
+
+        # Ітерації вичерпано — змусимо модель дати текстову відповідь без тулів.
+        messages.append(
+            {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
+        )
+        final = await self._ollama.chat(settings.ollama_model_agent, messages)
+        return (final.get("content") or "").strip(), settings.max_agent_iters

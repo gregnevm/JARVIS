@@ -1,0 +1,218 @@
+name: jarvis
+
+services:
+  # ---------------------------------------------------------
+  # Gateway — FastAPI: Telegram webhook, auth, роутинг
+  # ---------------------------------------------------------
+  gateway:
+    build: ./gateway
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [jarvis-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------
+  # Whisper — STT (готовий образ)
+  # ---------------------------------------------------------
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    environment:
+      ASR_MODEL: ${WHISPER_MODEL:-small}
+      ASR_ENGINE: openai_whisper
+    ports:
+      - "9000:9000"
+    networks: [jarvis-net]
+    restart: unless-stopped
+    healthcheck:
+      # start_period великий: на першому старті тягне модель Whisper.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:9000/docs')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+
+  # ---------------------------------------------------------
+  # Memory — RAG: embeddings + retrieval (через Ollama + pgvector)
+  # ---------------------------------------------------------
+  memory:
+    build: ./memory
+    env_file: .env
+    ports:
+      - "8100:8100"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [jarvis-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------
+  # Tools — агентські інструменти (calc, web_fetch, search, ...)
+  # ---------------------------------------------------------
+  tools:
+    build: ./tools
+    env_file: .env
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [jarvis-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------
+  # n8n — оркестратор (workflow agent_loop). UI: http://localhost:5678
+  # ---------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    env_file: .env
+    environment:
+      N8N_HOST: "0.0.0.0"
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://n8n:5678/
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE:-true}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-changeme}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Europe/Kyiv}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_RUNNERS_ENABLED: "true"
+      # Дозволяємо виразам читати $env.* (OLLAMA_HOST/OLLAMA_MODEL_* у workflow)
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [jarvis-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------
+  # PostgreSQL + pgvector
+  # ---------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jarvis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-jarvis}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks: [jarvis-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jarvis} -d ${POSTGRES_DB:-jarvis}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------
+  # Redis — rate limit, short-term context, черга n8n
+  # ---------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks: [jarvis-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # =========================================================
+  # --- OPTIONAL: Ollama у контейнері з GPU ---
+  # За замовчуванням Ollama працює на ХОСТІ (host.docker.internal),
+  # GPU обслуговує хостовий драйвер — Toolkit НЕ потрібен.
+  #
+  # Розкоментуй ЦЕЙ блок і прибери host.docker.internal, якщо хочеш
+  # Ollama в Compose: у .env постав OLLAMA_HOST=http://ollama:11434.
+  # ПОТРІБЕН NVIDIA Container Toolkit на хості.
+  # =========================================================
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks: [jarvis-net]
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+
+  # =========================================================
+  # --- OPTIONAL (Фаза 2): Nginx reverse proxy + TLS ---
+  # Альтернатива без домену/сертифіката — cloudflared tunnel (див. README).
+  # =========================================================
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/certs:/etc/nginx/certs:ro
+  #   depends_on:
+  #     - gateway
+  #   networks: [jarvis-net]
+  #   restart: unless-stopped
+
+networks:
+  jarvis-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+  # ollama_data:   # розкоментуй разом із сервісом ollama вище

@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  # Типи + тести по кожному сервісу окремо: три пакети `app` не можна
+  # збирати в одному процесі (колізія модуля), тож matrix із ізоляцією.
+  check:
+    name: ${{ matrix.service }} (mypy + pytest)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [gateway, memory, tools]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"          # збігається з python:3.11-slim в образах
+          cache: pip
+          cache-dependency-path: |
+            ${{ matrix.service }}/requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ${{ matrix.service }}/requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: mypy (strict)
+        run: mypy ${{ matrix.service }}/app
+
+      - name: pytest
+        run: pytest ${{ matrix.service }}/tests
+
+  # Дешева перевірка: docker-compose.yml лишається валідним (синтаксис + інтерполяція .env).
+  compose-validate:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare .env
+        run: cp .env.example .env
+      - name: Validate compose
+        run: docker compose config --quiet

@@ -1,0 +1,206 @@
+# JARVIS — повністю локальний AI-асистент у Telegram
+
+Self-hosted Telegram-бот на мікросервісах. Усе працює локально: LLM через **Ollama**,
+оркестрація через **n8n**, пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**.
+Жодних зовнішніх AI API. Запуск — один `docker compose up`.
+
+> Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
+> Tools + агент-луп на двох моделях, polish (rate limit, circuit breaker, healthchecks).
+> Чеклист — у кінці README.
+
+---
+
+## Архітектура
+
+```
+text ─► Gateway ──► n8n ──► Tools /agent ──┬─► Ollama (ХОСТ)  CHAT | AGENT
+       (auth,      (orch)   route + loop   ├─► Memory  (pgvector RAG)
+        rate-limit)                        └─► calc · web_fetch · search · code_exec
+voice ─► Whisper (STT) ─┘
+        дані: PostgreSQL (історія + вектори) · Redis (rate-limit)
+```
+
+Gateway робить лише I/O (Telegram, auth, rate-limit, STT) і кличе n8n. n8n —
+тонкий оркестратор: делегує в **Tools `/agent`**, де живе вся «мозкова» логіка —
+вибір моделі за `AGENT_MODE`, RAG-контекст із Memory і тул-луп на AGENT-моделі.
+
+| Сервіс     | Порт  | Образ / стек                                   | Роль                                  |
+|------------|-------|------------------------------------------------|---------------------------------------|
+| gateway    | 8000  | FastAPI (build)                                | Вебхук, auth, роутинг text/voice/file |
+| whisper    | 9000  | `onerahmet/openai-whisper-asr-webservice`      | Розпізнавання голосу (STT)            |
+| memory     | 8100  | FastAPI (build)                                | RAG: embeddings + retrieval           |
+| tools      | 8200  | FastAPI (build)                                | Інструменти + агент-луп (дві моделі)  |
+| n8n        | 5678  | `n8nio/n8n`                                     | Тонкий оркестратор → Tools `/agent`   |
+| postgres   | 5432  | `pgvector/pgvector:pg16`                        | Історія + векторна пам'ять            |
+| redis      | 6379  | `redis:7-alpine`                               | Rate limit, short-term, черга         |
+| ollama     | 11434 | **на хості** (не в Compose)                    | LLM + embeddings                      |
+
+---
+
+## Передумови
+
+1. **Docker Desktop** (Windows/Mac) або Docker Engine + Compose v2 (Linux).
+   Перевірка: `docker --version` та `docker compose version`.
+2. **Ollama на хості** — https://ollama.com. Перевірка: `ollama --version`,
+   а API має відповідати на `http://localhost:11434/api/tags`.
+   - GPU обслуговує хостовий драйвер напряму — **NVIDIA Container Toolkit не потрібен**.
+   - Хочеш Ollama всередині Compose з GPU — розкоментуй блок `ollama` у `docker-compose.yml`
+     і постав `OLLAMA_HOST=http://ollama:11434` (тоді Toolkit таки потрібен).
+
+### Які моделі завантажити
+
+```bash
+ollama pull qwen3:4b                 # OLLAMA_MODEL_CHAT — швидкий чат
+ollama pull qwen2.5:7b-instruct      # OLLAMA_MODEL_AGENT — надійний tool calling
+ollama pull nomic-embed-text         # EMBED_MODEL — ембединги (768 вимірів)
+```
+
+> **CPU-only (без NVIDIA GPU):** інференс ~7–8 tok/s. Уникай thinking-моделей
+> (`qwen3`, деякі `gemma`) — вони генерують сотні токенів міркувань, тож відповідь
+> триває хвилини. Для CPU став non-thinking instruct, напр.:
+> `ollama pull qwen2.5:3b-instruct` і `OLLAMA_MODEL_CHAT=qwen2.5:3b-instruct`.
+
+Моделі можна змінити у `.env`. Але якщо міняєш `EMBED_MODEL` на модель з **іншою
+розмірністю** вектора — треба синхронізувати `vector(768)` у `db/init.sql` (це міграція).
+
+---
+
+## Швидкий старт
+
+```bash
+# 1. Конфіг
+cp .env.example .env          # Windows: copy .env.example .env
+#   → впиши TELEGRAM_BOT_TOKEN та свій ALLOWED_USER_IDS
+
+# 2. Переконайся, що Ollama на хості піднята і моделі pull-нуті (див. вище)
+
+# 3. Підняти стек
+docker compose up -d --build
+
+# 4. Логи
+docker compose logs -f gateway
+```
+
+Перевірка здоров'я:
+
+```bash
+curl http://localhost:8000/health     # gateway
+curl http://localhost:8100/health     # memory
+docker compose ps                     # статуси + healthcheck
+```
+
+---
+
+## Telegram: токен і user_id
+
+1. **Токен:** напиши [@BotFather](https://t.me/BotFather) → `/newbot` → отримаєш `TELEGRAM_BOT_TOKEN`.
+2. **Свій user_id:** напиши [@userinfobot](https://t.me/userinfobot) — він поверне твій числовий ID.
+   Впиши його в `ALLOWED_USER_IDS` (кілька — через кому). Бот ігнорує всіх, кого нема у списку.
+
+### Вебхук назовні через cloudflared (безкоштовно, без домену)
+
+Telegram має достукатися до твого `gateway:8000`. Найпростіше — тунель Cloudflare:
+
+```bash
+# одноразовий тимчасовий тунель (видає випадковий https-домен)
+cloudflared tunnel --url http://localhost:8000
+
+# отриманий https://<random>.trycloudflare.com реєструємо як вебхук:
+curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https://<random>.trycloudflare.com/webhook"
+```
+
+Альтернатива для постійного домену — Nginx + TLS (закоментований блок `nginx` у compose).
+
+---
+
+## Структура проєкту
+
+```
+.
+├── docker-compose.yml      # усі сервіси, мережа jarvis-net, volumes, healthchecks
+├── .env.example            # шаблон конфігу
+├── README.md
+├── pyproject.toml          # конфіг mypy (strict) + pytest
+├── requirements-dev.txt    # dev/CI-залежності (mypy, pytest)
+├── .github/workflows/      # CI: mypy + pytest (matrix) + compose-validate
+├── gateway/                # FastAPI: вебхук, auth, роутинг + tests/ (Фаза 2)
+├── whisper/                # STT (готовий образ, без коду)
+├── memory/                 # RAG: embeddings + retrieval + tests/   (Фаза 4)
+├── tools/                  # агентські інструменти + tests/         (Фаза 6)
+├── db/
+│   └── init.sql            # схема: sessions, messages, embeddings(vector)
+├── n8n/
+│   └── workflows/
+│       └── agent_loop.json # експортований воркфлоу                (Фаза 3/6)
+└── data/
+    └── uploads/            # файли від користувача
+```
+
+---
+
+## Корисні команди
+
+```bash
+docker compose up -d --build      # підняти/перебудувати
+docker compose ps                 # статуси
+docker compose logs -f <service>  # логи сервісу
+docker compose down               # зупинити (дані лишаються у volumes)
+docker compose down -v            # зупинити + ВИДАЛИТИ дані (скине БД, перезапустить init.sql)
+```
+
+---
+
+## Розробка (типи + тести)
+
+Кожен сервіс — окремий пакет `app`, тож статичні перевірки й тести ганяємо **по-сервісно**
+(інакше три пакети `app` колізують в одному процесі). Залежності розробника — у `requirements-dev.txt`.
+
+```bash
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r gateway/requirements.txt -r requirements-dev.txt
+
+mypy gateway/app          # strict-типізація (конфіг у pyproject.toml)
+pytest gateway/tests      # юніт-тести: mocked-клієнти, без мережі/БД
+```
+
+Те саме для `memory` і `tools`. Тести покривають чисту логіку: маршрутизацію агента,
+інструменти (`calc`/`coerce_args`/парсер DDG), rate-limit, circuit breaker, парсинг
+whitelist, роутинг text/voice. У CI (`.github/workflows/ci.yml`) усе це йде matrix-ом
+по трьох сервісах + валідація `docker compose config`.
+
+---
+
+## Фази розробки
+
+- [x] **Фаза 1 — Скелет:** структура, docker-compose, `.env.example`, `init.sql`, README.
+- [x] **Фаза 2 — Gateway MVP:** вебхук → echo (без LLM).
+- [x] **Фаза 3 — Ollama bridge:** gateway → n8n → Ollama (CHAT) → відповідь.
+- [x] **Фаза 4 — Memory:** pgvector + RAG, контекст у промпті.
+- [x] **Фаза 5 — Voice:** Whisper pipeline для голосових.
+- [x] **Фаза 6 — Tools + дві моделі:** агент-луп з tool calling на AGENT-моделі.
+- [x] **Фаза 7 — Polish:** rate limit (Redis), circuit breaker, healthchecks, фінал README.
+
+---
+
+## Режими, інструменти, надійність
+
+**Маршрутизація моделей** (`AGENT_MODE` у `.env`):
+- `chat` — завжди легка `OLLAMA_MODEL_CHAT`, без інструментів (найшвидше).
+- `agent` — завжди `OLLAMA_MODEL_AGENT` із тул-лупом (макс 5 ітерацій).
+- `hybrid` — евристика: математика / URL / пошукові ключі → agent, решта → chat.
+
+**Інструменти агента:** `calc` (simpleeval), `web_search` (DuckDuckGo),
+`web_fetch` (текст сторінки), `code_exec` (лише якщо `ENABLE_CODE_EXEC=true`).
+Кожен доступний і окремим ендпойнтом Tools-сервісу (`/calc`, `/search`, `/web_fetch`, …).
+
+**Надійність:** rate-limit на `user_id` через Redis (`RATE_LIMIT_PER_MIN`, fail-open),
+circuit breaker на Ollama (N помилок підряд → пауза, fail-fast замість зависань),
+fallback-повідомлення на кожному зовнішньому виклику, healthchecks на всіх сервісах.
+
+---
+
+## Безпека
+
+- Усі секрети — лише в `.env` (він у `.gitignore`). Нічого не хардкодимо.
+- Доступ до бота — тільки whitelist `ALLOWED_USER_IDS`.
+- `ENABLE_CODE_EXEC=false` за замовчуванням; вмикай виконання коду свідомо.
