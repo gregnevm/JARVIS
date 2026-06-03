@@ -4,11 +4,11 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-COPY requirements.txt .
+COPY tools/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY jarvis_core /app/jarvis_core
-COPY app ./app
+COPY tools/app ./app
 ENV PYTHONPATH=/app
 
 EXPOSE 8200
