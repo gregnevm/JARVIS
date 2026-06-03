@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [gateway, memory, tools]
+        service: [jarvis_core, gateway, memory, tools, twin]
     steps:
       - uses: actions/checkout@v4
 
@@ -33,10 +33,20 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: mypy (strict)
-        run: mypy ${{ matrix.service }}/app
+        run: |
+          if [ "${{ matrix.service }}" = "jarvis_core" ]; then
+            mypy jarvis_core
+          else
+            mypy ${{ matrix.service }}/app
+          fi
 
       - name: pytest
-        run: pytest ${{ matrix.service }}/tests
+        run: |
+          if [ "${{ matrix.service }}" = "jarvis_core" ]; then
+            pytest jarvis_core/tests
+          else
+            pytest ${{ matrix.service }}/tests
+          fi
 
   # Дешева перевірка: docker-compose.yml лишається валідним (синтаксис + інтерполяція .env).
   compose-validate:

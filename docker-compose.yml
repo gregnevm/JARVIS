@@ -24,6 +24,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      tools:
+        condition: service_healthy
     networks: [jarvis-net]
     restart: unless-stopped
     logging: *default-logging
@@ -84,7 +86,9 @@ services:
   # Tools — агентські інструменти (calc, web_fetch, search, ...)
   # ---------------------------------------------------------
   tools:
-    build: ./tools
+    build:
+      context: .
+      dockerfile: tools/Dockerfile
     env_file: .env
     ports:
       - "8200:8200"
@@ -121,9 +125,34 @@ services:
       start_period: 30s
 
   # ---------------------------------------------------------
-  # n8n — оркестратор (workflow agent_loop). UI: http://localhost:5678
+  # Twin — SyncServer + ModelRegistry (DESIGN Phase 2). UI/API: :8765
+  # ---------------------------------------------------------
+  twin:
+    build:
+      context: .
+      dockerfile: twin/Dockerfile
+    env_file: .env
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data/twin:/data/twin
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [jarvis-net]
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------
+  # n8n — LEGACY (не потрібен: Gateway → Tools /agent напряму). Profile: legacy
   # ---------------------------------------------------------
   n8n:
+    profiles: ["legacy"]
     image: n8nio/n8n:latest
     env_file: .env
     environment:

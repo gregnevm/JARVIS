@@ -40,8 +40,11 @@ def test_latest_lora_empty(tmp_path: Path, monkeypatch):
 
 def test_latest_lora_after_promote(tmp_path: Path, monkeypatch):
     with _client(tmp_path, monkeypatch) as c:
-        main.app.state.registry.register_lora("v1", "/lora/v1.gguf", eval_score=0.9)
-        main.app.state.registry.promote("v1")
+        c.post(
+            "/registry/lora",
+            json={"version": "v1", "path": "/lora/v1.gguf", "eval_score": 0.9},
+        )
+        c.post("/registry/lora/v1/promote")
         body = c.get("/latest/lora").json()
         assert body["version"] == "v1"
         assert body["eval_score"] == 0.9

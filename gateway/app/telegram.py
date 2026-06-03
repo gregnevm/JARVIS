@@ -50,16 +50,39 @@ class TelegramClient:
         return resp.json()
 
     async def send_message(
-        self, chat_id: int, text: str, parse_mode: str | None = None
+        self,
+        chat_id: int,
+        text: str,
+        parse_mode: str | None = None,
+        reply_markup: dict[str, Any] | None = None,
     ) -> None:
-        for chunk in split_message(text):
+        chunks = split_message(text)
+        for i, chunk in enumerate(chunks):
             payload: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
             if parse_mode:
                 payload["parse_mode"] = parse_mode
+            if reply_markup and i == len(chunks) - 1:
+                payload["reply_markup"] = reply_markup
             try:
                 await self._call("sendMessage", payload)
             except httpx.HTTPError as exc:
                 logger.error("sendMessage failed: %s", exc)
+                if parse_mode:
+                    plain: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
+                    if reply_markup and i == len(chunks) - 1:
+                        plain["reply_markup"] = reply_markup
+                    await self._call("sendMessage", plain)
+
+    async def answer_callback_query(
+        self, callback_query_id: str, text: str | None = None
+    ) -> None:
+        payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+        if text:
+            payload["text"] = text[:200]
+        try:
+            await self._call("answerCallbackQuery", payload)
+        except httpx.HTTPError as exc:
+            logger.error("answerCallbackQuery failed: %s", exc)
 
     async def get_file_path(self, file_id: str) -> str | None:
         data = await self._call("getFile", {"file_id": file_id})

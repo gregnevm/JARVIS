@@ -1,8 +1,9 @@
 # JARVIS — повністю локальний AI-асистент у Telegram
 
 Self-hosted Telegram-бот на мікросервісах. Усе працює локально: LLM через **Ollama**,
-оркестрація через **n8n**, пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**.
-Жодних зовнішніх AI API. Запуск — один `docker compose up`.
+агент-луп у **Tools** (Python), пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**,
+синхронізація Edge↔Twin через **twin** (SyncServer + ModelRegistry). Жодних зовнішніх AI API.
+Запуск — один `docker compose up`. Цільова архітектура PortableAI — `docs/DESIGN.md`.
 
 > Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
 > Tools + агент-луп на двох моделях, polish (rate limit, circuit breaker, healthchecks).
@@ -13,16 +14,17 @@ Self-hosted Telegram-бот на мікросервісах. Усе працює
 ## Архітектура
 
 ```
-text ─► Gateway ──► n8n ──► Tools /agent ──┬─► Ollama (ХОСТ)  CHAT | AGENT
-       (auth,      (orch)   route + loop   ├─► Memory  (pgvector RAG)
-        rate-limit)                        └─► calc · web_fetch · search · code_exec
+text ─► Gateway ──► Tools /agent ──┬─► Ollama (ХОСТ)  CHAT | AGENT
+       (auth,       route + loop   ├─► Memory  (pgvector RAG)
+        rate-limit)                 └─► calc · web_fetch · search · code_exec
 voice ─► Whisper (STT) ─┘
-        дані: PostgreSQL (історія + вектори) · Redis (rate-limit)
+Edge ──► Twin SyncServer (ingest JSONL, /latest/lora, ModelRegistry)
+        дані: PostgreSQL · Redis · ./data/twin
 ```
 
-Gateway робить лише I/O (Telegram, auth, rate-limit, STT) і кличе n8n. n8n —
-тонкий оркестратор: делегує в **Tools `/agent`**, де живе вся «мозкова» логіка —
-вибір моделі за `AGENT_MODE`, RAG-контекст із Memory і тул-луп на AGENT-моделі.
+Gateway робить лише I/O (Telegram, auth, rate-limit, STT) і кличе **Tools `/agent`**
+напряму (DESIGN: без n8n-проксі). Там живе вся «мозкова» логіка — `AGENT_MODE`,
+RAG-контекст із Memory і тул-луп на AGENT-моделі.
 
 | Сервіс     | Порт  | Образ / стек                                   | Роль                                  |
 |------------|-------|------------------------------------------------|---------------------------------------|
@@ -30,7 +32,8 @@ Gateway робить лише I/O (Telegram, auth, rate-limit, STT) і клич�
 | whisper    | 9000  | `onerahmet/openai-whisper-asr-webservice`      | Розпізнавання голосу (STT)            |
 | memory     | 8100  | FastAPI (build)                                | RAG: embeddings + retrieval           |
 | tools      | 8200  | FastAPI (build)                                | Інструменти + агент-луп (дві моделі)  |
-| n8n        | 5678  | `n8nio/n8n`                                     | Тонкий оркестратор → Tools `/agent`   |
+| twin       | 8765  | FastAPI (build)                                | SyncServer, ModelRegistry, Edge ingest |
+| n8n        | 5678  | `n8nio/n8n` (profile `legacy`, опційно)        | Застарілий проксі; не потрібен за замовч. |
 | postgres   | 5432  | `pgvector/pgvector:pg16`                        | Історія + векторна пам'ять            |
 | redis      | 6379  | `redis:7-alpine`                               | Rate limit, short-term, черга         |
 | ollama     | 11434 | **на хості** (не в Compose)                    | LLM + embeddings                      |

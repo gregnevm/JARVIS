@@ -1,5 +1,5 @@
-"""extract_text — діставання тексту відповіді з різних форматів n8n/Ollama."""
-from app.orchestrator import FALLBACK, extract_text
+"""extract_text — діставання тексту відповіді Tools / legacy форматів."""
+from app.tools_client import FALLBACK, extract_text
 
 
 def test_plain_string():

@@ -11,7 +11,8 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 from . import router
 from .config import settings
-from .orchestrator import Orchestrator
+from .services import ServicesClient
+from .tools_client import ToolsClient
 from .ratelimit import RateLimiter
 from .telegram import TelegramClient
 from .tts_client import TtsClient
@@ -30,7 +31,8 @@ logger = logging.getLogger("jarvis.gateway")
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.tg = TelegramClient(settings.telegram_bot_token, settings.telegram_api_base)
-    app.state.orch = Orchestrator(settings.n8n_webhook_url, settings.orchestrator_timeout)
+    app.state.tools = ToolsClient(settings.tools_url, settings.agent_timeout)
+    app.state.svc = ServicesClient(settings.tools_url, settings.twin_url)
     app.state.stt = WhisperClient(settings.whisper_url, settings.whisper_language)
     app.state.redis = aioredis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
     app.state.limiter = RateLimiter(app.state.redis, settings.rate_limit_per_min)
@@ -43,7 +45,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
     await app.state.tg.aclose()
-    await app.state.orch.aclose()
+    await app.state.tools.aclose()
+    await app.state.svc.aclose()
     await app.state.stt.aclose()
     await app.state.redis.aclose()
     if app.state.tts is not None:
@@ -61,7 +64,14 @@ async def health() -> dict[str, str]:
 async def _process(update: dict[str, Any], app: FastAPI) -> None:
     try:
         await router.handle_update(
-            update, app.state.tg, app.state.orch, app.state.stt, app.state.limiter, app.state.tts
+            update,
+            app.state.tg,
+            app.state.tools,
+            app.state.svc,
+            app.state.stt,
+            app.state.limiter,
+            app.state.redis,
+            app.state.tts,
         )
     except Exception:
         logger.exception("Failed to handle update")

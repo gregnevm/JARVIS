@@ -7,7 +7,9 @@ ENV PYTHONUNBUFFERED=1 \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY jarvis_core /app/jarvis_core
 COPY app ./app
+ENV PYTHONPATH=/app
 
 EXPOSE 8200
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8200"]

@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from .config import settings
@@ -29,6 +29,15 @@ class IngestRequest(BaseModel):
     edge_id: str
     delta_start_idx: int = 0
     logs: list[dict[str, Any]]
+
+
+class RegisterLoraRequest(BaseModel):
+    version: str
+    path: str
+    eval_score: float | None = None
+    dataset_size: int | None = None
+    train_epochs: int | None = None
+    notes: str | None = None
 
 
 @asynccontextmanager
@@ -82,3 +91,51 @@ async def latest_lora(request: Request) -> dict[str, Any]:
 async def status(request: Request) -> dict[str, Any]:
     edges = {eid: lg.count() for eid, lg in request.app.state.edge_logs.items()}
     return {"edges": edges, "active_lora": request.app.state.registry.get_active()}
+
+
+# --- ModelRegistry HTTP (DESIGN §7.4) ---
+
+
+@app.get("/registry/versions")
+async def list_lora_versions(request: Request) -> dict[str, Any]:
+    return {"versions": request.app.state.registry.list_versions()}
+
+
+@app.post("/registry/lora")
+async def register_lora(req: RegisterLoraRequest, request: Request) -> dict[str, Any]:
+    reg: ModelRegistry = request.app.state.registry
+    try:
+        rid = reg.register_lora(
+            req.version,
+            req.path,
+            eval_score=req.eval_score,
+            dataset_size=req.dataset_size,
+            train_epochs=req.train_epochs,
+            notes=req.notes,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"id": rid, "version": req.version, "status": "candidate"}
+
+
+@app.post("/registry/lora/{version}/promote")
+async def promote_lora(version: str, request: Request) -> dict[str, Any]:
+    reg: ModelRegistry = request.app.state.registry
+    try:
+        reg.promote(version)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    active = reg.get_active()
+    assert active is not None
+    return {"version": active["version"], "status": active["status"]}
+
+
+@app.post("/registry/lora/rollback")
+async def rollback_lora(
+    request: Request,
+    n: int = Query(1, ge=1),
+) -> dict[str, Any]:
+    restored = request.app.state.registry.rollback(n)
+    if restored is None:
+        raise HTTPException(status_code=404, detail="no archived version to restore")
+    return restored

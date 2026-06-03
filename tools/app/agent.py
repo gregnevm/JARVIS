@@ -13,7 +13,7 @@ from typing import Any
 
 from .config import settings
 from .memory_client import MemoryClient
-from .ollama import OllamaClient
+from jarvis_core.llm.chat import ChatBackend
 from .toolkit import agent_tool_schemas, coerce_args, dispatch
 
 logger = logging.getLogger("jarvis.tools.agent")
@@ -79,17 +79,21 @@ def _sys_with_ctx(base: str, ctx: str) -> str:
 
 
 class AgentRunner:
-    def __init__(self, ollama: OllamaClient, memory: MemoryClient) -> None:
-        self._ollama = ollama
+    def __init__(self, llm: ChatBackend, memory: MemoryClient) -> None:
+        self._llm = llm
         self._mem = memory
 
-    async def run(self, user_id: int, text: str) -> dict[str, Any]:
+    async def run(
+        self, user_id: int, text: str, mode: str | None = None
+    ) -> dict[str, Any]:
         """Повертає {'text': ..., 'mode': 'chat'|'agent', 'iters': N}."""
+        from .runtime import get_agent_mode
+
         results = await self._mem.search(user_id, text, top_k=5)
         ctx = " | ".join(str(r.get("content", "")) for r in results)
-        mode = decide_mode(text, settings.agent_mode)
+        resolved = mode or decide_mode(text, get_agent_mode())
 
-        if mode == "chat":
+        if resolved == "chat":
             answer, iters = await self._chat(text, ctx), 0
         else:
             answer, iters = await self._agent(text, ctx, user_id)
@@ -97,10 +101,10 @@ class AgentRunner:
         await self._mem.store(user_id, text, role="user")
         if answer:
             await self._mem.store(user_id, answer, role="assistant")
-        return {"text": answer or FALLBACK, "mode": mode, "iters": iters}
+        return {"text": answer or FALLBACK, "mode": resolved, "iters": iters}
 
     async def _chat(self, text: str, ctx: str) -> str:
-        msg = await self._ollama.chat(
+        msg = await self._llm.chat(
             settings.ollama_model_chat,
             [
                 {"role": "system", "content": _sys_with_ctx(SYSTEM_CHAT, ctx)},
@@ -116,7 +120,7 @@ class AgentRunner:
         ]
         tools = agent_tool_schemas()
         for i in range(1, settings.max_agent_iters + 1):
-            msg = await self._ollama.chat(settings.ollama_model_agent, messages, tools=tools)
+            msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
             messages.append(_assistant_msg(msg))
             calls = msg.get("tool_calls") or []
             content = msg.get("content") or ""
@@ -137,5 +141,5 @@ class AgentRunner:
         messages.append(
             {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
         )
-        final = await self._ollama.chat(settings.ollama_model_agent, messages)
+        final = await self._llm.chat(settings.ollama_model_agent, messages)
         return (final.get("content") or "").strip(), settings.max_agent_iters
