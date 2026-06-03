@@ -12,9 +12,10 @@ venv/
 .mypy_cache/
 .pytest_cache/
 
-# Завантаження користувача
+# Дані рантайму (НЕ комітимо — це приватні дані користувача)
 data/uploads/*
 !data/uploads/.gitkeep
+data/notes/
 
 # Логи / тимчасові
 *.log

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
 
     # Сусідні сервіси
     memory_url: str = "http://memory:8100"
+    twin_url: str = "http://twin:8765"
+
+    # Шлях до даних (персональні нотатки тощо) — том ./data:/data у compose.
+    data_dir: str = "/data"
 
     # Безпека / ліміти
     enable_code_exec: bool = False

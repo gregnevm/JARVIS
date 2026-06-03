@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+COPY twin/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY jarvis_core /app/jarvis_core
+COPY twin/app ./app
+ENV PYTHONPATH=/app
+
+EXPOSE 8765
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8765"]

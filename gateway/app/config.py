@@ -10,15 +10,30 @@ class Settings(BaseSettings):
     # Telegram
     telegram_bot_token: str = ""
     allowed_user_ids: str = ""
+    # Адміни: /admin та небезпечні дії лише з підтвердженням. Порожньо = усі з whitelist.
+    admin_user_ids: str = ""
     telegram_api_base: str = "https://api.telegram.org"
+    # Спосіб отримання апдейтів:
+    #   polling — gateway сам опитує Telegram (getUpdates). Нуль інфраструктури,
+    #             переживає рестарти, не треба публічний URL/тунель. Дефолт.
+    #   webhook — Telegram шле POST /webhook (потрібен стабільний публічний HTTPS,
+    #             напр. named tunnel / домен). Вмикати лише в проді з фіксованим URL.
+    telegram_ingest_mode: str = "polling"
+    # Секрет вебхука (лише для webhook-режиму): Telegram шле його у заголовку
+    # X-Telegram-Bot-Api-Secret-Token. Порожньо = перевірка вимкнена.
+    telegram_webhook_secret: str = ""
 
-    # Внутрішні сервіси
-    n8n_webhook_url: str = "http://n8n:5678/webhook/agent"
+    # Tools — агент-луп (DESIGN: без n8n-проксі)
+    tools_url: str = "http://tools:8200"
+    twin_url: str = "http://twin:8765"
     whisper_url: str = "http://whisper:9000"
     whisper_language: str = ""  # порожньо = автовизначення мови
+    tts_url: str = "http://tts:8300"
+    # Голосова відповідь (TTS) на голосові повідомлення. Вимкнено за замовчуванням.
+    enable_voice_reply: bool = False
     redis_url: str = "redis://redis:6379/0"
     # Агент-луп на CPU повільний (кілька викликів Ollama) — тримаємо запас.
-    orchestrator_timeout: float = 300.0
+    agent_timeout: float = 300.0
 
     # Ліміти / шляхи
     rate_limit_per_min: int = 20
@@ -29,6 +44,23 @@ class Settings(BaseSettings):
         """ALLOWED_USER_IDS ('1,2,3') → set[int]. Порожньо = нікого не пускаємо."""
         ids: set[int] = set()
         for part in self.allowed_user_ids.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                ids.add(int(part))
+            except ValueError:
+                continue
+        return ids
+
+    @property
+    def admin_ids(self) -> set[int]:
+        """ADMIN_USER_IDS. Порожньо → адміни = ALLOWED_USER_IDS."""
+        raw = self.admin_user_ids.strip()
+        if not raw:
+            return self.allowed_ids
+        ids: set[int] = set()
+        for part in raw.split(","):
             part = part.strip()
             if not part:
                 continue

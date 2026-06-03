@@ -1,6 +1,10 @@
-# n8n workflow: agent_loop
+# n8n workflow: agent_loop (LEGACY)
 
-Оркестратор. Gateway шле `POST /webhook/agent`, n8n делегує всю «мозкову» логіку
+> **З 2026-06:** Gateway кличе **Tools `/agent` напряму** (`gateway/app/tools_client.py`).
+> n8n не потрібен для E2E. У Compose: `docker compose --profile legacy up` якщо все ж
+> хочеш старий шлях через webhook.
+
+Оркестратор (історично). Gateway шле `POST /webhook/agent`, n8n делегує всю «мозкову» логіку
 в Tools-сервіс (`/agent`) і повертає текст назад.
 
 > **Архітектурне рішення (Фаза 6).** Памʼять + маршрутизація CHAT/AGENT + тул-луп

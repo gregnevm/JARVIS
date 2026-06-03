@@ -1,8 +1,9 @@
 # JARVIS — повністю локальний AI-асистент у Telegram
 
 Self-hosted Telegram-бот на мікросервісах. Усе працює локально: LLM через **Ollama**,
-оркестрація через **n8n**, пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**.
-Жодних зовнішніх AI API. Запуск — один `docker compose up`.
+агент-луп у **Tools** (Python), пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**,
+синхронізація Edge↔Twin через **twin** (SyncServer + ModelRegistry). Жодних зовнішніх AI API.
+Запуск — один `docker compose up`. Цільова архітектура PortableAI — `docs/DESIGN.md`.
 
 > Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
 > Tools + агент-луп на двох моделях, polish (rate limit, circuit breaker, healthchecks).
@@ -13,16 +14,17 @@ Self-hosted Telegram-бот на мікросервісах. Усе працює
 ## Архітектура
 
 ```
-text ─► Gateway ──► n8n ──► Tools /agent ──┬─► Ollama (ХОСТ)  CHAT | AGENT
-       (auth,      (orch)   route + loop   ├─► Memory  (pgvector RAG)
-        rate-limit)                        └─► calc · web_fetch · search · code_exec
+text ─► Gateway ──► Tools /agent ──┬─► Ollama (ХОСТ)  CHAT | AGENT
+       (auth,       route + loop   ├─► Memory  (pgvector RAG)
+        rate-limit)                 └─► calc · web_fetch · search · code_exec
 voice ─► Whisper (STT) ─┘
-        дані: PostgreSQL (історія + вектори) · Redis (rate-limit)
+Edge ──► Twin SyncServer (ingest JSONL, /latest/lora, ModelRegistry)
+        дані: PostgreSQL · Redis · ./data/twin
 ```
 
-Gateway робить лише I/O (Telegram, auth, rate-limit, STT) і кличе n8n. n8n —
-тонкий оркестратор: делегує в **Tools `/agent`**, де живе вся «мозкова» логіка —
-вибір моделі за `AGENT_MODE`, RAG-контекст із Memory і тул-луп на AGENT-моделі.
+Gateway робить лише I/O (Telegram, auth, rate-limit, STT) і кличе **Tools `/agent`**
+напряму (DESIGN: без n8n-проксі). Там живе вся «мозкова» логіка — `AGENT_MODE`,
+RAG-контекст із Memory і тул-луп на AGENT-моделі.
 
 | Сервіс     | Порт  | Образ / стек                                   | Роль                                  |
 |------------|-------|------------------------------------------------|---------------------------------------|
@@ -30,7 +32,8 @@ Gateway робить лише I/O (Telegram, auth, rate-limit, STT) і клич�
 | whisper    | 9000  | `onerahmet/openai-whisper-asr-webservice`      | Розпізнавання голосу (STT)            |
 | memory     | 8100  | FastAPI (build)                                | RAG: embeddings + retrieval           |
 | tools      | 8200  | FastAPI (build)                                | Інструменти + агент-луп (дві моделі)  |
-| n8n        | 5678  | `n8nio/n8n`                                     | Тонкий оркестратор → Tools `/agent`   |
+| twin       | 8765  | FastAPI (build)                                | SyncServer, ModelRegistry, Edge ingest |
+| n8n        | 5678  | `n8nio/n8n` (profile `legacy`, опційно)        | Застарілий проксі; не потрібен за замовч. |
 | postgres   | 5432  | `pgvector/pgvector:pg16`                        | Історія + векторна пам'ять            |
 | redis      | 6379  | `redis:7-alpine`                               | Rate limit, short-term, черга         |
 | ollama     | 11434 | **на хості** (не в Compose)                    | LLM + embeddings                      |
@@ -60,8 +63,28 @@ ollama pull nomic-embed-text         # EMBED_MODEL — ембединги (768 �
 > триває хвилини. Для CPU став non-thinking instruct, напр.:
 > `ollama pull qwen2.5:3b-instruct` і `OLLAMA_MODEL_CHAT=qwen2.5:3b-instruct`.
 
+### AMD GPU без ROCm — через Vulkan (експериментально, але працює)
+
+ROCm на Windows для Ollama підтримує тільки **RDNA2/RDNA3** (RX 6000/7000). Старіші
+карти (RDNA1 — RX 5700 XT тощо) офіційно «не підтримуються». **Обхід — `OLLAMA_VULKAN=1`**:
+
+```powershell
+# зупинити поточну Ollama (якщо крутиться):
+Get-Process ollama -EA SilentlyContinue | Stop-Process -Force
+# стартувати з Vulkan-бекендом:
+$env:OLLAMA_VULKAN=1; $env:OLLAMA_HOST="0.0.0.0:11434"; ollama serve
+```
+
+Перевірено наживо на **AMD Radeon RX 5700 XT (8 ГБ VRAM)**: qwen2.5:7b-instruct
+дає ~50-60 tok/s — **~8× швидше за CPU** на тій самій машині. Vulkan працює на
+будь-якому сучасному GPU включно з RDNA1, тож це найпростіший шлях оживити
+не-NVIDIA залізо. На NVIDIA Ollama використовує CUDA автоматично — Vulkan не потрібен.
+
 Моделі можна змінити у `.env`. Але якщо міняєш `EMBED_MODEL` на модель з **іншою
 розмірністю** вектора — треба синхронізувати `vector(768)` у `db/init.sql` (це міграція).
+
+> **Зміна `.env` уже після старту:** `docker compose restart <svc>` **НЕ** перечитує
+> `env_file`. Щоб новий env підхопився — `docker compose up -d <svc>` (recreate).
 
 ---
 
@@ -97,19 +120,45 @@ docker compose ps                     # статуси + healthcheck
 2. **Свій user_id:** напиши [@userinfobot](https://t.me/userinfobot) — він поверне твій числовий ID.
    Впиши його в `ALLOWED_USER_IDS` (кілька — через кому). Бот ігнорує всіх, кого нема у списку.
 
-### Вебхук назовні через cloudflared (безкоштовно, без домену)
+### Як заходять апдейти (long polling — за замовчуванням)
 
-Telegram має достукатися до твого `gateway:8000`. Найпростіше — тунель Cloudflare:
+Gateway сам опитує Telegram через `getUpdates` (**long polling**). Це означає:
+
+- ✅ **нічого не треба налаштовувати** — підняв стек, бот працює;
+- ✅ **не потрібен публічний URL, тунель, домен чи сертифікат**;
+- ✅ переживає будь-який рестарт сам — жодного ручного `setWebhook`;
+- потрібен лише **вихідний** HTTPS до `api.telegram.org`.
 
 ```bash
-# одноразовий тимчасовий тунель (видає випадковий https-домен)
-cloudflared tunnel --url http://localhost:8000
-
-# отриманий https://<random>.trycloudflare.com реєструємо як вебхук:
-curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https://<random>.trycloudflare.com/webhook"
+docker compose up -d
+docker compose logs -f gateway   # "Long polling started (getUpdates)"
 ```
 
-Альтернатива для постійного домену — Nginx + TLS (закоментований блок `nginx` у compose).
+На старті gateway сам знімає будь-який старий webhook (бо `getUpdates` і webhook
+взаємовиключні для одного токена).
+
+### Webhook-режим (опціонально, для прода)
+
+Якщо є стабільний публічний HTTPS-домен (reverse proxy / named tunnel) — можна
+перейти на push-модель. У `.env`:
+
+```env
+TELEGRAM_INGEST_MODE=webhook
+TELEGRAM_WEBHOOK_SECRET=<token_hex(24)>   # захист /webhook від підробок (403)
+```
+
+Потім один раз зареєструвати адресу (URL не змінюється → робиться раз):
+
+```bash
+curl -X POST "https://api.telegram.org/bot$TOKEN/setWebhook" \
+  -d url="https://your-domain/webhook" \
+  -d secret_token="$TELEGRAM_WEBHOOK_SECRET" \
+  -d allowed_updates='["message","edited_message","callback_query"]'
+```
+
+> Масштаб «вшир» (багато воркерів) не залежить від polling vs webhook: Telegram
+> віддає апдейти одному споживачу на токен. Масштабована вісь — обробка:
+> *ingestion → черга (Redis) → N воркерів*. Див. `ROADMAP.md`.
 
 ---
 
@@ -123,7 +172,7 @@ curl "https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https://<random>.t
 ├── pyproject.toml          # конфіг mypy (strict) + pytest
 ├── requirements-dev.txt    # dev/CI-залежності (mypy, pytest)
 ├── .github/workflows/      # CI: mypy + pytest (matrix) + compose-validate
-├── gateway/                # FastAPI: вебхук, auth, роутинг + tests/ (Фаза 2)
+├── gateway/                # FastAPI: long polling (getUpdates) + /webhook, auth, роутинг + tests/
 ├── whisper/                # STT (готовий образ, без коду)
 ├── memory/                 # RAG: embeddings + retrieval + tests/   (Фаза 4)
 ├── tools/                  # агентські інструменти + tests/         (Фаза 6)

@@ -49,17 +49,67 @@ class TelegramClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def delete_webhook(self, drop_pending: bool = False) -> None:
+        """Знімає webhook. Потрібно перед getUpdates (вони взаємовиключні)."""
+        try:
+            await self._call("deleteWebhook", {"drop_pending_updates": drop_pending})
+        except httpx.HTTPError as exc:
+            logger.error("deleteWebhook failed: %s", exc)
+
+    async def get_updates(
+        self,
+        offset: int | None = None,
+        timeout: int = 30,
+        allowed_updates: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Long poll getUpdates. Запит висить до `timeout` с або до першого апдейту."""
+        payload: dict[str, Any] = {"timeout": timeout}
+        if offset is not None:
+            payload["offset"] = offset
+        if allowed_updates is not None:
+            payload["allowed_updates"] = allowed_updates
+        # read-timeout має перевищувати long-poll timeout, інакше httpx обірве сам.
+        resp = await self._client.post(
+            f"{self._api}/getUpdates", json=payload, timeout=timeout + 15
+        )
+        resp.raise_for_status()
+        result = resp.json().get("result")
+        return result if isinstance(result, list) else []
+
     async def send_message(
-        self, chat_id: int, text: str, parse_mode: str | None = None
+        self,
+        chat_id: int,
+        text: str,
+        parse_mode: str | None = None,
+        reply_markup: dict[str, Any] | None = None,
     ) -> None:
-        for chunk in split_message(text):
+        chunks = split_message(text)
+        for i, chunk in enumerate(chunks):
             payload: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
             if parse_mode:
                 payload["parse_mode"] = parse_mode
+            if reply_markup and i == len(chunks) - 1:
+                payload["reply_markup"] = reply_markup
             try:
                 await self._call("sendMessage", payload)
             except httpx.HTTPError as exc:
                 logger.error("sendMessage failed: %s", exc)
+                if parse_mode:
+                    plain: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
+                    if reply_markup and i == len(chunks) - 1:
+                        plain["reply_markup"] = reply_markup
+                    await self._call("sendMessage", plain)
+
+    async def answer_callback_query(
+        self, callback_query_id: str, text: str | None = None
+    ) -> None:
+        payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+        if text:
+            payload["text"] = text[:200]
+        try:
+            await self._call("answerCallbackQuery", payload)
+        except httpx.HTTPError as exc:
+            logger.error("answerCallbackQuery failed: %s", exc)
 
     async def get_file_path(self, file_id: str) -> str | None:
         data = await self._call("getFile", {"file_id": file_id})
@@ -70,3 +120,15 @@ class TelegramClient:
         resp = await self._client.get(f"{self._files}/{file_path}")
         resp.raise_for_status()
         return resp.content
+
+    async def send_voice(self, chat_id: int, audio: bytes, caption: str | None = None) -> None:
+        """Надсилає голосове (OGG/Opus). Помилки логуються, не кидаються."""
+        data: dict[str, str] = {"chat_id": str(chat_id)}
+        if caption:
+            data["caption"] = caption[:1024]
+        files = {"voice": ("voice.ogg", audio, "audio/ogg")}
+        try:
+            resp = await self._client.post(f"{self._api}/sendVoice", data=data, files=files)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.error("sendVoice failed: %s", exc)

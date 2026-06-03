@@ -1,23 +1,24 @@
-"""JARVIS Tools service — інструменти агента + агент-луп (дві моделі)."""
+"""JARVIS Tools service — інструменти агента + Facade JARVIS + pipeline."""
 from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from . import toolkit
-from .agent import AgentRunner
+from .bootstrap import build_jarvis
 from .config import settings
 from .memory_client import MemoryClient
-from .ollama import OllamaClient
+from .runtime import clear_agent_mode, get_agent_mode, set_agent_mode
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("jarvis.tools.main")
 
 
@@ -47,26 +48,28 @@ class AgentRequest(BaseModel):
     text: str
 
 
+class ModeRequest(BaseModel):
+    mode: str
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    app.state.ollama = OllamaClient(
-        settings.ollama_host,
-        settings.ollama_timeout,
-        settings.ollama_fail_threshold,
-        settings.ollama_cooldown,
-    )
-    app.state.memory = MemoryClient(settings.memory_url)
-    app.state.agent = AgentRunner(app.state.ollama, app.state.memory)
+    memory = MemoryClient(settings.memory_url)
+    jarvis, runner, chat_backend = build_jarvis(memory, settings.twin_url)
+    app.state.memory = memory
+    app.state.jarvis = jarvis
+    app.state.agent = runner
+    app.state.chat_backend = chat_backend
     logger.info(
         "Tools up. mode=%s chat=%s agent=%s code_exec=%s",
-        settings.agent_mode,
+        get_agent_mode(),
         settings.ollama_model_chat,
         settings.ollama_model_agent,
         settings.enable_code_exec,
     )
     yield
-    await app.state.ollama.aclose()
-    await app.state.memory.aclose()
+    await chat_backend.aclose()
+    await memory.aclose()
 
 
 app = FastAPI(title="JARVIS Tools", lifespan=lifespan)
@@ -75,6 +78,30 @@ app = FastAPI(title="JARVIS Tools", lifespan=lifespan)
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/status")
+async def status_ep() -> dict[str, Any]:
+    return await app.state.jarvis.dashboard()
+
+
+@app.get("/dashboard")
+async def dashboard_ep() -> dict[str, Any]:
+    return await app.state.jarvis.dashboard()
+
+
+@app.post("/mode")
+async def set_mode_ep(req: ModeRequest) -> dict[str, str]:
+    try:
+        set_agent_mode(req.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"mode": get_agent_mode(), "status": "ok"}
+
+
+@app.delete("/mode")
+async def reset_mode_ep() -> dict[str, str]:
+    return {"mode": clear_agent_mode(), "status": "reset"}
 
 
 @app.post("/calc")
@@ -104,10 +131,12 @@ async def code_exec_ep(req: CodeRequest) -> dict[str, str]:
 
 @app.post("/agent")
 async def agent_ep(req: AgentRequest) -> dict[str, Any]:
-    runner: AgentRunner = app.state.agent
     try:
-        return await runner.run(req.user_id, req.text)
-    except Exception:  # noqa: BLE001 — користувач має отримати відповідь навіть як Ollama лежить
+        return await app.state.jarvis.chat(req.user_id, req.text)
+    except Exception:  # noqa: BLE001
         logger.exception("agent run failed")
-        return {"text": "Локальна модель зараз недоступна. Перевір, чи піднятий Ollama на хості.",
-                "mode": "error", "iters": 0}
+        return {
+            "text": "Локальна модель зараз недоступна. Перевір, чи піднятий Ollama на хості.",
+            "mode": "error",
+            "iters": 0,
+        }

@@ -31,6 +31,11 @@ def test_hybrid_plain_to_chat():
     assert decide_mode("розкажи жарт", "hybrid") == "chat"
 
 
+def test_hybrid_note_to_agent():
+    assert decide_mode("запиши нотатку: купити хліб", "hybrid") == "agent"
+    assert decide_mode("покажи мої нотатки", "hybrid") == "agent"
+
+
 # --- фейки ---
 class FakeOllama:
     def __init__(self, responses: list[dict[str, Any]]) -> None:
@@ -91,3 +96,37 @@ async def test_run_fallback_on_empty_answer(monkeypatch):
     out = await AgentRunner(ollama, mem).run(1, "щось")
     assert out["text"] == agent.FALLBACK
     assert mem.stored == [("user", "щось")]  # порожню відповідь не зберігаємо
+
+
+# --- inline tool-call фолбек (qwen2.5 інколи віддає виклик текстом) ---
+def test_parse_inline_no_args():
+    content = 'ось виклик\n<tool_call>\n{"name": "recall_notes", "arguments": {}}\n</tool_call>'
+    calls = agent._parse_inline_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "recall_notes"
+    assert calls[0]["function"]["arguments"] == {}
+
+
+def test_parse_inline_with_args():
+    calls = agent._parse_inline_tool_calls('{"name": "calc", "arguments": {"expression": "2+2"}}')
+    assert calls[0]["function"]["name"] == "calc"
+    assert calls[0]["function"]["arguments"] == {"expression": "2+2"}
+
+
+def test_parse_inline_none():
+    assert agent._parse_inline_tool_calls("звичайний текст без викликів") == []
+
+
+async def test_run_agent_handles_inline_tool_call(monkeypatch):
+    """Модель віддала tool call текстом → loop має його виконати, а не злити юзеру."""
+    monkeypatch.setattr(settings, "agent_mode", "agent")
+    ollama = FakeOllama(
+        [
+            {"role": "assistant",
+             "content": '<tool_call>{"name": "calc", "arguments": {"expression": "2+2"}}</tool_call>'},
+            {"role": "assistant", "content": "Відповідь: 4"},
+        ]
+    )
+    out = await AgentRunner(ollama, FakeMemory()).run(1, "скільки буде 2+2")
+    assert out["text"] == "Відповідь: 4"
+    assert out["iters"] == 2  # inline-виклик оброблено як справжній

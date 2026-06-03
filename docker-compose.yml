@@ -1,12 +1,23 @@
 name: jarvis
 
+# Спільний логдрайвер — рятує диск від нескінченного росту логів (json-file без ліміту).
+# Кожен сервіс: max 5 файлів × 10 МБ = ≤50 МБ логів на контейнер.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   # ---------------------------------------------------------
-  # Gateway — FastAPI: Telegram webhook, auth, роутинг
+  # Gateway — FastAPI + Telegram long polling (getUpdates), auth, роутинг.
+  # За замовчуванням НЕ потрібен публічний URL/тунель: gateway сам опитує Telegram.
+  # Для webhook-режиму (прод зі стабільним доменом): TELEGRAM_INGEST_MODE=webhook.
   # ---------------------------------------------------------
   gateway:
     build: ./gateway
     env_file: .env
+    # Порт потрібен лише для webhook-режиму та /health. У polling можна не публікувати.
     ports:
       - "8000:8000"
     volumes:
@@ -16,8 +27,11 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      tools:
+        condition: service_healthy
     networks: [jarvis-net]
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -37,6 +51,7 @@ services:
       - "9000:9000"
     networks: [jarvis-net]
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       # start_period великий: на першому старті тягне модель Whisper.
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:9000/docs')\" || exit 1"]
@@ -58,8 +73,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks: [jarvis-net]
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
       interval: 30s
@@ -71,7 +89,9 @@ services:
   # Tools — агентські інструменти (calc, web_fetch, search, ...)
   # ---------------------------------------------------------
   tools:
-    build: ./tools
+    build:
+      context: .
+      dockerfile: tools/Dockerfile
     env_file: .env
     ports:
       - "8200:8200"
@@ -81,6 +101,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks: [jarvis-net]
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')"]
       interval: 30s
@@ -89,9 +110,52 @@ services:
       start_period: 20s
 
   # ---------------------------------------------------------
-  # n8n — оркестратор (workflow agent_loop). UI: http://localhost:5678
+  # TTS — синтез голосових відповідей (piper → OGG/Opus). Опційно (ENABLE_VOICE_REPLY).
+  # ---------------------------------------------------------
+  tts:
+    build: ./tts
+    env_file: .env
+    ports:
+      - "8300:8300"
+    networks: [jarvis-net]
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8300/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------
+  # Twin — SyncServer + ModelRegistry (DESIGN Phase 2). UI/API: :8765
+  # ---------------------------------------------------------
+  twin:
+    build:
+      context: .
+      dockerfile: twin/Dockerfile
+    env_file: .env
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data/twin:/data/twin
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [jarvis-net]
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------
+  # n8n — LEGACY (не потрібен: Gateway → Tools /agent напряму). Profile: legacy
   # ---------------------------------------------------------
   n8n:
+    profiles: ["legacy"]
     image: n8nio/n8n:latest
     env_file: .env
     environment:
@@ -116,6 +180,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks: [jarvis-net]
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
       interval: 30s
@@ -139,6 +204,7 @@ services:
       - "5432:5432"
     networks: [jarvis-net]
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jarvis} -d ${POSTGRES_DB:-jarvis}"]
       interval: 10s
@@ -158,6 +224,7 @@ services:
       - "6379:6379"
     networks: [jarvis-net]
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -172,7 +239,7 @@ services:
   #
   # Розкоментуй ЦЕЙ блок і прибери host.docker.internal, якщо хочеш
   # Ollama в Compose: у .env постав OLLAMA_HOST=http://ollama:11434.
-  # ПОТРІБЕН NVIDIA Container Toolkit на хості.
+  # ПОТРІБЕН NVIDIA Container Toolkit на хості (для AMD — складніше, див. ROADMAP E2).
   # =========================================================
   # ollama:
   #   image: ollama/ollama:latest
@@ -192,7 +259,8 @@ services:
 
   # =========================================================
   # --- OPTIONAL (Фаза 2): Nginx reverse proxy + TLS ---
-  # Альтернатива без домену/сертифіката — cloudflared tunnel (див. README).
+  # Потрібен лише для webhook-режиму (TELEGRAM_INGEST_MODE=webhook) у проді.
+  # Дефолтний polling публічного URL не потребує.
   # =========================================================
   # nginx:
   #   image: nginx:alpine
