@@ -84,10 +84,11 @@ def test_parse_ddg_respects_limit():
 # --- схеми інструментів ---
 def test_schemas_default_excludes_code_exec(monkeypatch):
     monkeypatch.setattr(settings, "enable_code_exec", False)
+    monkeypatch.setattr(settings, "enable_computer_use", False)
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
     assert names == [
         "calc", "web_search", "web_fetch", "parse_file", "ocr_image", "take_note",
-        "recall_notes", "set_reminder", "list_reminders", "show_in_app",
+        "recall_notes", "set_reminder", "list_reminders", "cancel_reminder", "show_in_app",
     ]
     assert "code_exec" not in names
 

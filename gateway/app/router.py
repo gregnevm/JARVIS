@@ -18,7 +18,8 @@ import httpx
 import redis.asyncio as aioredis
 
 from .auth import is_allowed
-from .bot import handle_callback, handle_command, is_command
+from .bot import handle_callback, handle_command, handle_quick_action, is_command, is_quick_action
+from .bot.quick_actions import ensure_reply_keyboard_auto
 from .config import settings
 from .media import (
     AUDIO_SOURCES,
@@ -35,7 +36,7 @@ from .media import (
 from .outbound import deliver
 from .ratelimit import RateLimiter
 from .services import ServicesClient
-from .streaming import stream_reply
+from .agent_turn import run_agent_turn
 from .telegram import TelegramClient
 from .tools_client import ToolsClient
 from .tts_client import TtsClient
@@ -170,8 +171,26 @@ async def handle_update(
         await _handle_reaction(reaction, tg, tools, limiter, redis)
         return
 
+    chosen = update.get("chosen_inline_result")
+    if isinstance(chosen, dict):
+        logger.info(
+            "chosen_inline_result user=%s result_id=%s",
+            (chosen.get("from") or {}).get("id"),
+            chosen.get("result_id"),
+        )
+        return
+
     message = _extract_message(update)
     if message is None:
+        return
+
+    if update.get("edited_message") and settings.ignore_edited_messages:
+        chat_id = message.get("chat", {}).get("id")
+        if chat_id is not None:
+            await tg.send_message(
+                int(chat_id),
+                "✏️ Редагування повідомлення не перезапускає агента. Надішли новий запит.",
+            )
         return
 
     user_id = message.get("from", {}).get("id")
@@ -187,6 +206,8 @@ async def handle_update(
         await tg.send_message(chat_id, "Забагато запитів 🙂 Почекай хвилинку і спробуй знову.")
         return
 
+    await ensure_reply_keyboard_auto(tg, int(chat_id), int(user_id), redis)
+
     # Альбом (media_group): кілька файлів одним постом → буферимо й обробляємо разом.
     if message.get("media_group_id"):
         await _handle_album(message, int(chat_id), int(user_id), tg, tools, redis)
@@ -201,8 +222,16 @@ async def handle_update(
             return  # вже відповіли користувачу (помилка/порожньо)
 
     if is_command(text):
-        await handle_command(text, int(chat_id), int(user_id), tg, svc, redis)
+        await handle_command(
+            text, int(chat_id), int(user_id), tg, svc, redis, tools=tools
+        )
         return
+
+    if is_quick_action(text):
+        if await handle_quick_action(
+            text, int(chat_id), int(user_id), tg, svc, tools, redis
+        ):
+            return
 
     # Контекст (reply/forward) підкладаємо агенту, не показуючи користувачу.
     ctx = message_context(message)
@@ -211,45 +240,30 @@ async def handle_update(
     # Показуємо "typing…" поки агент думає (інференс на CPU може тривати секунди).
     await tg.send_chat_action(int(chat_id), "typing")
 
+    thread_id = message.get("message_thread_id")
     payload = {
         "user_id": user_id,
         "chat_id": chat_id,
         "text": agent_text,
         "type": source,
         "mode": "auto",
+        "message_thread_id": thread_id,
     }
-    reply = await _run_agent(
-        tg, tools, int(chat_id), payload, message.get("message_id"), redis, int(user_id)
+    reply = await run_agent_turn(
+        tg,
+        tools,
+        int(chat_id),
+        payload,
+        message.get("message_id"),
+        redis,
+        int(user_id),
+        message_thread_id=thread_id,
     )
 
     if tts is not None and source in AUDIO_SOURCES and reply:
         audio = await tts.synthesize(reply)
         if audio:
             await tg.send_voice(chat_id, audio)
-
-
-async def _run_agent(
-    tg: TelegramClient,
-    tools: ToolsClient,
-    chat_id: int,
-    payload: dict[str, Any],
-    react_message_id: int | None = None,
-    redis: aioredis.Redis | None = None,
-    user_id: int | None = None,
-) -> str:
-    """Виконує запит до агента й доставляє відповідь (текст + медіа/кнопки/реакції/канвас)."""
-    if settings.enable_streaming:
-        reply = await stream_reply(tg, tools, chat_id, payload, react_message_id, redis=redis)
-        if not reply:
-            reply = await tools.process(payload)
-            reply = await deliver(
-                tg, chat_id, reply, react_message_id, redis=redis, user_id=user_id
-            )
-        return reply
-    reply = await tools.process(payload)
-    return await deliver(
-        tg, chat_id, reply, react_message_id, redis=redis, user_id=user_id
-    )
 
 
 # --------------------------------------------------------------------------- #
@@ -263,10 +277,67 @@ async def _handle_inline_query(
         return
     query = str(inline.get("query") or "").strip()
     iq_id = str(inline.get("id") or "")
-    if not query or not iq_id:
+    if not iq_id:
         return
+
+    if not query:
+        results = [
+            {
+                "type": "article",
+                "id": "cmd_brief",
+                "title": "📋 Бриф",
+                "description": "Короткий огляд системи та нагадувань",
+                "input_message_content": {"message_text": "/brief"},
+            },
+            {
+                "type": "article",
+                "id": "cmd_status",
+                "title": "📊 Статус",
+                "description": "Ollama, режим, Twin / LoRA",
+                "input_message_content": {"message_text": "/status"},
+            },
+            {
+                "type": "article",
+                "id": "cmd_reminders",
+                "title": "⏰ Нагадування",
+                "description": "Активні нагадування",
+                "input_message_content": {"message_text": "/reminders"},
+            },
+            {
+                "type": "article",
+                "id": "cmd_help",
+                "title": "❓ Довідка",
+                "description": "Команди та можливості бота",
+                "input_message_content": {"message_text": "/help"},
+            },
+        ]
+        await tg.answer_inline_query(iq_id, results, cache_time=300)
+        return
+
+    img_match = re.search(
+        r"(https?://\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?)",
+        query,
+        re.IGNORECASE,
+    )
+    if img_match:
+        url = img_match.group(1)
+        await tg.answer_inline_query(
+            iq_id,
+            [
+                {
+                    "type": "photo",
+                    "id": uuid.uuid4().hex[:16],
+                    "photo_url": url,
+                    "thumb_url": url,
+                    "title": "Зображення",
+                    "description": query[:120],
+                }
+            ],
+            cache_time=300,
+        )
+        return
+
     answer = await tools.process({"user_id": int(user_id), "text": query})
-    # Inline не показує медіа-директив — лишаємо чистий текст.
     from .outbound import parse_directives
 
     clean, _ = parse_directives(answer)
@@ -280,7 +351,7 @@ async def _handle_inline_query(
             "input_message_content": {"message_text": clean[:4096]},
         }
     ]
-    await tg.answer_inline_query(iq_id, results, cache_time=0)
+    await tg.answer_inline_query(iq_id, results, cache_time=60)
 
 
 # --------------------------------------------------------------------------- #
@@ -382,7 +453,7 @@ async def _handle_album(
         "type": "album",
         "mode": "auto",
     }
-    await _run_agent(
+    await run_agent_turn(
         tg, tools, chat_id, payload, message.get("message_id"), redis, user_id
     )
 

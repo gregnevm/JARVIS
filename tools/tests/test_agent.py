@@ -1,6 +1,8 @@
 """decide_mode + AgentRunner з підробленими Ollama/Memory (без мережі)."""
 from typing import Any
 
+import pytest
+
 from app import agent
 from app.agent import AgentRunner, decide_mode
 from app.config import settings
@@ -41,6 +43,21 @@ def test_hybrid_plain_to_chat():
 def test_hybrid_note_to_agent():
     assert decide_mode("запиши нотатку: купити хліб", "hybrid") == "agent"
     assert decide_mode("покажи мої нотатки", "hybrid") == "agent"
+
+
+def test_decide_mode_screenshot_routes_agent_when_computer_enabled(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "enable_computer_use", True)
+    assert decide_mode("зроби скріншот", "hybrid") == "agent"
+    assert decide_mode("take a screenshot please", "hybrid") == "agent"
+    assert decide_mode("зроби скріншот", "chat") == "chat"
+
+
+def test_decide_mode_screen_region_without_kw_still_agent_when_computer_on(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """_SCREENSHOT_RE ловить «скрін екран» навіть без слова «скріншот» у _KW_RE."""
+    monkeypatch.setattr(settings, "enable_computer_use", True)
+    assert decide_mode("зроби скрін екран зараз", "hybrid") == "agent"
 
 
 # --- фейки ---

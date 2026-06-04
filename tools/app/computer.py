@@ -1,13 +1,17 @@
 """Клієнт host-agent: PowerShell, CLI, FS на Windows-хості."""
 from __future__ import annotations
 
+import base64
 import logging
+import uuid
+from pathlib import Path
 from typing import Any
 
 import httpx
 
 from .computer_confirm import wrap_execute
 from .config import settings
+from .ps_whitelist import check_ps_whitelist
 
 logger = logging.getLogger("jarvis.tools.computer")
 
@@ -39,25 +43,15 @@ def _format_exec(stdout: str, stderr: str, code: int) -> str:
     return _truncate("\n".join(parts))
 
 
-def _parse_whitelist(raw: str) -> set[str]:
-    return {x.strip().lower() for x in (raw or "").split(",") if x.strip()}
+def _check_cli_whitelist(exe: str, *, trusted: bool = False) -> str | None:
+    if trusted:
+        return None
+    from .computer_learned import cli_exe_name, effective_cli_allowed
 
-
-def _check_ps_whitelist(script: str) -> str | None:
-    allowed = _parse_whitelist(settings.ps_whitelist)
+    allowed = effective_cli_allowed()
     if not allowed:
-        return "PowerShell вимкнено: PS_WHITELIST порожній."
-    first = (script or "").strip().split(None, 1)[0].lower().rstrip(";")
-    if first not in allowed:
-        return f"PowerShell-команда '{first}' не в PS_WHITELIST."
-    return None
-
-
-def _check_cli_whitelist(exe: str) -> str | None:
-    allowed = _parse_whitelist(settings.cli_whitelist)
-    if not allowed:
-        return "CLI вимкнено: CLI_WHITELIST порожній."
-    name = (exe or "").strip().split("\\")[-1].split("/")[-1].lower()
+        return "CLI вимкнено: CLI_WHITELIST порожній і ще немає навчених exe."
+    name = cli_exe_name(exe)
     if name not in allowed:
         return f"CLI '{name}' не в CLI_WHITELIST."
     return None
@@ -81,12 +75,14 @@ async def _request(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         return {"error": f"hostagent недоступний: {exc}"}
 
 
-async def _run_powershell_impl(script: str, as_admin: bool = False) -> str:
+async def _run_powershell_impl(
+    script: str, as_admin: bool = False, *, trusted: bool = False
+) -> str:
     if not settings.enable_computer_use:
         return "Computer Use вимкнено (ENABLE_COMPUTER_USE=false)."
     if as_admin and not settings.computer_allow_admin:
         return "Admin PowerShell вимкнено (COMPUTER_ALLOW_ADMIN=false)."
-    err = _check_ps_whitelist(script)
+    err = check_ps_whitelist(script, trusted=trusted)
     if err:
         return err
     data = await _request(
@@ -103,10 +99,16 @@ async def _run_powershell_impl(script: str, as_admin: bool = False) -> str:
     )
 
 
-async def _run_cli_impl(exe: str, args: list[str] | None = None, cwd: str | None = None) -> str:
+async def _run_cli_impl(
+    exe: str,
+    args: list[str] | None = None,
+    cwd: str | None = None,
+    *,
+    trusted: bool = False,
+) -> str:
     if not settings.enable_computer_use:
         return "Computer Use вимкнено (ENABLE_COMPUTER_USE=false)."
-    err = _check_cli_whitelist(exe)
+    err = _check_cli_whitelist(exe, trusted=trusted)
     if err:
         return err
     data = await _request(
@@ -147,6 +149,30 @@ async def _fs_read_impl(path: str) -> str:
     return _truncate(f"Файл {data.get('path', path)}{note}:\n{content}")
 
 
+async def _capture_screenshot_impl() -> str:
+    if not settings.enable_computer_use:
+        return "Computer Use вимкнено (ENABLE_COMPUTER_USE=false)."
+    data = await _request("POST", "/screen/capture")
+    if "error" in data:
+        return str(data["error"])
+    raw = data.get("data_b64")
+    if not raw:
+        return "hostagent: порожня відповідь скріншота"
+    try:
+        png = base64.b64decode(str(raw), validate=True)
+    except (ValueError, TypeError) as exc:
+        return f"скріншот: невалідний base64 ({exc})"
+    uploads = Path(settings.data_dir) / "uploads"
+    try:
+        uploads.mkdir(parents=True, exist_ok=True)
+        dest = uploads / f"screenshot_{uuid.uuid4().hex[:10]}.png"
+        dest.write_bytes(png)
+    except OSError as exc:
+        return f"не вдалося зберегти скріншот: {exc}"
+    # Директива для gateway outbound — надішле фото в Telegram.
+    return f"Скріншот знято (T0). [[photo:{dest.as_posix()}|екран]]"
+
+
 async def _fs_write_impl(path: str, content: str) -> str:
     if not settings.enable_computer_use:
         return "Computer Use вимкнено (ENABLE_COMPUTER_USE=false)."
@@ -156,24 +182,29 @@ async def _fs_write_impl(path: str, content: str) -> str:
     return f"Записано: {data.get('path', path)} ✅"
 
 
-async def execute_internal(tool: str, args: dict[str, Any]) -> str:
-    """Виконує computer-дію без перевірки підтвердження (після ✅ у Telegram)."""
+async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = False) -> str:
+    """Виконує computer-дію. trusted=True після ✅ у Telegram."""
     if tool == "run_powershell":
         return await _run_powershell_impl(
             str(args.get("script", "")),
             bool(args.get("as_admin", False)),
+            trusted=trusted,
         )
     if tool == "run_cli":
         raw_args = args.get("args", [])
         cli_args = [str(a) for a in raw_args] if isinstance(raw_args, list) else []
         cwd = str(args.get("cwd", "")) or None
-        return await _run_cli_impl(str(args.get("exe", "")), cli_args, cwd)
+        return await _run_cli_impl(
+            str(args.get("exe", "")), cli_args, cwd, trusted=trusted
+        )
     if tool == "fs_list":
         return await _fs_list_impl(str(args.get("path", "")))
     if tool == "fs_read":
         return await _fs_read_impl(str(args.get("path", "")))
     if tool == "fs_write":
         return await _fs_write_impl(str(args.get("path", "")), str(args.get("content", "")))
+    if tool == "capture_screenshot":
+        return await _capture_screenshot_impl()
     return f"Невідома computer-дія: {tool}"
 
 
@@ -210,3 +241,9 @@ async def fs_read(path: str, *, user_id: int = 0) -> str:
 async def fs_write(path: str, content: str, *, user_id: int = 0) -> str:
     args = {"path": path, "content": content}
     return await wrap_execute(user_id, "fs_write", args, lambda: _fs_write_impl(path, content))
+
+
+async def capture_screenshot(*, user_id: int = 0) -> str:
+    return await wrap_execute(
+        user_id, "capture_screenshot", {}, lambda: _capture_screenshot_impl()
+    )

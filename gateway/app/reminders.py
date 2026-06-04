@@ -27,7 +27,7 @@ async def deliver_due(
     """Шле всі прострочені нагадування (score <= now), видаляє з ZSET. Повертає к-сть."""
     cutoff = int(time.time()) if now is None else now
     try:
-        raw = await redis.zrangebyscore(REMINDERS_KEY, "-inf", cutoff)
+        raw = await redis.zrangebyscore(REMINDERS_KEY, "-inf", cutoff, start=0, num=50)
     except Exception as exc:  # noqa: BLE001
         logger.warning("reminders zrangebyscore failed: %s", exc)
         return 0

@@ -29,6 +29,18 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
             out["ollama_up"] = r.status_code == 200
     except httpx.HTTPError:
         out["ollama_up"] = False
+    out["enable_computer_use"] = settings.enable_computer_use
+    out["hostagent_up"] = False
+    if settings.enable_computer_use and settings.hostagent_token:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as c:
+                r = await c.get(
+                    f"{settings.hostagent_url.rstrip('/')}/health",
+                    headers={"X-Hostagent-Token": settings.hostagent_token},
+                )
+                out["hostagent_up"] = r.status_code == 200
+        except httpx.HTTPError:
+            out["hostagent_up"] = False
     if twin_url:
         try:
             async with httpx.AsyncClient(timeout=5.0) as c:

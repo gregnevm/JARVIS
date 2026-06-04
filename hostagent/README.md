@@ -15,7 +15,13 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8400
 
 ## Автозапуск
 
-Зареєструй як scheduled task або NSSM-сервіс (аналог persistent Ollama, див. ROADMAP M1). Слухає лише `127.0.0.1`.
+Разово з кореня репо:
+
+```powershell
+powershell -File scripts/install_autostart.ps1
+```
+
+Це піднімає **Ollama + Docker compose + host-agent** при кожному логоні і кожні **5 хв** (scheduled task `JARVIS-Watchdog`). Потрібні `HOSTAGENT_TOKEN` (і за бажанням `HOSTAGENT_*`) у кореневому `.env`. Слухає лише `127.0.0.1`.
 
 ## Безпека
 

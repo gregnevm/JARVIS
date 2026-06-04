@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     port: int = 8400
     exec_timeout: float = 30.0
     max_bytes: int = 6000
+    # Comma-separated absolute paths; FS API only allows paths under these roots.
+    fs_roots: str = ""
 
 
 settings = Settings()

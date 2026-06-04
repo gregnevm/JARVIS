@@ -8,6 +8,14 @@
 
 ---
 
+## Post-audit fixes (2026-06-04)
+
+Після другого проходу аудиту: паритет streaming/deliver, origin для Computer confirm,
+`agent_turn` модуль, `/start canvas` → Mini App `?canvas=1`, hybrid routing для скріншотів.
+Операційний чеклист змінних: [`docs/ENV_CHECKLIST.md`](docs/ENV_CHECKLIST.md).
+
+---
+
 ## Прогрес (оновлено 2026-06-04)
 
 - ✅ **M1** Persistent Ollama (Vulkan+keep_alive 24h, автозапуск) — зроблено, verified.

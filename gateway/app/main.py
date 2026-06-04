@@ -13,6 +13,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 from . import router
 from .config import settings
+from .bot.setup import register_bot_ui
 from .reminders import reminder_loop
 from .services import ServicesClient
 from .webapp import router as webapp_router
@@ -38,6 +39,7 @@ ALLOWED_UPDATES = [
     "edited_message",
     "callback_query",
     "inline_query",
+    "chosen_inline_result",
     "message_reaction",
 ]
 
@@ -56,14 +58,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     poll_task: asyncio.Task[None] | None = None
     if mode == "polling":
         poll_task = asyncio.create_task(_poll_loop(app))
+    elif mode == "webhook":
+        webhook_url = settings.telegram_webhook_url.strip()
+        if webhook_url:
+            secret = settings.telegram_webhook_secret.strip() or None
+            await app.state.tg.set_webhook(
+                webhook_url, secret_token=secret, allowed_updates=ALLOWED_UPDATES
+            )
+            logger.info("Webhook registered → %s", webhook_url)
+        else:
+            logger.warning("TELEGRAM_INGEST_MODE=webhook but TELEGRAM_WEBHOOK_URL is empty")
 
-    # Поллер нагадувань — незалежний від ingest-режиму (шле прострочене з Redis ZSET).
-    reminder_task = asyncio.create_task(reminder_loop(app.state.redis, app.state.tg))
+    reminder_task = asyncio.create_task(
+        reminder_loop(
+            app.state.redis,
+            app.state.tg,
+            interval=settings.reminder_poll_seconds,
+        )
+    )
 
-    # Mini App: якщо є публічний https-URL — реєструємо кнопку-меню (вхід у дашборд).
-    if settings.public_app_url.startswith("https://"):
-        await app.state.tg.set_chat_menu_button(settings.public_app_url, "📊 Dashboard")
-        logger.info("Mini App menu button set → %s", settings.public_app_url)
+    # BotFather UI: команди, опис, Mini App menu button.
+    await register_bot_ui(app.state.tg)
 
     logger.info(
         "Gateway up. ingest=%s | Whitelist: %s | rate_limit=%s/min | voice_reply=%s",

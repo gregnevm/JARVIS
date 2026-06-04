@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     whisper_url: str = "http://whisper:9000"
     whisper_language: str = ""  # порожньо = автовизначення мови
     tts_url: str = "http://tts:8300"
+    # Постійна Reply Keyboard під полем вводу (швидкі кнопки: Статус, Бриф, …).
+    telegram_reply_keyboard: bool = True
     # Голосова відповідь (TTS) на голосові повідомлення. Вимкнено за замовчуванням.
     enable_voice_reply: bool = False
     # Реагувати на реакції користувача (emoji) до повідомлень бота короткою відповіддю.
@@ -54,6 +56,14 @@ class Settings(BaseSettings):
     # Дозволити відкривати /app та /app/* без Telegram initData (для локального
     # перегляду в браузері). У проді (named tunnel) лиши False — пускає лише з Telegram.
     webapp_dev_open: bool = True
+    # Публічний URL для webhook (лише TELEGRAM_INGEST_MODE=webhook).
+    telegram_webhook_url: str = ""
+    # Режим computer лише для ADMIN_USER_IDS.
+    computer_mode_admins_only: bool = False
+    # Інтервал поллера нагадувань (секунди).
+    reminder_poll_seconds: float = 20.0
+    # Ігнорувати edited_message (не перезапускати агента).
+    ignore_edited_messages: bool = True
 
     @property
     def allowed_ids(self) -> set[int]:

@@ -77,7 +77,7 @@
   .badge.off { background: rgba(139,149,168,.15); color: var(--muted); }
 
   /* segmented mode control */
-  .seg { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; background: rgba(0,0,0,.25);
+  .seg { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; background: rgba(0,0,0,.25);
     padding: 6px; border-radius: 14px; margin-top: 12px; }
   .seg button { border: 0; background: transparent; color: var(--muted); padding: 11px 0; border-radius: 10px;
     font-size: 14px; font-weight: 600; cursor: pointer; transition: all .18s ease; }
@@ -157,6 +157,14 @@
       <div class="k">🧠 Режим</div>
       <div class="v" id="modeVal">—</div>
     </div>
+    <div class="card">
+      <div class="k"><span class="dot mut" id="hostDot"></span> Host-agent</div>
+      <div class="v" id="hostVal">—</div>
+    </div>
+    <div class="card">
+      <div class="k">💻 Computer Use</div>
+      <div class="v"><span class="badge off" id="computerUse">—</span></div>
+    </div>
   </div>
 
   <div class="section-label">Роутинг моделей</div>
@@ -165,6 +173,7 @@
       <button data-mode="chat">💬 Chat</button>
       <button data-mode="agent">🤖 Agent</button>
       <button data-mode="hybrid">⚖️ Hybrid</button>
+      <button data-mode="computer">💻 PC</button>
     </div>
   </div>
 
@@ -236,6 +245,15 @@
     const ceEl = $("codeExec");
     ceEl.textContent = ce ? "увімкнено" : "вимкнено";
     ceEl.className = "badge " + (ce ? "ok" : "off");
+
+    const cu = !!c.enable_computer_use;
+    const cuEl = $("computerUse");
+    cuEl.textContent = cu ? "увімкнено" : "вимкнено";
+    cuEl.className = "badge " + (cu ? "ok" : "off");
+
+    const ha = !!c.hostagent_up;
+    $("hostDot").className = "dot " + (ha ? "ok" : "bad");
+    $("hostVal").textContent = ha ? "online" : (cu ? "offline" : "—");
 
     const mode = c.agent_mode || "?";
     $("modeVal").textContent = mode;
@@ -430,8 +448,16 @@
     $("canvasCard").classList.toggle("expanded");
   });
 
+  const wantCanvas = /(?:^|[?&])canvas=1(?:&|$)/.test(location.search)
+    || location.hash === "#canvas";
   load(true);
-  loadArtifact();
+  if (wantCanvas) {
+    loadArtifact();
+    $("canvasCard").classList.add("expanded");
+    $("canvasCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  } else {
+    loadArtifact();
+  }
   setInterval(() => { if (!document.hidden) { load(false); loadArtifact(); } }, 6000);
 })();
 </script>

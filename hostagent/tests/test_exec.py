@@ -1,6 +1,7 @@
 """host-agent: auth, /health, /powershell, admin gating."""
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -68,6 +69,23 @@ def test_fs_list_requires_absolute_path(client: TestClient, tmp_path) -> None:
         headers={"X-Hostagent-Token": TOKEN},
     )
     assert r.status_code == 400
+
+
+def test_fs_list_outside_roots_returns_403(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setattr(settings, "fs_roots", str(allowed))
+    r = client.get(
+        "/fs/list",
+        params={"path": str(outside)},
+        headers={"X-Hostagent-Token": TOKEN},
+    )
+    assert r.status_code == 403
+    assert "HOSTAGENT_FS_ROOTS" in r.json()["detail"]
 
 
 def test_fs_list_and_read(client: TestClient, tmp_path) -> None:

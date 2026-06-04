@@ -16,7 +16,7 @@ from .config import settings
 
 ALLOWED_KINDS = {"html", "markdown", "url", "image", "code"}
 
-ARTIFACT_TTL = 6 * 3600
+ARTIFACT_TTL = 24 * 3600
 MAX_HISTORY = 20
 _MAX_CONTENT = 200_000
 

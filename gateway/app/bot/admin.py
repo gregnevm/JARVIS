@@ -214,7 +214,7 @@ async def handle_admin_callback(
         await tg.send_message(chat_id, result, parse_mode="HTML")
         return True
 
-    # adm:Y:m:agent | adm:Y:r | adm:Y:rl:42 — пряме підтвердження з кнопки меню
+    # adm:Y:m:agent | adm:Y:r | adm:Y:rl:42 — запит підтвердження (як CLI /admin)
     if len(parts) >= 4 and parts[2] == "m":
         action = f"mode:{parts[3]}"
     elif len(parts) >= 3 and parts[2] == "r":
@@ -226,7 +226,5 @@ async def handle_admin_callback(
         await tg.send_message(chat_id, "Невідома кнопка.")
         return True
 
-    await clear_pending(redis, user_id)
-    result = await execute_action(action, svc, redis)
-    await tg.send_message(chat_id, result, parse_mode="HTML")
+    await request_confirmation(chat_id, user_id, action, tg, redis)
     return True

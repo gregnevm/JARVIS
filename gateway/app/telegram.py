@@ -50,6 +50,22 @@ class TelegramClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def set_webhook(
+        self,
+        url: str,
+        secret_token: str | None = None,
+        allowed_updates: list[str] | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {"url": url}
+        if secret_token:
+            payload["secret_token"] = secret_token
+        if allowed_updates is not None:
+            payload["allowed_updates"] = allowed_updates
+        try:
+            await self._call("setWebhook", payload)
+        except httpx.HTTPError as exc:
+            logger.error("setWebhook failed: %s", exc)
+
     async def delete_webhook(self, drop_pending: bool = False) -> None:
         """Знімає webhook. Потрібно перед getUpdates (вони взаємовиключні)."""
         try:
@@ -83,10 +99,13 @@ class TelegramClient:
         text: str,
         parse_mode: str | None = None,
         reply_markup: dict[str, Any] | None = None,
+        message_thread_id: int | None = None,
     ) -> None:
         chunks = split_message(text)
         for i, chunk in enumerate(chunks):
             payload: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
+            if message_thread_id is not None:
+                payload["message_thread_id"] = message_thread_id
             if parse_mode:
                 payload["parse_mode"] = parse_mode
             if reply_markup and i == len(chunks) - 1:
@@ -102,10 +121,16 @@ class TelegramClient:
                     await self._call("sendMessage", plain)
 
     async def send_message_id(
-        self, chat_id: int, text: str, parse_mode: str | None = None
+        self,
+        chat_id: int,
+        text: str,
+        parse_mode: str | None = None,
+        message_thread_id: int | None = None,
     ) -> int | None:
         """Шле одне (нерозбите) повідомлення і повертає message_id — для стрім-плейсхолдера."""
         payload: dict[str, Any] = {"chat_id": chat_id, "text": text[:TELEGRAM_MAX_LEN]}
+        if message_thread_id is not None:
+            payload["message_thread_id"] = message_thread_id
         if parse_mode:
             payload["parse_mode"] = parse_mode
         try:
@@ -123,6 +148,7 @@ class TelegramClient:
         text: str,
         parse_mode: str | None = None,
         reply_markup: dict[str, Any] | None = None,
+        message_thread_id: int | None = None,
     ) -> None:
         """editMessageText. 'message is not modified' та інші помилки лише логуються."""
         payload: dict[str, Any] = {
@@ -130,6 +156,8 @@ class TelegramClient:
             "message_id": message_id,
             "text": text[:TELEGRAM_MAX_LEN],
         }
+        if message_thread_id is not None:
+            payload["message_thread_id"] = message_thread_id
         if parse_mode:
             payload["parse_mode"] = parse_mode
         if reply_markup:
@@ -187,6 +215,25 @@ class TelegramClient:
             )
         except httpx.HTTPError as exc:
             logger.error("setChatMenuButton failed: %s", exc)
+
+    async def set_my_commands(self, commands: list[dict[str, str]]) -> None:
+        """Меню команд BotFather (кнопка «/» у полі вводу)."""
+        try:
+            await self._call("setMyCommands", {"commands": commands})
+        except httpx.HTTPError as exc:
+            logger.error("setMyCommands failed: %s", exc)
+
+    async def set_my_description(self, description: str) -> None:
+        try:
+            await self._call("setMyDescription", {"description": description[:512]})
+        except httpx.HTTPError as exc:
+            logger.error("setMyDescription failed: %s", exc)
+
+    async def set_my_short_description(self, description: str) -> None:
+        try:
+            await self._call("setMyShortDescription", {"description": description[:120]})
+        except httpx.HTTPError as exc:
+            logger.error("setMyShortDescription failed: %s", exc)
 
     async def send_chat_action(self, chat_id: int, action: str = "typing") -> None:
         """Показує індикатор (typing…/record_voice). Помилки лише логуються."""
@@ -260,6 +307,11 @@ class TelegramClient:
                 with open(src, "rb") as fh:
                     files = {field: (os.path.basename(src), fh.read())}
                 resp = await self._client.post(f"{self._api}/{method}", data=data, files=files)
+            elif isinstance(src, str) and (
+                src.startswith(("/", "./")) or "\\" in src or src.endswith((".png", ".jpg", ".jpeg"))
+            ):
+                logger.error("%s: локальний файл не знайдено: %s", method, src)
+                return False
             else:
                 # Інакше трактуємо як file_id (вже завантажений у Telegram файл).
                 resp = await self._client.post(
@@ -298,6 +350,35 @@ class TelegramClient:
 
     async def send_sticker(self, chat_id: int, src: str) -> bool:
         return await self._send_media("sendSticker", "sticker", chat_id, src)
+
+    async def send_media_group(
+        self,
+        chat_id: int,
+        photos: list[tuple[str, str | None]],
+        *,
+        message_thread_id: int | None = None,
+    ) -> None:
+        """Альбом фото (2–10). Підтримує http(s) URL; інше — по одному sendPhoto."""
+        media: list[dict[str, Any]] = []
+        for i, (src, cap) in enumerate(photos[:10]):
+            if isinstance(src, str) and src.startswith(("http://", "https://")):
+                entry: dict[str, Any] = {"type": "photo", "media": src}
+                if cap and i == 0:
+                    entry["caption"] = cap[:1024]
+                media.append(entry)
+        if len(media) < 2:
+            for src, cap in photos:
+                await self.send_photo(chat_id, src, cap)
+            return
+        payload: dict[str, Any] = {"chat_id": chat_id, "media": media}
+        if message_thread_id is not None:
+            payload["message_thread_id"] = message_thread_id
+        try:
+            await self._call("sendMediaGroup", payload)
+        except httpx.HTTPError as exc:
+            logger.warning("sendMediaGroup failed, fallback to sendPhoto: %s", exc)
+            for src, cap in photos:
+                await self.send_photo(chat_id, src, cap)
 
     async def send_location(self, chat_id: int, latitude: float, longitude: float) -> bool:
         """Надсилає геолокацію. Помилки логуються, не кидаються."""

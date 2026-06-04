@@ -11,10 +11,13 @@ class FakeRedis:
     async def zadd(self, key, mapping):
         self.z.update(mapping)
 
-    async def zrangebyscore(self, key, mn, mx):
+    async def zrangebyscore(self, key, mn, mx, start=0, num=None):
         lo = float("-inf") if mn == "-inf" else float(mn)
         hi = float("inf") if mx == "+inf" else float(mx)
-        return [m for m, s in sorted(self.z.items(), key=lambda kv: kv[1]) if lo <= s <= hi]
+        out = [m for m, s in sorted(self.z.items(), key=lambda kv: kv[1]) if lo <= s <= hi]
+        if num is not None:
+            return out[start : start + num]
+        return out[start:]
 
     async def zrem(self, key, *members):
         for m in members:

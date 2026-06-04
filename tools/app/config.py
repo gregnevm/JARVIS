@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     cli_whitelist: str = ""
     computer_timeout: float = 30.0
     computer_require_confirm: bool = True
+    # Після ✅ додати cmdlet/exe у data/computer_learned.json; повтор — без підтвердження.
+    computer_auto_learn_whitelist: bool = True
+    computer_auto_trust_learned: bool = True
     http_timeout: float = 20.0          # web_fetch / web_search
     ollama_timeout: float = 180.0       # CPU-інференс може бути повільним
     max_agent_iters: int = 5            # стеля ітерацій тул-лупа

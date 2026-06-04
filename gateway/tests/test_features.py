@@ -69,7 +69,7 @@ class FakeTG:
         self.inline_answers: list[tuple[str, list[dict[str, Any]]]] = []
         self.reactions: list[tuple[int, int, str]] = []
 
-    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None, **kwargs):
         self.sent.append((chat_id, text))
 
     async def answer_inline_query(self, inline_query_id, results, cache_time=0):

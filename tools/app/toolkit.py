@@ -381,6 +381,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     _schema("list_reminders", "Показати активні (ще не спрацьовані) нагадування користувача.",
             {}, []),
     _schema(
+        "cancel_reminder",
+        "Скасувати нагадування за id (з list_reminders) або всі, якщо reminder_id='all'.",
+        {"reminder_id": {**_STR, "description": "id нагадування або 'all'"}},
+        ["reminder_id"],
+    ),
+    _schema(
         "show_in_app",
         "Показати багатий контент у Mini App (Канвас) — коли краще побачити, ніж читати "
         "текстом: графік/діаграма, таблиця, дашборд, мапа, відформатований звіт, зображення "
@@ -450,6 +456,14 @@ _COMPUTER_SCHEMAS: list[dict[str, Any]] = [
     ),
 ]
 
+_SCREENSHOT_SCHEMA = _schema(
+    "capture_screenshot",
+    "Зняти скріншот основного екрана Windows і надіслати користувачу (read-only). "
+    "Використовуй, коли просять «зроби скріншот», «покажи екран».",
+    {},
+    [],
+)
+
 
 _VISION_SCHEMA = _schema(
     "describe_image",
@@ -475,8 +489,10 @@ def agent_tool_schemas(*, computer: bool = False) -> list[dict[str, Any]]:
         schemas.append(_IMAGEGEN_SCHEMA)
     if settings.enable_code_exec:
         schemas.append(_CODE_SCHEMA)
-    if settings.enable_computer_use and computer:
-        schemas.extend(_COMPUTER_SCHEMAS)
+    if settings.enable_computer_use:
+        schemas.append(_SCREENSHOT_SCHEMA)
+        if computer:
+            schemas.extend(_COMPUTER_SCHEMAS)
     return schemas
 
 
@@ -525,6 +541,13 @@ async def dispatch(name: str, arguments: dict[str, Any], user_id: int = 0) -> st
             from .reminders import list_reminders
 
             return await list_reminders(user_id)
+        if name == "cancel_reminder":
+            from .reminders import cancel_all_reminders, cancel_reminder
+
+            rid = str(arguments.get("reminder_id", "")).strip()
+            if rid.lower() in ("all", "*"):
+                return await cancel_all_reminders(user_id)
+            return await cancel_reminder(user_id, rid)
         if name == "show_in_app":
             from .artifacts import show_in_app
 
@@ -566,6 +589,10 @@ async def dispatch(name: str, arguments: dict[str, Any], user_id: int = 0) -> st
                 str(arguments.get("content", "")),
                 user_id=user_id,
             )
+        if name == "capture_screenshot":
+            from . import computer
+
+            return await computer.capture_screenshot(user_id=user_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("tool %s failed", name)
         return f"Інструмент {name} впав: {exc}"

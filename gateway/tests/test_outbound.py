@@ -9,7 +9,7 @@ class FakeTG:
         self.sent: list[tuple[int, str]] = []
         self.media: list[tuple[str, int, object]] = []
 
-    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None, **kwargs):
         self.sent.append((chat_id, text))
 
     async def send_photo(self, chat_id, src, caption=None):
@@ -23,6 +23,9 @@ class FakeTG:
     async def send_location(self, chat_id, latitude, longitude):
         self.media.append(("location", chat_id, (latitude, longitude)))
         return True
+
+    async def send_voice(self, chat_id, audio, caption=None):
+        self.media.append(("voice", chat_id, audio))
 
 
 def test_no_directives_returns_text():
@@ -59,6 +62,14 @@ async def test_deliver_sends_text_and_media():
     assert out == "тут  кінець".strip() or "тут" in out
     assert any("тут" in t for _, t in tg.sent)
     assert ("photo", 7, "http://x/y.jpg") in tg.media
+
+
+async def test_voice_directive_uses_send_voice(tmp_path):
+    p = tmp_path / "v.ogg"
+    p.write_bytes(b"OggS")
+    tg = FakeTG()
+    await deliver(tg, 7, f"[[voice:{p}]]")
+    assert any(m[0] == "voice" for m in tg.media)
 
 
 async def test_deliver_media_only():

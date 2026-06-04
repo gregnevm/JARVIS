@@ -11,6 +11,8 @@ from app.computer_confirm import (
     describe_action,
     execute_confirmed,
     is_mutating,
+    load_origin,
+    save_origin,
     wrap_execute,
 )
 from app.config import settings
@@ -72,16 +74,61 @@ async def test_wrap_execute_skips_confirm_when_disabled(monkeypatch: pytest.Monk
     assert out == "done"
 
 
-async def test_execute_confirmed_runs_action(confirm_env: FakeRedis, monkeypatch: pytest.MonkeyPatch):
+async def test_save_load_origin(confirm_env: FakeRedis):
     from app import computer_confirm
 
+    await computer_confirm.save_origin(7, "зроби скріншот")
+    assert await load_origin(7) == "зроби скріншот"
+
+
+async def test_execute_confirmed_returns_origin(confirm_env: FakeRedis, monkeypatch: pytest.MonkeyPatch):
+    from app import computer_confirm
+
+    await save_origin(7, "відкрий блокнот")
     code = await computer_confirm.save_pending(7, "fs_write", {"path": "C:\\t", "content": "hi"})
     monkeypatch.setattr(
         computer,
         "execute_internal",
         AsyncMock(return_value="Записано ✅"),
     )
-    result = await execute_confirmed(7, code)
+    result, origin = await execute_confirmed(7, code)
     assert result == "Записано ✅"
+    assert origin == "відкрий блокнот"
+
+
+async def test_execute_confirmed_runs_action(confirm_env: FakeRedis, monkeypatch: pytest.MonkeyPatch):
+    from app import computer_confirm
+
+    code = await computer_confirm.save_pending(7, "fs_write", {"path": "C:\\t", "content": "hi"})
+    mock_exec = AsyncMock(return_value="Записано ✅")
+    monkeypatch.setattr(computer, "execute_internal", mock_exec)
+    result, origin = await execute_confirmed(7, code)
+    assert result == "Записано ✅"
+    assert origin == ""
+    mock_exec.assert_awaited_once()
+    assert mock_exec.await_args.kwargs.get("trusted") is True
     log_path = Path(settings.data_dir) / "logs" / "computer.jsonl"
     assert log_path.is_file()
+
+
+async def test_execute_confirmed_learns_ps(
+    confirm_env: FakeRedis, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(settings, "computer_auto_learn_whitelist", True)
+    monkeypatch.setattr(settings, "ps_whitelist", "")
+    mock = AsyncMock(
+        return_value={"stdout": "ok", "stderr": "", "code": 0},
+    )
+    with patch.object(computer, "_request", mock):
+        from app import computer_confirm
+
+        code = await computer_confirm.save_pending(
+            7,
+            "run_powershell",
+            {"script": "Stop-Service -Name docker"},
+        )
+        result, _ = await execute_confirmed(7, code)
+    assert "[exit 0]" in result
+    from app.computer_learned import learned_ps
+
+    assert "stop-service" in learned_ps()

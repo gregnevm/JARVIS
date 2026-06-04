@@ -43,8 +43,10 @@ SYSTEM_CHAT = (
 )
 SYSTEM_AGENT = (
     "Ти JARVIS — помічник з інструментами. Користуйся ними, коли треба порахувати, "
-    "знайти свіжу інформацію, відкрити сторінку, прочитати надісланий файл (parse_file) "
-    "чи поставити нагадування. Не вигадуй фактів — перевіряй інструментами. Коли "
+    "знайти свіжу інформацію, відкрити сторінку, прочитати надісланий файл (parse_file), "
+    "зняти скріншот екрана (capture_screenshot, якщо увімкнено Computer Use) "
+    "чи поставити нагадування. Команда /app — Mini App дашборд, не шлях у ФС. "
+    "Не вигадуй фактів — перевіряй інструментами. Коли "
     "відповідь краще побачити, ніж прочитати (графік, таблиця, дашборд, мапа, "
     "зображення, відформатований звіт) — поклич show_in_app (Канвас Mini App) і дай "
     "поряд короткий текстовий підсумок. Для нагадування на конкретний час порахуй "
@@ -53,19 +55,21 @@ SYSTEM_AGENT = (
     "відповідь дай українською, стисло, звичайним текстом. " + MEDIA_HINT + APP_HINT
 )
 SYSTEM_COMPUTER = (
-    "Ти JARVIS — агент керування комп'ютером Windows. Дотримуйся «драбини швидкодії»: "
-    "T0 PowerShell або файлова система → T1 CLI (winget, git, curl) → T2 браузер по DOM → "
-    "T3 UI Automation → T4 візуальний клік (лише останній резерв). Ніколи не обирай "
-    "візуальний tier, якщо задачу можна зробити PowerShell/CLI. У відповіді коротко "
-    "зазнач, яким tier ти діяв. Не вигадуй результатів — перевіряй інструментами. "
-    "Фінальну відповідь дай українською, стисло. " + MEDIA_HINT
+    "Ти JARVIS — агент керування комп'ютером Windows. Доступні інструменти: T0 PowerShell "
+    "(whitelist), capture_screenshot, fs_list/read/write; T1 CLI (whitelist). "
+    "Браузер (Playwright), UI Automation і піксельний клік НЕ доступні — не вигадуй їх. "
+    "Команда /app — Mini App дашборд, не шлях у ФС. Для скріншота — capture_screenshot. "
+    "Не вигадуй результатів — перевіряй інструментами. Фінальну відповідь українською, стисло. "
+    + MEDIA_HINT
 )
 
 _URL_RE = re.compile(r"https?://", re.IGNORECASE)
 _MATH_RE = re.compile(r"\d\s*[-+*/^]\s*\d")
 _KW_RE = re.compile(
     r"(знайд|пошук|загугл|google|search|погод|\bкурс\b|новин|обчисл|пораху|"
-    r"скільки буде|calculate|відкрий\s+http|нотатк|запиши|занотуй|нагадай)",
+    r"скільки буде|calculate|відкрий\s+http|нотатк|запиши|занотуй|нагадай|"
+    r"скріншот|screenshot|скрін\s+екран|"
+    r"комп.?ютер|powershell|файл\s+на\s+диску)",
     re.IGNORECASE,
 )
 
@@ -97,6 +101,7 @@ _TOOL_STATUS = {
     "fs_list": "📁 переглядаю каталог…",
     "fs_read": "📄 читаю файл…",
     "fs_write": "✍️ записую файл…",
+    "capture_screenshot": "📸 знімаю екран…",
 }
 
 
@@ -123,11 +128,16 @@ def _parse_confirm(result: str) -> dict[str, str] | None:
     return {"code": m.group(1), "desc": m.group(2).strip()}
 
 
+_SCREENSHOT_RE = re.compile(r"скріншот|screenshot|скрін\s+екран", re.IGNORECASE)
+
+
 def decide_mode(text: str, agent_mode: str) -> str:
     mode = (agent_mode or "hybrid").lower()
     if mode in ("chat", "agent", "computer"):
         return mode
     t = text or ""
+    if settings.enable_computer_use and _SCREENSHOT_RE.search(t):
+        return "agent"
     if _URL_RE.search(t) or _MATH_RE.search(t) or _KW_RE.search(t):
         return "agent"
     return "chat"
@@ -268,6 +278,9 @@ class AgentRunner:
                 result = await dispatch(name, args, user_id)
                 confirm = _parse_confirm(result)
                 if confirm:
+                    from .computer_confirm import save_origin
+
+                    await save_origin(user_id, text)
                     yield {"confirm": confirm}
                     result = (
                         f"Очікую підтвердження в Telegram (код {confirm['code']}): "
@@ -318,7 +331,9 @@ class AgentRunner:
                 result = await dispatch(name, args, user_id)
                 confirm = _parse_confirm(result)
                 if confirm:
-                    # Синхронний шлях: повідомлення моделі про pending; gateway шле кнопки окремо.
+                    from .computer_confirm import save_origin
+
+                    await save_origin(user_id, text)
                     result = (
                         f"[[COMPUTER_CONFIRM:{confirm['code']}]] "
                         f"Очікую підтвердження: {confirm['desc']}"

@@ -108,9 +108,60 @@ docker compose logs -f gateway
 
 ```bash
 curl http://localhost:8000/health     # gateway
+curl http://localhost:8200/health     # tools
 curl http://localhost:8100/health     # memory
+curl http://localhost:8300/health     # tts (якщо ENABLE_VOICE_REPLY=true)
+curl http://127.0.0.1:8400/health     # host-agent (процес на Windows, не в Compose)
+curl http://localhost:11434/api/tags  # Ollama на хості
 docker compose ps                     # статуси + healthcheck
+docker compose logs gateway --tail 5  # ingest=polling, whitelist, "Long polling started"
 ```
+
+### Перевірка після змін `.env`
+
+1. **Не використовуй** `docker compose restart` для підхоплення env — лише recreate:
+   `docker compose up -d gateway tools` (або `--build` після змін коду).
+2. Після змін computer-use / токена host-agent — перезапусти процес на хості
+   (`hostagent/run.bat` або scheduled task з `scripts/install_autostart.ps1`).
+3. Прогони health-перевірки з блоку вище; gateway-лог має містити `ingest=polling`
+   і непорожній whitelist.
+4. Юніт-тести (по одному сервісу, інакше колізія пакета `app`):
+   `pytest gateway/tests`, `pytest tools/tests`, `pytest hostagent/tests`, …
+
+### Computer Use (швидкий старт)
+
+Керування Windows-хостом з Telegram (PowerShell/CLI/FS). Повний план: `docs/COMPUTER_USE.md`.
+
+1. У `.env`: `ENABLE_COMPUTER_USE=true`, `HOSTAGENT_TOKEN=<secrets.token_hex(24)>`
+   (той самий рядок — tools і host-agent читають `HOSTAGENT_TOKEN`).
+2. Whitelist: `PS_WHITELIST`, `CLI_WHITELIST`. Admin вимкнено за замовч. (`COMPUTER_ALLOW_ADMIN=false`).
+3. На хості (поза Docker):
+
+```powershell
+cd O:\JARVIS\hostagent
+.\run.bat
+# або: pip install -r requirements.txt
+#      $env:HOSTAGENT_TOKEN = "..." ; python -m uvicorn app.main:app --host 127.0.0.1 --port 8400
+```
+
+4. Перевірка: `curl http://127.0.0.1:8400/health` → `{"status":"ok"}`.
+5. `docker compose up -d gateway tools` — tools ходить на `http://host.docker.internal:8400`.
+6. У чаті: `/mode computer` або `AGENT_MODE=computer`; мутуючі дії — підтвердження ✅/❌ у Telegram.
+
+> **Безпека:** ротуй `TELEGRAM_BOT_TOKEN` у @BotFather, якщо токен світився в логах/чаті
+> (див. `ROADMAP.md` M4). Після revoke — онови `.env` і `docker compose up -d gateway`.
+
+### Windows: автозапуск усього стеку (завжди)
+
+Щоб **Ollama, Docker Compose, host-agent** піднімались після логону і відновлювались
+кожні 5 хв (watchdog), один раз:
+
+```powershell
+powershell -File scripts/install_autostart.ps1
+```
+
+У кореневому `.env` має бути `HOSTAGENT_TOKEN` (той самий, що для `ENABLE_COMPUTER_USE`).
+Лог: `data/autostart.log`. Видалити: `install_autostart.ps1 -Uninstall`.
 
 ---
 
@@ -184,6 +235,10 @@ gateway-ом на `GET /app`, дані — `GET /app/data`, зміна режи�
 Named tunnel дає стабільний URL (на відміну від quick tunnel, який «стрибає»).
 У проді постав `WEBAPP_DEV_OPEN=false` — тоді `/app` пускає лише з Telegram.
 
+**Швидко (5 хв):** `powershell -File scripts/setup_tunnel.ps1` після
+`CLOUDFLARE_TUNNEL_TOKEN` + `PUBLIC_APP_URL=https://<домен>/app` у `.env`.
+У чаті: команда `/app` або кнопка «Dashboard»; deep links: `/start app`, `/start mode_agent`.
+
 ---
 
 ## Структура проєкту
@@ -200,6 +255,7 @@ Named tunnel дає стабільний URL (на відміну від quick t
 ├── whisper/                # STT (готовий образ, без коду)
 ├── memory/                 # RAG: embeddings + retrieval + tests/   (Фаза 4)
 ├── tools/                  # агентські інструменти + tests/         (Фаза 6)
+├── hostagent/              # Computer Use: FastAPI на Windows-хості + tests/
 ├── db/
 │   └── init.sql            # схема: sessions, messages, embeddings(vector)
 ├── n8n/
@@ -236,10 +292,10 @@ mypy gateway/app          # strict-типізація (конфіг у pyproject
 pytest gateway/tests      # юніт-тести: mocked-клієнти, без мережі/БД
 ```
 
-Те саме для `memory` і `tools`. Тести покривають чисту логіку: маршрутизацію агента,
-інструменти (`calc`/`coerce_args`/парсер DDG), rate-limit, circuit breaker, парсинг
-whitelist, роутинг text/voice. У CI (`.github/workflows/ci.yml`) усе це йде matrix-ом
-по трьох сервісах + валідація `docker compose config`.
+Те саме для `memory`, `tools` і `hostagent`. Тести покривають чисту логіку: маршрутизацію агента,
+інструменти (`calc`/`coerce_args`/парсер DDG), rate-limit, circuit breaker, computer-use,
+парсинг whitelist, роутинг text/voice. У CI (`.github/workflows/ci.yml`) matrix по
+`jarvis_core`, `gateway`, `memory`, `tools`, `twin`, `hostagent` + `docker compose config`.
 
 ---
 

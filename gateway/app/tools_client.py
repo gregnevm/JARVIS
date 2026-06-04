@@ -77,7 +77,8 @@ class ToolsClient:
         except ValueError:
             return resp.text or FALLBACK
 
-    async def confirm_computer(self, user_id: int, code: str) -> str:
+    async def confirm_computer(self, user_id: int, code: str) -> tuple[str, str]:
+        """Повертає (result, origin_user_text)."""
         try:
             resp = await self._client.post(
                 f"{self._base}/computer/confirm",
@@ -86,11 +87,12 @@ class ToolsClient:
             resp.raise_for_status()
             data = resp.json()
             if isinstance(data, dict) and isinstance(data.get("result"), str):
-                return data["result"]
+                origin = str(data.get("origin") or "")
+                return data["result"], origin
         except httpx.HTTPError as exc:
             logger.error("tools /computer/confirm failed: %s", exc)
-            return "Не вдалося виконати дію — tools недоступний."
-        return FALLBACK
+            return "Не вдалося виконати дію — tools недоступний.", ""
+        return FALLBACK, ""
 
     async def cancel_computer(self, user_id: int) -> None:
         try:

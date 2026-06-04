@@ -101,6 +101,12 @@ async def dashboard_ep() -> dict[str, Any]:
 
 @app.post("/mode")
 async def set_mode_ep(req: ModeRequest) -> dict[str, str]:
+    m = req.mode.lower().strip()
+    if m == "computer" and not settings.enable_computer_use:
+        raise HTTPException(
+            status_code=400,
+            detail="Computer Use вимкнено (ENABLE_COMPUTER_USE=false).",
+        )
     try:
         set_agent_mode(req.mode)
     except ValueError as exc:
@@ -188,8 +194,8 @@ async def computer_confirm_ep(req: ComputerConfirmRequest) -> dict[str, str]:
 
     if not req.code.strip():
         raise HTTPException(status_code=400, detail="code required")
-    result = await execute_confirmed(req.user_id, req.code.strip())
-    return {"result": result}
+    result, origin = await execute_confirmed(req.user_id, req.code.strip())
+    return {"result": result, "origin": origin}
 
 
 @app.post("/computer/cancel")

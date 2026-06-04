@@ -24,15 +24,15 @@ class FakeTG:
         self._file_path = file_path
         self._content = content
 
-    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None, **kwargs):
         self.sent.append((chat_id, text))
 
-    async def send_message_id(self, chat_id, text, parse_mode=None):
+    async def send_message_id(self, chat_id, text, parse_mode=None, **kwargs):
         self.sent.append((chat_id, text))
         return 99
 
     async def edit_message_text(
-        self, chat_id, message_id, text, parse_mode=None, reply_markup=None
+        self, chat_id, message_id, text, parse_mode=None, reply_markup=None, **kwargs
     ):
         self.edits.append((chat_id, text))
 
@@ -112,14 +112,24 @@ class FakeSvc:
 
 
 class FakeRedis:
+    def __init__(self) -> None:
+        self.kv: dict[str, str] = {}
+
     async def get(self, key):
-        return None
+        return self.kv.get(key)
+
+    async def set(self, key, value, nx=False, ex=None):
+        if nx and key in self.kv:
+            return None
+        self.kv[key] = value
+        return True
 
     async def setex(self, key, ttl, value):
-        pass
+        self.kv[key] = value
 
     async def delete(self, *keys):
-        pass
+        for k in keys:
+            self.kv.pop(k, None)
 
 
 async def _route(tg, tools, stt, limiter, msg, tts=None):

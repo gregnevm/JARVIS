@@ -9,9 +9,12 @@ from typing import Any
 import redis.asyncio as aioredis
 
 from .computer_audit import log_action
+from .computer_learned import is_cli_trusted, is_ps_trusted, learn_from_action
+from .ps_whitelist import check_ps_whitelist, extract_ps_cmdlets
 from .config import settings
 
 _PENDING_PREFIX = "jarvis:computer:pending:"
+_ORIGIN_PREFIX = "jarvis:computer:origin:"
 _PENDING_TTL = 300
 
 CONFIRM_MARKER = "[[COMPUTER_CONFIRM:{code}]]"
@@ -20,6 +23,8 @@ _READONLY_PS = frozenset(
     {
         "get-childitem",
         "get-content",
+        "get-service",
+        "get-process",
         "test-path",
         "write-output",
         "select-object",
@@ -34,6 +39,7 @@ _TIER = {
     "fs_list": "T0",
     "fs_read": "T0",
     "fs_write": "T0",
+    "capture_screenshot": "T0",
     "run_cli": "T1",
 }
 
@@ -58,16 +64,22 @@ def _pending_key(user_id: int) -> str:
     return f"{_PENDING_PREFIX}{int(user_id)}"
 
 
+def _origin_key(user_id: int) -> str:
+    return f"{_ORIGIN_PREFIX}{int(user_id)}"
+
+
 def tier_for(tool: str) -> str:
     return _TIER.get(tool, "T0")
 
 
 def is_mutating(tool: str, args: dict[str, Any]) -> bool:
-    if tool in ("fs_list", "fs_read"):
+    if tool in ("fs_list", "fs_read", "capture_screenshot"):
         return False
     if tool == "fs_write":
         return True
     if tool == "run_cli":
+        if is_cli_trusted(str(args.get("exe", ""))):
+            return False
         return True
     if tool == "run_powershell":
         if bool(args.get("as_admin")):
@@ -75,8 +87,16 @@ def is_mutating(tool: str, args: dict[str, Any]) -> bool:
         script = str(args.get("script", "")).strip()
         if not script:
             return False
-        first = script.split(None, 1)[0].lower().rstrip(";")
-        return first not in _READONLY_PS
+        if is_ps_trusted(script):
+            return False
+        cmdlets = extract_ps_cmdlets(script)
+        if not cmdlets:
+            return False
+        if check_ps_whitelist(script, trusted=False) is not None:
+            if all(c in _READONLY_PS for c in cmdlets):
+                return False
+            return True
+        return any(c not in _READONLY_PS for c in cmdlets)
     return False
 
 
@@ -119,6 +139,24 @@ async def load_pending(user_id: int, code: str) -> dict[str, Any] | None:
 
 async def clear_pending(user_id: int) -> None:
     await _client().delete(_pending_key(user_id))
+    await clear_origin(user_id)
+
+
+async def save_origin(user_id: int, text: str) -> None:
+    """Зберігає оригінальний user prompt для resume після confirm."""
+    t = (text or "").strip()
+    if not t or int(user_id) <= 0:
+        return
+    await _client().setex(_origin_key(user_id), _PENDING_TTL, t[:4000])
+
+
+async def load_origin(user_id: int) -> str:
+    raw = await _client().get(_origin_key(user_id))
+    return (raw or "").strip() if raw else ""
+
+
+async def clear_origin(user_id: int) -> None:
+    await _client().delete(_origin_key(user_id))
 
 
 async def wrap_execute(
@@ -140,16 +178,18 @@ async def wrap_execute(
     return result
 
 
-async def execute_confirmed(user_id: int, code: str) -> str:
+async def execute_confirmed(user_id: int, code: str) -> tuple[str, str]:
     from . import computer as comp
 
     data = await load_pending(user_id, code)
     if not data:
-        return "Дію прострочено або код невірний."
+        return "Дію прострочено або код невірний.", ""
+    origin = await load_origin(user_id)
     await clear_pending(user_id)
     tool = str(data.get("tool", ""))
     args = data.get("args") if isinstance(data.get("args"), dict) else {}
     tier = str(data.get("tier") or tier_for(tool))
-    result = await comp.execute_internal(tool, args)
+    result = await comp.execute_internal(tool, args, trusted=True)
+    learn_from_action(tool, args)
     log_action(user_id, tool, tier, args, result, confirmed=True)
-    return result
+    return result, origin

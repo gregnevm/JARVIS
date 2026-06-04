@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import base64
 import hmac
 import json
 import logging
@@ -133,11 +134,66 @@ def _run_cli(exe: str, args: list[str], cwd: str | None, timeout: float) -> dict
     return {"stdout": proc.stdout, "stderr": proc.stderr, "code": proc.returncode}
 
 
+def _fs_roots() -> list[Path]:
+    raw = (settings.fs_roots or "").strip()
+    if not raw:
+        return []
+    return [Path(x.strip()).resolve() for x in raw.split(",") if x.strip()]
+
+
 def _resolve_path(path: str) -> Path:
     p = Path(path).expanduser()
     if not p.is_absolute():
         raise HTTPException(status_code=400, detail="path must be absolute")
-    return p
+    resolved = p.resolve()
+    roots = _fs_roots()
+    if roots:
+        ok = False
+        for root in roots:
+            try:
+                resolved.relative_to(root)
+                ok = True
+                break
+            except ValueError:
+                continue
+        if not ok:
+            raise HTTPException(status_code=403, detail="path outside HOSTAGENT_FS_ROOTS")
+    return resolved
+
+
+_SCREEN_PS = """
+Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+$path = Join-Path $env:TEMP ('jarvis_scr_' + [guid]::NewGuid().ToString('N') + '.png')
+$bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+$g.Dispose(); $bmp.Dispose()
+Write-Output $path
+""".strip()
+
+
+def _capture_screen_png() -> bytes:
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="screenshots only on Windows")
+    result = _run_powershell(_SCREEN_PS, False, 15.0)
+    if int(result.get("code", -1)) != 0:
+        detail = (result.get("stderr") or result.get("stdout") or "screenshot failed").strip()
+        raise HTTPException(status_code=500, detail=detail[:300])
+    lines = [ln.strip() for ln in (result.get("stdout") or "").splitlines() if ln.strip()]
+    if not lines:
+        raise HTTPException(status_code=500, detail="screenshot path empty")
+    img_path = Path(lines[-1])
+    if not img_path.is_file():
+        raise HTTPException(status_code=500, detail=f"screenshot file missing: {img_path}")
+    try:
+        return img_path.read_bytes()
+    finally:
+        try:
+            img_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 @app.get("/health")
@@ -221,6 +277,15 @@ async def fs_write(
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"path": str(p), "status": "ok"}
+
+
+@app.post("/screen/capture")
+async def screen_capture(
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    """Знімок основного екрана (read-only, Windows)."""
+    data = _capture_screen_png()
+    return {"format": "png", "data_b64": base64.b64encode(data).decode("ascii")}
 
 
 logger.info(

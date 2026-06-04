@@ -54,6 +54,26 @@ async def test_ps_whitelist_blocks(computer_enabled: None):
     assert "PS_WHITELIST" in out
 
 
+async def test_ps_whitelist_multistatement(computer_enabled: None, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        settings,
+        "ps_whitelist",
+        "Stop-Service,Start-Service,Write-Output",
+    )
+    mock = AsyncMock(return_value={"stdout": "ok", "stderr": "", "code": 0})
+    with patch.object(computer, "_request", mock):
+        out = await computer.run_powershell("Stop-Service -Name docker; Start-Service -Name docker")
+    assert "[exit 0]" in out
+    assert "PS_WHITELIST" not in out
+
+
+async def test_ps_whitelist_blocks_second_cmdlet(computer_enabled: None, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "ps_whitelist", "Stop-Service,Write-Output")
+    out = await computer.run_powershell("Stop-Service x; Remove-Item y")
+    assert "remove-item" in out.lower()
+    assert "PS_WHITELIST" in out
+
+
 async def test_admin_blocked(computer_enabled: None):
     out = await computer.run_powershell("Write-Output 1", as_admin=True)
     assert "COMPUTER_ALLOW_ADMIN" in out
