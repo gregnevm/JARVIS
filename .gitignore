@@ -19,6 +19,7 @@ data/notes/
 data/logs/
 data/access/
 data/twin/
+vendor/sd-forge/
 
 # Логи / тимчасові
 *.log

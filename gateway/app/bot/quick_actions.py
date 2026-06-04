@@ -6,7 +6,7 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from ..auth import computer_mode_denied_message
+from ..auth import can_use_computer, computer_mode_denied_message
 from ..config import settings
 from ..outbound import deliver
 from ..services import ServicesClient
@@ -15,6 +15,7 @@ from ..tools_client import ToolsClient
 from .dashboard import esc, format_dashboard
 from .keyboards import (
     BTN_BRIEF,
+    BTN_CLIPBOARD,
     BTN_COMPUTER,
     BTN_HIDE,
     BTN_MENU,
@@ -35,7 +36,16 @@ _KEYBOARD_OFF = "jarvis:tg:keyboard_off:{user_id}"
 _KEYBOARD_SHOWN = "jarvis:tg:keyboard_shown:{user_id}"
 
 QUICK_ACTIONS = frozenset(
-    {BTN_STATUS, BTN_BRIEF, BTN_REMINDERS, BTN_COMPUTER, BTN_SCREEN, BTN_MENU, BTN_HIDE}
+    {
+        BTN_STATUS,
+        BTN_BRIEF,
+        BTN_REMINDERS,
+        BTN_COMPUTER,
+        BTN_SCREEN,
+        BTN_CLIPBOARD,
+        BTN_MENU,
+        BTN_HIDE,
+    }
 )
 
 _BRIEF_PROMPT = """Сформуй короткий бриф для користувача (до 12 рядків, українською):
@@ -94,7 +104,9 @@ async def handle_quick_action(
             chat_id,
             format_dashboard(dash, twin),
             parse_mode="HTML",
-            reply_markup=main_menu_keyboard(settings.public_app_url),
+            reply_markup=main_menu_keyboard(
+                settings.public_app_url, show_computer=can_use_computer(user_id)
+            ),
         )
         return True
 
@@ -134,14 +146,31 @@ async def handle_quick_action(
                 "Мутуючі дії (PowerShell, FS, CLI) потребують підтвердження ✅/❌.\n"
                 f"Режим: <code>{esc(res.get('mode', 'computer'))}</code>",
                 parse_mode="HTML",
-                reply_markup=mode_keyboard(),
+                reply_markup=mode_keyboard(show_computer=can_use_computer(user_id)),
             )
         return True
 
     if action == BTN_SCREEN:
+        from ..auth import computer_denied_message
+
+        denied = computer_denied_message(user_id)
+        if denied:
+            await tg.send_message(chat_id, denied)
+            return True
         await tg.send_chat_action(chat_id, "upload_photo")
         reply = await tools.capture_screenshot(user_id)
         await deliver(tg, chat_id, reply, redis=redis, user_id=user_id)
+        return True
+
+    if action == BTN_CLIPBOARD:
+        from ..auth import computer_denied_message
+
+        denied = computer_denied_message(user_id)
+        if denied:
+            await tg.send_message(chat_id, denied)
+            return True
+        reply = await tools.clipboard_read(user_id)
+        await tg.send_message(chat_id, reply[:4000])
         return True
 
     if action == BTN_MENU:
@@ -151,7 +180,9 @@ async def handle_quick_action(
             chat_id,
             format_dashboard(dash, twin),
             parse_mode="HTML",
-            reply_markup=main_menu_keyboard(settings.public_app_url),
+            reply_markup=main_menu_keyboard(
+                settings.public_app_url, show_computer=can_use_computer(user_id)
+            ),
         )
         return True
 
@@ -208,7 +239,9 @@ async def ensure_reply_keyboard_auto(
     await tg.send_message(
         chat_id,
         "⌨️ Швидкий доступ — кнопки внизу.",
-        reply_markup=reply_keyboard(settings.public_app_url),
+        reply_markup=reply_keyboard(
+            settings.public_app_url, show_computer=can_use_computer(user_id or 0)
+        ),
     )
 
 
@@ -226,5 +259,7 @@ async def show_reply_keyboard(
     await tg.send_message(
         chat_id,
         "⌨️ Швидкі кнопки активні.",
-        reply_markup=reply_keyboard(settings.public_app_url),
+        reply_markup=reply_keyboard(
+            settings.public_app_url, show_computer=can_use_computer(user_id or 0)
+        ),
     )

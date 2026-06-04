@@ -22,6 +22,8 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/data
+      # HTML/CSS дашборда — без rebuild при зміні app.html / admin.html
+      - ./gateway/app/static:/app/app/static:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

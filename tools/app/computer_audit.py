@@ -1,6 +1,7 @@
 """Аудит Computer Use → data/logs/computer.jsonl."""
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -47,3 +48,26 @@ def log_action(
             "confirmed": confirmed,
         }
     )
+
+
+def tail_actions(*, limit: int = 10) -> list[dict[str, Any]]:
+    p = _log_path()
+    if not p.is_file():
+        return []
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out: list[dict[str, Any]] = []
+    for line in reversed(lines[-limit * 2 :]):
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+            if isinstance(rec, dict):
+                out.append(rec)
+        except json.JSONDecodeError:
+            continue
+        if len(out) >= limit:
+            break
+    return out

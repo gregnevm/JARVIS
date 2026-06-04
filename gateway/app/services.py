@@ -14,18 +14,29 @@ class ServicesClient:
         self._tools = tools_url.rstrip("/")
         self._twin = twin_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout)
+        # Швидкий клієнт для дашборда — не чекаємо 15с на кожен полінг Mini App.
+        self._dash_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=2.0, read=8.0, write=5.0, pool=2.0)
+        )
 
     async def aclose(self) -> None:
         await self._client.aclose()
+        await self._dash_client.aclose()
 
     async def dashboard(self) -> dict[str, Any]:
-        try:
-            r = await self._client.get(f"{self._tools}/dashboard")
-            r.raise_for_status()
-            return r.json()
-        except httpx.HTTPError as exc:
-            logger.error("dashboard failed: %s", exc)
-            return {"error": "tools_unreachable"}
+        url = f"{self._tools}/dashboard"
+        last_exc: httpx.HTTPError | None = None
+        for attempt in range(3):
+            try:
+                r = await self._dash_client.get(url)
+                r.raise_for_status()
+                return r.json()
+            except httpx.HTTPError as exc:
+                last_exc = exc
+                if attempt < 2:
+                    logger.debug("dashboard retry %s: %s", attempt + 1, exc)
+        logger.error("dashboard failed: %s", last_exc)
+        return {"error": "tools_unreachable"}
 
     async def set_mode(self, mode: str) -> dict[str, Any]:
         try:

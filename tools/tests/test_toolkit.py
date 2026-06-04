@@ -124,7 +124,22 @@ async def test_describe_image_disabled(monkeypatch):
 
 async def test_generate_image_disabled(monkeypatch):
     monkeypatch.setattr(settings, "image_gen_url", "")
+    monkeypatch.setattr(settings, "image_gen_model", "")
     assert (await toolkit.generate_image("кіт")).startswith("Генерація зображень вимкнена")
+
+
+async def test_generate_image_ollama(monkeypatch, tmp_path):
+    async def _fake(prompt: str) -> bytes:
+        assert prompt == "banana"
+        return b"\x89PNG\r\n\x1a\n"
+
+    monkeypatch.setattr(settings, "image_gen_url", "ollama")
+    monkeypatch.setattr(settings, "image_gen_model", "x/z-image-turbo")
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path))
+    monkeypatch.setattr(toolkit, "_generate_image_ollama", _fake)
+    out = await toolkit.generate_image("banana")
+    assert "[[photo:" in out
+    assert (tmp_path / "uploads").exists()
 
 
 def test_ocr_image_missing_file():
@@ -134,6 +149,7 @@ def test_ocr_image_missing_file():
 def test_vision_imagegen_schemas_gated(monkeypatch):
     monkeypatch.setattr(settings, "ollama_model_vision", "llava:7b")
     monkeypatch.setattr(settings, "image_gen_url", "http://localhost:7860")
+    monkeypatch.setattr(settings, "image_gen_model", "")
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
     assert "describe_image" in names and "generate_image" in names
 

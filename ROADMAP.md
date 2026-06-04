@@ -1,10 +1,12 @@
 # JARVIS — Roadmap
 
 Стек живий, Telegram E2E доведений, фази 1-7 (skeleton → polish) закриті, фаза 7.5
-(зміцнення без Docker: mypy strict + 76 тестів + CI) теж. Цей файл — про те, що
-ефективно зробити **далі**, а не про вже зроблене (історія — у `README.md` + `memory/`).
+(зміцнення без Docker: mypy strict + 76 тестів + CI) теж.
 
-Поділено на **must / nice / explore** і пронумеровано — щоб брати по черзі.
+**Продуктовий план (фази 0–7, KPI, editions):** [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).
+
+Цей файл — **короткий ops-backlog** (must / nice / explore), а не повний product roadmap.
+Історія зробленого — у `README.md` + `memory/`.
 
 ---
 

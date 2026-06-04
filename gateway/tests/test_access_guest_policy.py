@@ -1,9 +1,10 @@
-"""Політика доступу: режим лише адмін, computer для is_allowed."""
+"""Політика доступу: режим лише адмін; Computer Use — лише власник ПК."""
 import pytest
 
 from app.auth import (
     agent_mode_denied_message,
     can_change_agent_mode,
+    can_use_computer,
     can_use_computer_mode,
     is_allowed,
 )
@@ -20,13 +21,14 @@ def test_mode_change_admin_only(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_computer_allowed_for_bot_friend(tmp_path, monkeypatch) -> None:
+async def test_computer_denied_for_bot_friend(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("app.config.settings.allowed_user_ids", "1")
     monkeypatch.setattr("app.config.settings.admin_user_ids", "1")
-    monkeypatch.setattr("app.config.settings.computer_mode_admins_only", False)
+    monkeypatch.setattr("app.config.settings.computer_owner_user_ids", "1")
     store = AccessStore(tmp_path / "users.json")
     bind_access_store(store)
     await store.approve(2, by_admin=1)
     assert is_allowed(2)
-    assert can_use_computer_mode(2)
+    assert not can_use_computer(2)
+    assert not can_use_computer_mode(2)
     bind_access_store(None)

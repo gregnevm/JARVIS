@@ -198,10 +198,37 @@ if (Test-DockerEngine) {
     Log "Skipping compose: engine unavailable"
 }
 
-# --- 4) Host-agent (Windows, outside Docker) ---
+function Test-ForgeApi {
+    try {
+        Invoke-RestMethod 'http://127.0.0.1:7860/sdapi/v1/options' -TimeoutSec 4 | Out-Null
+        return $true
+    } catch { return $false }
+}
+
+function Start-SdForgeIfConfigured {
+    $envPath = Join-Path $root '.env'
+    Import-JarvisEnv $envPath
+    $url = ($env:IMAGE_GEN_URL -as [string]).Trim().ToLower()
+    if ($url -notmatch '7860' -and $url -notmatch 'host\.docker\.internal') { return }
+    if (Test-ForgeApi) {
+        Log 'sd-forge: API already up :7860'
+        return
+    }
+    $start = Join-Path $root 'scripts\start_sd_forge.ps1'
+    if (-not (Test-Path $start)) {
+        Log 'sd-forge: start script missing'
+        return
+    }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $start 2>&1 | ForEach-Object { Log "sd-forge: $_" }
+}
+
+# --- 4) SD Forge (локальні картинки, :7860) ---
+Start-SdForgeIfConfigured
+
+# --- 5) Host-agent (Windows, outside Docker) ---
 Start-JarvisHostagent
 
-# --- 5) Ollama API health ---
+# --- 6) Ollama API health ---
 for ($i = 0; $i -lt 15; $i++) {
     try {
         Invoke-RestMethod 'http://localhost:11434/api/tags' -TimeoutSec 4 | Out-Null

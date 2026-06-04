@@ -201,7 +201,8 @@
   function clearErr() { $("err").style.display = "none"; }
 
   async function api(path, opts) {
-    const r = await fetch(path, Object.assign({ cache: "no-store" }, opts || {}));
+    const p = path.startsWith("/") ? path : ("/admin/" + path.replace(/^\/?admin\/?/, ""));
+    const r = await fetch(p, Object.assign({ cache: "no-store" }, opts || {}));
     if (r.status === 401) { fail("Потрібна авторизація — оновіть сторінку."); throw new Error("401"); }
     if (!r.ok) {
       let d = "HTTP " + r.status;
@@ -349,7 +350,7 @@
     if (busy) return;
     busy = true;
     $("btnRefresh").disabled = true;
-    try { renderAll(await api("admin/api/overview")); }
+    try { renderAll(await api("/admin/api/overview")); }
     catch (e) { if (e.message !== "401") fail(e.message); }
     finally { busy = false; $("btnRefresh").disabled = false; }
   }
@@ -371,7 +372,7 @@
   document.querySelectorAll("#seg button").forEach((btn) => {
     btn.onclick = () => confirmModal("Режим", "Встановити «" + btn.dataset.mode + "»?", async () => {
       try {
-        const res = await api("admin/api/mode", { method: "POST", headers: { "Content-Type": "application/json" },
+        const res = await api("/admin/api/mode", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mode: btn.dataset.mode }) });
         toast("Режим: " + (res.mode || btn.dataset.mode));
         await load();
@@ -381,7 +382,7 @@
 
   $("btnResetMode").onclick = () => confirmModal("Скинути", "Повернути AGENT_MODE з .env?", async () => {
     try {
-      const res = await api("admin/api/mode", { method: "DELETE" });
+      const res = await api("/admin/api/mode", { method: "DELETE" });
       toast("→ " + (res.mode || "?")); await load();
     } catch (e) { toast(e.message, true); }
   });
@@ -391,7 +392,7 @@
     if (!uid) return toast("Вкажи ID", true);
     confirmModal("Rate-limit", "Скинути для " + uid + "?", async () => {
       try {
-        const res = await api("admin/api/ratelimit/reset", { method: "POST",
+        const res = await api("/admin/api/ratelimit/reset", { method: "POST",
           headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: uid }) });
         toast(res.message || "ok", !res.ok); await load();
       } catch (e) { toast(e.message, true); }
@@ -403,7 +404,7 @@
     if (!uid) return toast("Вкажи ID", true);
     confirmModal("Доступ", "Дозволити " + uid + "?", async () => {
       try {
-        const res = await api("admin/api/access/approve", { method: "POST",
+        const res = await api("/admin/api/access/approve", { method: "POST",
           headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: uid }) });
         toast(res.ok ? "дозволено" : (res.message || "помилка"), !res.ok); await load();
       } catch (e) { toast(e.message, true); }
@@ -415,7 +416,7 @@
     if (!uid) return toast("Вкажи ID", true);
     confirmModal("Trust", "Trust 30 хв для " + uid + "?", async () => {
       try {
-        await api("admin/api/computer/trust", { method: "POST",
+        await api("/admin/api/computer/trust", { method: "POST",
           headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: uid }) });
         toast("trusted"); await load();
       } catch (e) { toast(e.message, true); }
@@ -426,7 +427,7 @@
     const t = ev.target;
     if (!t || !t.dataset || !t.dataset.act) return;
     const act = t.dataset.act, id = parseInt(t.dataset.id, 10);
-    const map = { approve: "admin/api/access/approve", deny: "admin/api/access/deny", revoke: "admin/api/access/revoke" };
+    const map = { approve: "/admin/api/access/approve", deny: "/admin/api/access/deny", revoke: "/admin/api/access/revoke" };
     confirmModal(act, act + " для " + id + "?", async () => {
       try {
         const res = await api(map[act], { method: "POST",

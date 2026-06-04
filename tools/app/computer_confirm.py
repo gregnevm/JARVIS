@@ -11,6 +11,7 @@ import redis.asyncio as aioredis
 from .computer_audit import log_action
 from .computer_learned import is_cli_trusted, is_ps_trusted, learn_from_action
 from .ps_whitelist import check_ps_whitelist, extract_ps_cmdlets
+from .computer_access import computer_denied_message
 from .config import settings
 
 _PENDING_PREFIX = "jarvis:computer:pending:"
@@ -39,8 +40,12 @@ _TIER = {
     "fs_list": "T0",
     "fs_read": "T0",
     "fs_write": "T0",
+    "fs_write_bytes": "T0",
     "capture_screenshot": "T0",
+    "clipboard_read": "T0",
+    "clipboard_write": "T0",
     "run_cli": "T1",
+    "power_action": "T0",
 }
 
 _redis: aioredis.Redis | None = None
@@ -73,9 +78,13 @@ def tier_for(tool: str) -> str:
 
 
 def is_mutating(tool: str, args: dict[str, Any]) -> bool:
-    if tool in ("fs_list", "fs_read", "capture_screenshot"):
+    if tool in ("fs_list", "fs_read", "capture_screenshot", "clipboard_read"):
         return False
-    if tool == "fs_write":
+    if tool == "fs_write" or tool == "fs_write_bytes":
+        return True
+    if tool == "clipboard_write":
+        return True
+    if tool == "power_action":
         return True
     if tool == "run_cli":
         if is_cli_trusted(str(args.get("exe", ""))):
@@ -159,6 +168,24 @@ async def clear_origin(user_id: int) -> None:
     await _client().delete(_origin_key(user_id))
 
 
+async def load_pending_raw(user_id: int) -> dict[str, Any]:
+    """Для Mini App — поточний pending без коду."""
+    raw = await _client().get(_pending_key(user_id))
+    if not raw:
+        return {"pending": False}
+    stored_code, _, payload = raw.partition(":")
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        data = {}
+    return {
+        "pending": True,
+        "code": stored_code,
+        "tool": data.get("tool") if isinstance(data, dict) else "",
+        "tier": data.get("tier") if isinstance(data, dict) else "",
+    }
+
+
 async def wrap_execute(
     user_id: int,
     tool: str,
@@ -166,8 +193,17 @@ async def wrap_execute(
     executor: Callable[[], Awaitable[str]],
 ) -> str:
     """Виконує дію або повертає маркер підтвердження для gateway."""
+    from .computer_trust import is_trusted
+
+    denied = computer_denied_message(user_id)
+    if denied:
+        return denied
     tier = tier_for(tool)
     mutating = is_mutating(tool, args)
+    if bool(args.get("as_admin")):
+        mutating = True
+    if mutating and await is_trusted(user_id) and not bool(args.get("as_admin")):
+        mutating = False
     if mutating and settings.computer_require_confirm and int(user_id) > 0:
         code = await save_pending(user_id, tool, args)
         desc = describe_action(tool, args)
@@ -181,6 +217,9 @@ async def wrap_execute(
 async def execute_confirmed(user_id: int, code: str) -> tuple[str, str]:
     from . import computer as comp
 
+    denied = computer_denied_message(user_id)
+    if denied:
+        return denied, ""
     data = await load_pending(user_id, code)
     if not data:
         return "Дію прострочено або код невірний.", ""

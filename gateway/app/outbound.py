@@ -53,6 +53,44 @@ _KINDS = {
 # Kinds, де "|" — це не «src|caption», а власний синтаксис.
 _NO_CAPTION = {"location", "buttons", "reaction"}
 
+# Каталоги для резолву «голих» імен файлів (puppy.jpg → /data/uploads/puppy.jpg).
+_UPLOAD_SEARCH_DIRS = ("/data/uploads", "/data")
+
+
+def resolve_media_src(src: str) -> str:
+    """Нормалізує src: http(s) і /data/... без змін; інакше шукає файл у /data/uploads."""
+    src = (src or "").strip()
+    if not src:
+        return src
+    if src.startswith(("http://", "https://")):
+        return src
+    if os.path.isfile(src):
+        return src
+    name = os.path.basename(src.replace("\\", "/"))
+    if not name:
+        return src
+    for base in _UPLOAD_SEARCH_DIRS:
+        candidate = os.path.join(base, name)
+        if os.path.isfile(candidate):
+            return candidate
+    return src
+
+
+def media_src_exists(src: str) -> bool:
+    """Чи можна реально відправити src (URL, існуючий файл або Telegram file_id)."""
+    src = resolve_media_src(src)
+    if src.startswith(("http://", "https://")):
+        return True
+    if os.path.isfile(src):
+        return True
+    # file_id: без слешів і без типових розширень «вигаданих» файлів
+    low = src.lower()
+    if "/" not in src and "\\" not in src and not low.endswith(
+        (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".pdf")
+    ):
+        return True
+    return False
+
 
 @dataclass(frozen=True)
 class Directive:
@@ -82,6 +120,8 @@ def parse_directives(text: str) -> tuple[str, list[Directive]]:
             src, caption = payload, None
         if not src:
             return ""
+        if kind in ("photo", "document", "video", "audio", "animation"):
+            src = resolve_media_src(src)
         directives.append(Directive(kind=kind, src=src, caption=caption))
         return ""
 
@@ -131,21 +171,28 @@ async def _send_one(
     react_message_id: int | None,
     *,
     message_thread_id: int | None = None,
-) -> None:
+) -> bool:
+    """True — медіа відправлено (або пропущено без помилки); False — не вдалося."""
     try:
         if d.kind == "photo":
-            await tg.send_photo(chat_id, d.src, d.caption)
-        elif d.kind == "document":
-            await tg.send_document(chat_id, d.src, d.caption)
-        elif d.kind == "video":
-            await tg.send_video(chat_id, d.src, d.caption)
-        elif d.kind == "audio":
-            await tg.send_audio(chat_id, d.src, d.caption)
-        elif d.kind == "animation":
-            await tg.send_animation(chat_id, d.src, d.caption)
-        elif d.kind == "sticker":
-            await tg.send_sticker(chat_id, d.src)
-        elif d.kind == "voice":
+            if not media_src_exists(d.src):
+                logger.error("sendPhoto: файл не знайдено: %s", d.src)
+                return False
+            return await tg.send_photo(chat_id, d.src, d.caption)
+        if d.kind == "document":
+            if not media_src_exists(d.src):
+                logger.error("sendDocument: файл не знайдено: %s", d.src)
+                return False
+            return await tg.send_document(chat_id, d.src, d.caption)
+        if d.kind == "video":
+            return await tg.send_video(chat_id, d.src, d.caption)
+        if d.kind == "audio":
+            return await tg.send_audio(chat_id, d.src, d.caption)
+        if d.kind == "animation":
+            return await tg.send_animation(chat_id, d.src, d.caption)
+        if d.kind == "sticker":
+            return await tg.send_sticker(chat_id, d.src)
+        if d.kind == "voice":
             if isinstance(d.src, str) and os.path.isfile(d.src):
                 with open(d.src, "rb") as fh:
                     await tg.send_voice(chat_id, fh.read(), d.caption)
@@ -155,13 +202,18 @@ async def _send_one(
                 await tg.send_voice(chat_id, d.src, d.caption)
             else:
                 await tg.send_audio(chat_id, d.src, d.caption)
-        elif d.kind == "location":
+            return True
+        if d.kind == "location":
             lat, lon = (p.strip() for p in d.src.split(",", 1))
             await tg.send_location(chat_id, float(lat), float(lon))
-        elif d.kind == "reaction" and react_message_id is not None:
+            return True
+        if d.kind == "reaction" and react_message_id is not None:
             await tg.set_message_reaction(chat_id, react_message_id, d.src.strip())
+            return True
     except (ValueError, IndexError) as exc:
         logger.warning("bad directive %s: %s", d, exc)
+        return False
+    return True
 
 
 async def send_directives(
@@ -188,8 +240,21 @@ async def send_directives(
             message_thread_id=message_thread_id,
         )
         photos = []
+    failed: list[str] = []
     for d in photos + rest:
-        await _send_one(tg, chat_id, d, react_message_id, message_thread_id=message_thread_id)
+        ok = await _send_one(
+            tg, chat_id, d, react_message_id, message_thread_id=message_thread_id
+        )
+        if not ok and d.kind in ("photo", "document"):
+            failed.append(d.src)
+    if failed:
+        names = ", ".join(os.path.basename(f) for f in failed[:3])
+        await tg.send_message(
+            chat_id,
+            f"⚠️ Не вдалося надіслати файл(и): {names}. "
+            "Для генерації картинок у .env потрібен IMAGE_GEN_URL (Stable Diffusion/Forge).",
+            message_thread_id=message_thread_id,
+        )
 
 
 async def deliver(

@@ -45,13 +45,15 @@ class SafetyHandler(Handler):
 
 
 class ModeRouterHandler(Handler):
-    """Визначає chat/agent до інференсу (евристика з agent.py)."""
+    """Визначає chat/agent/computer до інференсу (евристика з agent.py)."""
 
-    def __init__(self, decide_mode: Callable[[str, str], str]) -> None:
+    def __init__(self, decide_mode: Callable[..., str]) -> None:
         self._decide = decide_mode
 
     async def _process(self, req: AgentRequest) -> AgentResponse | None:
-        req.mode = self._decide(req.text, req.agent_mode)
+        req.mode = self._decide(
+            req.text, req.agent_mode, mode_hint=req.mode_hint, user_id=req.user_id
+        )
         return None
 
 

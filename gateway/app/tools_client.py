@@ -47,6 +47,9 @@ class ToolsClient:
         if user_id is None or not isinstance(text, str) or not text.strip():
             return
         body = {"user_id": int(user_id), "text": text}
+        mode = payload.get("mode")
+        if isinstance(mode, str) and mode.strip() and mode.strip().lower() != "auto":
+            body["mode"] = mode.strip().lower()
         async with self._client.stream("POST", self._stream_url, json=body) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -66,6 +69,9 @@ class ToolsClient:
         if user_id is None or not isinstance(text, str) or not text.strip():
             return FALLBACK
         body = {"user_id": int(user_id), "text": text}
+        mode = payload.get("mode")
+        if isinstance(mode, str) and mode.strip() and mode.strip().lower() != "auto":
+            body["mode"] = mode.strip().lower()
         try:
             resp = await self._client.post(self._url, json=body)
             resp.raise_for_status()
@@ -114,3 +120,113 @@ class ToolsClient:
         except httpx.HTTPError as exc:
             logger.error("tools /computer/screenshot failed: %s", exc)
             return "Не вдалося зняти скріншот — перевір host-agent на хості (порт 8400)."
+
+    async def pull_file(self, user_id: int, path: str) -> dict[str, Any]:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/computer/file/pull",
+                json={"user_id": int(user_id), "path": path},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, dict) else {"error": "invalid response"}
+        except httpx.HTTPError as exc:
+            logger.error("tools file pull failed: %s", exc)
+            return {"error": str(exc)}
+
+    async def push_file(self, user_id: int, path: str, data_b64: str) -> dict[str, Any]:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/computer/file/push",
+                json={"user_id": int(user_id), "path": path, "data_b64": data_b64},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as exc:
+            return {"error": str(exc)}
+
+    async def clipboard_read(self, user_id: int) -> str:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/computer/clipboard/read",
+                json={"user_id": int(user_id)},
+            )
+            resp.raise_for_status()
+            return extract_text(resp.json())
+        except httpx.HTTPError as exc:
+            return f"Clipboard недоступний: {exc}"
+
+    async def see_screen(self, user_id: int, question: str = "") -> str:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/computer/see",
+                json={"user_id": int(user_id), "question": question},
+            )
+            resp.raise_for_status()
+            return extract_text(resp.json())
+        except httpx.HTTPError as exc:
+            return f"See screen failed: {exc}"
+
+    async def list_macros(self) -> dict[str, Any]:
+        try:
+            resp = await self._client.get(f"{self._base}/computer/macros")
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError:
+            return {"macros": []}
+
+    async def run_macro(self, user_id: int, name: str) -> str:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/computer/macro/run",
+                json={"user_id": int(user_id), "name": name},
+            )
+            resp.raise_for_status()
+            return extract_text(resp.json())
+        except httpx.HTTPError as exc:
+            return f"Macro failed: {exc}"
+
+    async def grant_trust(self, user_id: int) -> None:
+        try:
+            await self._client.post(
+                f"{self._base}/computer/trust",
+                json={"user_id": int(user_id)},
+            )
+        except httpx.HTTPError as exc:
+            logger.error("grant trust failed: %s", exc)
+
+    async def remote_status(self, user_id: int) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        try:
+            r = await self._client.get(
+                f"{self._base}/computer/pending", params={"user_id": user_id}
+            )
+            out["pending"] = r.json() if r.status_code == 200 else {}
+            r2 = await self._client.get(f"{self._base}/computer/audit", params={"limit": 10})
+            out["audit"] = r2.json() if r2.status_code == 200 else {}
+        except httpx.HTTPError:
+            pass
+        return out
+
+    async def list_tasks(self, user_id: int) -> str:
+        try:
+            resp = await self._client.get(f"{self._base}/tasks", params={"user_id": user_id})
+            resp.raise_for_status()
+            return extract_text(resp.json())
+        except httpx.HTTPError:
+            return "Tasks недоступні."
+
+    async def cancel_tasks(self, user_id: int) -> None:
+        try:
+            await self._client.delete(f"{self._base}/tasks", params={"user_id": user_id})
+        except httpx.HTTPError:
+            pass
+
+    async def due_jobs(self) -> list[dict[str, Any]]:
+        try:
+            resp = await self._client.get(f"{self._base}/jobs/due")
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("jobs") if isinstance(data, dict) else []
+        except httpx.HTTPError:
+            return []

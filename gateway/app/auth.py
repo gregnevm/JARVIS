@@ -39,12 +39,40 @@ def is_allowed(user_id: int | None) -> bool:
     return False
 
 
-def can_use_computer_mode(user_id: int | None) -> bool:
+def _parse_owner_ids(raw: str) -> set[int]:
+    ids: set[int] = set()
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.add(int(part))
+        except ValueError:
+            continue
+    return ids
+
+
+def computer_owner_ids() -> set[int]:
+    """Власник ПК: COMPUTER_OWNER_USER_IDS, інакше адміни, інакше ALLOWED з .env (не /allow)."""
+    owners = _parse_owner_ids(settings.computer_owner_user_ids)
+    if owners:
+        return owners
+    if settings.computer_mode_admins_only:
+        return settings.admin_ids
+    admins = settings.admin_ids
+    if settings.admin_user_ids.strip():
+        return admins
+    return settings.allowed_ids
+
+
+def can_use_computer(user_id: int | None) -> bool:
     if user_id is None:
         return False
-    if not settings.computer_mode_admins_only:
-        return is_allowed(user_id)
-    return is_admin(user_id)
+    return int(user_id) in computer_owner_ids()
+
+
+def can_use_computer_mode(user_id: int | None) -> bool:
+    return can_use_computer(user_id)
 
 
 def can_change_agent_mode(user_id: int | None) -> bool:
@@ -58,12 +86,19 @@ def agent_mode_denied_message(user_id: int | None) -> str | None:
     return "Змінювати режим агента можуть лише адміни (ADMIN_USER_IDS)."
 
 
+def computer_denied_message(user_id: int | None) -> str | None:
+    if can_use_computer(user_id):
+        return None
+    return (
+        "Керування цим комп'ютером доступне лише власнику "
+        "(COMPUTER_OWNER_USER_IDS у .env)."
+    )
+
+
 def computer_mode_denied_message(user_id: int | None, mode: str) -> str | None:
     if mode.lower() != "computer":
         return None
-    if can_use_computer_mode(user_id):
-        return None
-    return "Режим computer доступний лише адмінам (COMPUTER_MODE_ADMINS_ONLY)."
+    return computer_denied_message(user_id)
 
 
 def is_admin(user_id: int | None) -> bool:

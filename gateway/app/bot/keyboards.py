@@ -9,17 +9,22 @@ BTN_REMINDERS = "⏰ Нагадування"
 BTN_COMPUTER = "💻 Computer"
 BTN_SCREEN = "📸 Скрін"
 BTN_MENU = "🎛 Меню"
+BTN_CLIPBOARD = "📋 Буфер"
 BTN_HIDE = "⌨️ Сховати"
 
 
-def reply_keyboard(app_url: str | None = None) -> dict[str, Any]:
+def reply_keyboard(app_url: str | None = None, *, show_computer: bool = True) -> dict[str, Any]:
     """Reply Keyboard — постійні кнопки під полем вводу."""
     rows: list[list[dict[str, str]]] = [
         [{"text": BTN_STATUS}, {"text": BTN_BRIEF}],
-        [{"text": BTN_REMINDERS}, {"text": BTN_SCREEN}],
-        [{"text": BTN_COMPUTER}, {"text": BTN_MENU}],
-        [{"text": BTN_HIDE}],
     ]
+    if show_computer:
+        rows.append([{"text": BTN_REMINDERS}, {"text": BTN_SCREEN}])
+        rows.append([{"text": BTN_CLIPBOARD}, {"text": BTN_COMPUTER}])
+        rows.append([{"text": BTN_MENU}])
+    else:
+        rows.append([{"text": BTN_REMINDERS}, {"text": BTN_MENU}])
+    rows.append([{"text": BTN_HIDE}])
     if app_url and app_url.startswith("https://"):
         rows.insert(0, [{"text": "📊 Dashboard", "web_app": {"url": app_url}}])
     return {
@@ -34,7 +39,9 @@ def remove_reply_keyboard() -> dict[str, Any]:
     return {"remove_keyboard": True}
 
 
-def main_menu_keyboard(app_url: str | None = None) -> dict[str, Any]:
+def main_menu_keyboard(
+    app_url: str | None = None, *, show_computer: bool = True
+) -> dict[str, Any]:
     rows: list[list[dict[str, Any]]] = []
     if app_url and app_url.startswith("https://"):
         rows.append([{"text": "📊 Відкрити дашборд", "web_app": {"url": app_url}}])
@@ -54,7 +61,11 @@ def main_menu_keyboard(app_url: str | None = None) -> dict[str, Any]:
             ],
             [
                 {"text": "⚖️ Гібрид", "callback_data": "mode:hybrid"},
-                {"text": "💻 Computer", "callback_data": "mode:computer"},
+                *(
+                    [{"text": "💻 Computer", "callback_data": "mode:computer"}]
+                    if show_computer
+                    else []
+                ),
             ],
             [
                 {"text": "🔄 Sync / LoRA", "callback_data": "dash:sync"},
@@ -111,23 +122,26 @@ def computer_confirm_keyboard(code: str) -> dict[str, Any]:
         "inline_keyboard": [
             [
                 {"text": "✅ Підтвердити", "callback_data": f"cmp:Y:{code}"},
-                {"text": "❌ Скасувати", "callback_data": "cmp:N:0"},
-            ]
+                {"text": "✅ + Trust 30х", "callback_data": f"cmp:YT:{code}"},
+            ],
+            [{"text": "❌ Скасувати", "callback_data": "cmp:N:0"}],
         ]
     }
 
 
-def mode_keyboard() -> dict[str, Any]:
+def mode_keyboard(*, show_computer: bool = True) -> dict[str, Any]:
+    mode_row: list[dict[str, str]] = [
+        {"text": "⚖️ Гібрид", "callback_data": "mode:hybrid"},
+    ]
+    if show_computer:
+        mode_row.append({"text": "💻 Computer", "callback_data": "mode:computer"})
     return {
         "inline_keyboard": [
             [
                 {"text": "💬 Чат", "callback_data": "mode:chat"},
                 {"text": "🤖 Агент", "callback_data": "mode:agent"},
             ],
-            [
-                {"text": "⚖️ Гібрид", "callback_data": "mode:hybrid"},
-                {"text": "💻 Computer", "callback_data": "mode:computer"},
-            ],
+            mode_row,
             [{"text": "« Меню", "callback_data": "dash:menu"}],
         ]
     }

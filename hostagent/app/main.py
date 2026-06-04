@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from .config import settings
@@ -53,6 +54,31 @@ class CliRequest(BaseModel):
 class FsWriteRequest(BaseModel):
     path: str
     content: str
+
+
+class FsWriteBytesRequest(BaseModel):
+    path: str
+    data_b64: str
+
+
+class ClipboardWriteRequest(BaseModel):
+    text: str
+
+
+class UiaInvokeRequest(BaseModel):
+    window: str = ""
+    control_name: str = ""
+    action: str = "click"
+
+
+class PowerRequest(BaseModel):
+    action: str
+    delay_seconds: int = 60
+
+
+class WolRequest(BaseModel):
+    mac: str
+    broadcast: str = "255.255.255.255"
 
 
 def _timeout(req_timeout: float | None) -> float:
@@ -201,6 +227,24 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/health/stack")
+async def health_stack(
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, bool]:
+    docker_up = False
+    try:
+        proc = subprocess.run(
+            ["docker", "ps", "-q"],
+            capture_output=True,
+            text=True,
+            timeout=10.0,
+        )
+        docker_up = proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        docker_up = False
+    return {"docker_up": docker_up}
+
+
 @app.post("/powershell")
 async def powershell(
     req: PowerShellRequest,
@@ -286,6 +330,222 @@ async def screen_capture(
     """Знімок основного екрана (read-only, Windows)."""
     data = _capture_screen_png()
     return {"format": "png", "data_b64": base64.b64encode(data).decode("ascii")}
+
+
+@app.get("/fs/download")
+async def fs_download(
+    path: Annotated[str, Query()],
+    _: Annotated[None, Depends(_check_token)],
+) -> Response:
+    p = _resolve_path(path)
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="not a file")
+    try:
+        data = p.read_bytes()
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if len(data) > settings.max_download_bytes:
+        raise HTTPException(status_code=413, detail="file too large")
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{p.name}"'},
+    )
+
+
+@app.post("/fs/write_bytes")
+async def fs_write_bytes(
+    req: FsWriteBytesRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    p = _resolve_path(req.path)
+    try:
+        raw = base64.b64decode(req.data_b64 or "", validate=True)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="invalid base64") from exc
+    if len(raw) > settings.max_download_bytes:
+        raise HTTPException(status_code=413, detail="content too large")
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(raw)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"path": str(p), "status": "ok", "bytes": str(len(raw))}
+
+
+_CLIPBOARD_READ_PS = (
+    "Add-Type -AssemblyName System.Windows.Forms; "
+    "[System.Windows.Forms.Clipboard]::GetText()"
+)
+_CLIPBOARD_WRITE_PS = (
+    "Add-Type -AssemblyName System.Windows.Forms; "
+    "param($t); [System.Windows.Forms.Clipboard]::SetText($t)"
+)
+
+
+@app.get("/clipboard")
+async def clipboard_read(
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="clipboard only on Windows")
+    result = _run_powershell(_CLIPBOARD_READ_PS, False, 10.0)
+    text = (result.get("stdout") or "").strip()
+    return {"text": text}
+
+
+@app.post("/clipboard")
+async def clipboard_write(
+    req: ClipboardWriteRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="clipboard only on Windows")
+    text = req.text or ""
+    if len(text.encode("utf-8")) > settings.max_bytes:
+        raise HTTPException(status_code=400, detail="text too large")
+    escaped = json.dumps(text)
+    script = f"$t = {escaped}; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetText($t)"
+    result = _run_powershell(script, False, 10.0)
+    if int(result.get("code", -1)) != 0:
+        detail = (result.get("stderr") or "clipboard write failed").strip()
+        raise HTTPException(status_code=500, detail=detail[:200])
+    return {"status": "ok"}
+
+
+@app.get("/window/list")
+async def window_list(
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, Any]:
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="windows only")
+    ps = (
+        "Get-Process | Where-Object { $_.MainWindowTitle } "
+        "| Select-Object Id, ProcessName, MainWindowTitle "
+        "| ConvertTo-Json -Compress"
+    )
+    result = _run_powershell(ps, False, 15.0)
+    raw = (result.get("stdout") or "").strip()
+    windows: list[dict[str, Any]] = []
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                parsed = [parsed]
+            if isinstance(parsed, list):
+                windows = parsed
+        except json.JSONDecodeError:
+            pass
+    return {"windows": windows[:100]}
+
+
+@app.post("/window/focus")
+async def window_focus(
+    title: Annotated[str, Query()],
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="windows only")
+    if not title.strip():
+        raise HTTPException(status_code=400, detail="empty title")
+    escaped = json.dumps(title.strip())
+    ps = (
+        f"$t = {escaped}; "
+        "(Add-Type @'\\nusing System;\\nusing System.Runtime.InteropServices;\\n"
+        "public class Win32 { [DllImport(\\\"user32.dll\\\")] public static extern bool SetForegroundWindow(IntPtr hWnd); }\\n'@ -PassThru); "
+        "$p = Get-Process | Where-Object {{ $_.MainWindowTitle -like \\\"*${{t}}*\\\" }} | Select-Object -First 1; "
+        "if (-not $p) {{ exit 2 }}; [Win32]::SetForegroundWindow($p.MainWindowHandle); $p.MainWindowTitle"
+    )
+    result = _run_powershell(ps, False, 15.0)
+    if int(result.get("code", -1)) == 2:
+        raise HTTPException(status_code=404, detail="window not found")
+    if int(result.get("code", -1)) != 0:
+        raise HTTPException(status_code=500, detail=(result.get("stderr") or "focus failed")[:200])
+    return {"title": (result.get("stdout") or "").strip(), "status": "ok"}
+
+
+@app.post("/uia/invoke")
+async def uia_invoke(
+    req: UiaInvokeRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    """UI Automation lite — фокус вікна + Enter (SendKeys fallback)."""
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="windows only")
+    control = (req.control_name or "").strip()
+    if not control:
+        raise HTTPException(status_code=400, detail="control_name required")
+    if req.window.strip():
+        title = req.window.strip()
+        escaped = json.dumps(title)
+        focus_ps = (
+            f"$t = {escaped}; "
+            "$p = Get-Process | Where-Object { $_.MainWindowTitle -like \"*$($t)*\" } | Select-Object -First 1; "
+            "if (-not $p) { exit 2 }; "
+            "(Add-Type @'\nusing System;\nusing System.Runtime.InteropServices;\n"
+            "public class Win32 { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd); }\n'@ -PassThru); "
+            "[Win32]::SetForegroundWindow($p.MainWindowHandle)"
+        )
+        focus = _run_powershell(focus_ps, False, 15.0)
+        if int(focus.get("code", -1)) == 2:
+            raise HTTPException(status_code=404, detail="window not found")
+    action = (req.action or "click").lower()
+    if action != "click":
+        raise HTTPException(status_code=400, detail="only click supported")
+    ps = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "Start-Sleep -Milliseconds 200; "
+        "[System.Windows.Forms.SendKeys]::SendWait('{ENTER}')"
+    )
+    result = _run_powershell(ps, False, 15.0)
+    if int(result.get("code", -1)) != 0:
+        raise HTTPException(status_code=500, detail=(result.get("stderr") or "uia failed")[:200])
+    return {"status": "ok", "control": control}
+
+
+@app.post("/power")
+async def power_action(
+    req: PowerRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    if not settings.allow_power:
+        raise HTTPException(status_code=403, detail="power actions disabled")
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="windows only")
+    action = (req.action or "").lower().strip()
+    delay = max(0, min(int(req.delay_seconds), 300))
+    scripts = {
+        "lock": "rundll32.exe user32.dll,LockWorkStation",
+        "sleep": "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)",
+        "restart": f"shutdown /r /t {delay}",
+        "shutdown": f"shutdown /s /t {delay}",
+    }
+    if action not in scripts:
+        raise HTTPException(status_code=400, detail="bad action")
+    result = _run_powershell(scripts[action], False, 15.0)
+    if int(result.get("code", -1)) != 0 and action in ("lock", "sleep"):
+        raise HTTPException(status_code=500, detail=(result.get("stderr") or "power failed")[:200])
+    return {"status": "ok", "action": action, "delay": str(delay)}
+
+
+@app.post("/wol")
+async def wake_on_lan(
+    req: WolRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    mac = (req.mac or "").replace("-", ":").replace(".", ":").upper()
+    if len(mac.split(":")) != 6:
+        raise HTTPException(status_code=400, detail="invalid mac")
+    ps = (
+        f"$mac = '{mac}'; $macBytes = ($mac -split ':') | ForEach-Object {{ [byte]('0x' + $_) }}; "
+        f"$packet = [byte[]](,0xFF * 6) + ($macBytes * 16); "
+        f"$udp = New-Object System.Net.Sockets.UdpClient; "
+        f"$udp.Connect('{req.broadcast}', 9); $udp.Send($packet, $packet.Length) | Out-Null; $udp.Close()"
+    )
+    result = _run_powershell(ps, False, 10.0)
+    if int(result.get("code", -1)) != 0:
+        raise HTTPException(status_code=500, detail=(result.get("stderr") or "wol failed")[:200])
+    return {"status": "ok", "mac": mac}
 
 
 logger.info(

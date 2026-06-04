@@ -18,8 +18,11 @@ class Settings(BaseSettings):
     port: int = 8400
     exec_timeout: float = 30.0
     max_bytes: int = 6000
+    max_download_bytes: int = 48 * 1024 * 1024
     # Comma-separated absolute paths; FS API only allows paths under these roots.
     fs_roots: str = ""
+    allow_power: bool = False
+    drop_dir: str = ""
 
 
 settings = Settings()

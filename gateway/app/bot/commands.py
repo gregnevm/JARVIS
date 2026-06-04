@@ -5,7 +5,7 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from ..auth import computer_mode_denied_message
+from ..auth import can_use_computer, computer_mode_denied_message
 from ..config import settings
 from ..services import ServicesClient
 from ..telegram import TelegramClient
@@ -75,6 +75,7 @@ async def _send_dashboard(
     tg: TelegramClient,
     svc: ServicesClient,
     *,
+    user_id: int | None = None,
     message_id: int | None = None,
     edit: bool = True,
 ) -> None:
@@ -86,7 +87,9 @@ async def _send_dashboard(
         chat_id,
         body,
         message_id=message_id,
-        reply_markup=main_menu_keyboard(settings.public_app_url),
+        reply_markup=main_menu_keyboard(
+            settings.public_app_url, show_computer=can_use_computer(user_id)
+        ),
         edit=edit,
     )
 
@@ -185,7 +188,7 @@ async def handle_command(
                     chat_id,
                     f"✅ Режим: <code>{esc(res.get('mode', mode))}</code>",
                     parse_mode="HTML",
-                    reply_markup=mode_keyboard(),
+                    reply_markup=mode_keyboard(show_computer=can_use_computer(user_id)),
                 )
             return True
         if payload in ("remind", "reminders"):
@@ -197,11 +200,11 @@ async def handle_command(
         if payload == "canvas":
             await _send_mini_app(chat_id, tg, canvas=True)
             return True
-        await _send_dashboard(chat_id, tg, svc, edit=False)
+        await _send_dashboard(chat_id, tg, svc, user_id=user_id, edit=False)
         return True
 
     if cmd == "/dashboard":
-        await _send_dashboard(chat_id, tg, svc, edit=False)
+        await _send_dashboard(chat_id, tg, svc, user_id=user_id, edit=False)
         return True
 
     if cmd == "/app":
@@ -213,12 +216,14 @@ async def handle_command(
             chat_id,
             format_help(),
             parse_mode="HTML",
-            reply_markup=main_menu_keyboard(settings.public_app_url),
+            reply_markup=main_menu_keyboard(
+                settings.public_app_url, show_computer=can_use_computer(user_id)
+            ),
         )
         return True
 
     if cmd == "/status":
-        await _send_dashboard(chat_id, tg, svc, edit=False)
+        await _send_dashboard(chat_id, tg, svc, user_id=user_id, edit=False)
         return True
 
     if cmd == "/sync":
@@ -230,7 +235,9 @@ async def handle_command(
             chat_id,
             format_dashboard({}, twin),
             parse_mode="HTML",
-            reply_markup=main_menu_keyboard(settings.public_app_url),
+            reply_markup=main_menu_keyboard(
+                settings.public_app_url, show_computer=can_use_computer(user_id)
+            ),
         )
         return True
 
@@ -292,7 +299,7 @@ async def handle_command(
                     chat_id,
                     f"✅ Режим: <code>{esc(res.get('mode', mode))}</code>",
                     parse_mode="HTML",
-                    reply_markup=mode_keyboard(),
+                    reply_markup=mode_keyboard(show_computer=can_use_computer(user_id)),
                 )
             return True
         dash = await svc.dashboard()
@@ -302,7 +309,7 @@ async def handle_command(
             f"🧠 Поточний режим: <code>{esc(cur)}</code>\n"
             "Обери кнопкою або: <code>/mode chat|agent|hybrid|computer</code>",
             parse_mode="HTML",
-            reply_markup=mode_keyboard(),
+            reply_markup=mode_keyboard(show_computer=can_use_computer(user_id)),
         )
         return True
 
@@ -399,7 +406,7 @@ async def handle_callback(
             int(chat_id),
             text,
             message_id=int(message_id) if message_id is not None else None,
-            reply_markup=mode_keyboard(),
+            reply_markup=mode_keyboard(show_computer=can_use_computer(user_id)),
         )
         if cq_id:
             await tg.answer_callback_query(str(cq_id), text=toast)
@@ -413,7 +420,9 @@ async def handle_callback(
             int(chat_id),
             format_dashboard(dash, twin),
             message_id=int(message_id) if message_id is not None else None,
-            reply_markup=main_menu_keyboard(settings.public_app_url),
+            reply_markup=main_menu_keyboard(
+                settings.public_app_url, show_computer=can_use_computer(user_id)
+            ),
         )
         if cq_id:
             await tg.answer_callback_query(str(cq_id))
@@ -425,7 +434,9 @@ async def handle_callback(
             int(chat_id),
             format_help(),
             message_id=int(message_id) if message_id is not None else None,
-            reply_markup=main_menu_keyboard(settings.public_app_url),
+            reply_markup=main_menu_keyboard(
+                settings.public_app_url, show_computer=can_use_computer(user_id)
+            ),
         )
         if cq_id:
             await tg.answer_callback_query(str(cq_id))
@@ -459,13 +470,17 @@ async def handle_callback(
         twin = await svc.twin_status()
         if data == "dash:mode":
             text = f"🧠 Режим: <code>{esc(dash.get('agent_mode', '?'))}</code>"
-            markup = mode_keyboard()
+            markup = mode_keyboard(show_computer=can_use_computer(user_id))
         elif data == "dash:sync":
             text = format_dashboard({}, twin) if twin else "🔴 Twin недоступний."
-            markup = main_menu_keyboard(settings.public_app_url)
+            markup = main_menu_keyboard(
+                settings.public_app_url, show_computer=can_use_computer(user_id)
+            )
         else:
             text = format_dashboard(dash, twin)
-            markup = main_menu_keyboard(settings.public_app_url)
+            markup = main_menu_keyboard(
+                settings.public_app_url, show_computer=can_use_computer(user_id)
+            )
         await _present(
             tg,
             int(chat_id),

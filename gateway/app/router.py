@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 import redis.asyncio as aioredis
 
-from .auth import get_access_store, is_admin, is_allowed
+from .auth import get_access_store, is_admin, is_allowed, can_use_computer
 from .bot.access import handle_guest_access
 from .bot import handle_callback, handle_command, handle_quick_action, is_command, is_quick_action
 from .bot.quick_actions import ensure_reply_keyboard_auto
@@ -123,8 +123,8 @@ def _inline_text(path: str) -> str:
 
 async def _ingest_attachment(
     att: FileAttachment, tg: TelegramClient
-) -> tuple[str, str] | None:
-    """Готує (текст_для_агента, source) з файлового вкладення або None при невдачі."""
+) -> tuple[str, str, str | None] | None:
+    """Готує (текст_для_агента, source, saved_path) з файлового вкладення."""
     path = await _save_attachment(att, tg)
     if path is None:
         return None
@@ -147,7 +147,7 @@ async def _ingest_attachment(
             f"Це зображення. Щоб зрозуміти його — виклич describe_image зі шляхом {path} "
             f"(або ocr_image, якщо там переважно текст/скрін)."
         )
-    return "\n".join(lines), att.kind
+    return "\n".join(lines), att.kind, path
 
 
 async def handle_update(
@@ -236,11 +236,18 @@ async def handle_update(
     source = "text"
 
     if not text:
-        text, source = await _ingest_any(message, chat_id, tg, stt)
+        text, source = await _ingest_any(message, chat_id, tg, stt, tools)
         if text is None:
             return  # вже відповіли користувачу (помилка/порожньо)
 
     if is_command(text):
+        from .bot.remote import handle_remote_command, is_remote_command
+
+        if is_remote_command(text):
+            if await handle_remote_command(
+                text, int(chat_id), int(user_id), tg, tools, redis=redis
+            ):
+                return
         await handle_command(
             text,
             int(chat_id),
@@ -260,6 +267,12 @@ async def handle_update(
             return
 
     if _is_screenshot_request(text):
+        from .auth import computer_denied_message
+
+        denied = computer_denied_message(int(user_id))
+        if denied:
+            await tg.send_message(int(chat_id), denied)
+            return
         await tg.send_chat_action(int(chat_id), "upload_photo")
         reply = await tools.capture_screenshot(int(user_id))
         await deliver(
@@ -281,12 +294,18 @@ async def handle_update(
     await tg.send_chat_action(int(chat_id), "typing")
 
     thread_id = message.get("message_thread_id")
+    mode = "auto"
+    if source in ("voice", "audio", "video_note") and can_use_computer(int(user_id)):
+        from .bot.remote import looks_like_computer_request
+
+        if looks_like_computer_request(agent_text):
+            mode = "computer"
     payload = {
         "user_id": user_id,
         "chat_id": chat_id,
         "text": agent_text,
         "type": source,
-        "mode": "auto",
+        "mode": mode,
         "message_thread_id": thread_id,
     }
     reply = await run_agent_turn(
@@ -499,7 +518,11 @@ async def _handle_album(
 
 
 async def _ingest_any(
-    message: dict[str, Any], chat_id: Any, tg: TelegramClient, stt: WhisperClient
+    message: dict[str, Any],
+    chat_id: Any,
+    tg: TelegramClient,
+    stt: WhisperClient,
+    tools: ToolsClient,
 ) -> tuple[str | None, str]:
     """Перетворює будь-який нетекстовий контент на (текст_для_агента, source).
 
@@ -527,7 +550,19 @@ async def _ingest_any(
                 chat_id, "Не вдалося завантажити файл 🤷 Спробуй ще раз."
             )
             return None, "text"
-        prompt, source = ingested
+        prompt, source, saved_path = ingested
+        from .bot.remote import maybe_drop_to_host
+
+        if saved_path and await maybe_drop_to_host(
+            message,
+            saved_path,
+            att.caption or "",
+            int(chat_id),
+            int(message.get("from", {}).get("id") or 0),
+            tg,
+            tools,
+        ):
+            return None, "text"
         await tg.send_message(chat_id, f"{attachment_label(att)} прийняв: {att.filename}")
         return prompt, source
 

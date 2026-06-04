@@ -1,20 +1,21 @@
 """parse_directives + deliver — вирізання медіа-директив і доставка."""
 import json
 
-from app.outbound import deliver, parse_directives
+from app.outbound import deliver, parse_directives, resolve_media_src
 
 
 class FakeTG:
     def __init__(self) -> None:
         self.sent: list[tuple[int, str]] = []
         self.media: list[tuple[str, int, object]] = []
+        self.photo_ok = True
 
     async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None, **kwargs):
         self.sent.append((chat_id, text))
 
     async def send_photo(self, chat_id, src, caption=None):
         self.media.append(("photo", chat_id, src))
-        return True
+        return self.photo_ok
 
     async def send_document(self, chat_id, src, caption=None):
         self.media.append(("document", chat_id, src))
@@ -78,6 +79,24 @@ async def test_deliver_media_only():
     assert out == ""                       # тексту не лишилось
     assert tg.sent == []                   # порожній текст не шлемо
     assert ("photo", 7, "http://x/y.jpg") in tg.media
+
+
+def test_resolve_bare_filename_under_uploads(tmp_path, monkeypatch):
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    img = uploads / "puppy.jpg"
+    img.write_bytes(b"\xff\xd8\xff")
+    monkeypatch.setattr(
+        "app.outbound._UPLOAD_SEARCH_DIRS", (str(uploads), str(tmp_path))
+    )
+    assert resolve_media_src("puppy.jpg") == str(uploads / "puppy.jpg")
+
+
+async def test_deliver_warns_on_missing_local_photo():
+    tg = FakeTG()
+    tg.photo_ok = False
+    await deliver(tg, 7, "ось [[photo:puppy.jpg|щеня]]")
+    assert any("IMAGE_GEN_URL" in t for _, t in tg.sent)
 
 
 class _Redis:

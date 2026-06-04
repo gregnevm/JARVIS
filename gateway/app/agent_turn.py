@@ -75,6 +75,12 @@ async def resume_after_computer(
     message_thread_id: int | None = None,
 ) -> str:
     """Другий хід агента після підтвердженої Computer Use дії."""
+    from .auth import computer_denied_message
+
+    denied = computer_denied_message(user_id)
+    if denied:
+        await tg.send_message(chat_id, denied, message_thread_id=message_thread_id)
+        return denied
     origin = (origin_text or "").strip()
     parts = []
     if origin:
@@ -94,7 +100,7 @@ async def resume_after_computer(
             "chat_id": chat_id,
             "text": "\n\n".join(parts),
             "type": "computer_resume",
-            "mode": "auto",
+            "mode": "computer",
             "message_thread_id": message_thread_id,
         },
         redis=redis,

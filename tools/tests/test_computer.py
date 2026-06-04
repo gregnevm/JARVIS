@@ -14,7 +14,10 @@ from app.config import settings
 @pytest.fixture()
 def computer_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "enable_computer_use", True)
+    monkeypatch.setattr(settings, "computer_owner_user_ids", "1")
+    monkeypatch.setattr(settings, "admin_user_ids", "1")
     monkeypatch.setattr(settings, "computer_allow_admin", False)
+    monkeypatch.setattr(settings, "computer_require_confirm", False)
     monkeypatch.setattr(settings, "hostagent_token", "tok")
     monkeypatch.setattr(settings, "hostagent_url", "http://host.test:8400")
     monkeypatch.setattr(settings, "ps_whitelist", "Get-ChildItem,Write-Output")
@@ -23,8 +26,11 @@ def computer_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "computer_timeout", 5.0)
 
 
-def test_decide_mode_computer_forced():
-    assert decide_mode("anything", "computer") == "computer"
+def test_decide_mode_computer_forced(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "enable_computer_use", True)
+    monkeypatch.setattr(settings, "computer_owner_user_ids", "1")
+    assert decide_mode("anything", "computer", user_id=1) == "computer"
+    assert decide_mode("anything", "computer", user_id=2) == "agent"
 
 
 def test_schemas_exclude_computer_by_default(monkeypatch: pytest.MonkeyPatch):
@@ -50,7 +56,7 @@ async def test_disabled_returns_message(monkeypatch: pytest.MonkeyPatch):
 
 
 async def test_ps_whitelist_blocks(computer_enabled: None):
-    out = await computer.run_powershell("Remove-Item x")
+    out = await computer.run_powershell("Remove-Item x", user_id=1)
     assert "PS_WHITELIST" in out
 
 
@@ -62,32 +68,34 @@ async def test_ps_whitelist_multistatement(computer_enabled: None, monkeypatch: 
     )
     mock = AsyncMock(return_value={"stdout": "ok", "stderr": "", "code": 0})
     with patch.object(computer, "_request", mock):
-        out = await computer.run_powershell("Stop-Service -Name docker; Start-Service -Name docker")
+        out = await computer.run_powershell(
+            "Stop-Service -Name docker; Start-Service -Name docker", user_id=1
+        )
     assert "[exit 0]" in out
     assert "PS_WHITELIST" not in out
 
 
 async def test_ps_whitelist_blocks_second_cmdlet(computer_enabled: None, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "ps_whitelist", "Stop-Service,Write-Output")
-    out = await computer.run_powershell("Stop-Service x; Remove-Item y")
+    out = await computer.run_powershell("Stop-Service x; Remove-Item y", user_id=1)
     assert "remove-item" in out.lower()
     assert "PS_WHITELIST" in out
 
 
 async def test_admin_blocked(computer_enabled: None):
-    out = await computer.run_powershell("Write-Output 1", as_admin=True)
+    out = await computer.run_powershell("Write-Output 1", as_admin=True, user_id=1)
     assert "COMPUTER_ALLOW_ADMIN" in out
 
 
 async def test_cli_whitelist_blocks(computer_enabled: None):
-    out = await computer.run_cli("rm", ["-rf", "/"])
+    out = await computer.run_cli("rm", ["-rf", "/"], user_id=1)
     assert "CLI_WHITELIST" in out
 
 
 async def test_run_powershell_calls_hostagent(computer_enabled: None):
     mock = AsyncMock(return_value={"stdout": "ok", "stderr": "", "code": 0})
     with patch.object(computer, "_request", mock):
-        out = await computer.run_powershell("Write-Output hi")
+        out = await computer.run_powershell("Write-Output hi", user_id=1)
     assert out.startswith("ok")
     assert "[exit 0]" in out
     mock.assert_awaited_once()
@@ -99,7 +107,7 @@ async def test_output_truncation(computer_enabled: None):
     long_out = "x" * 200
     mock = AsyncMock(return_value={"stdout": long_out, "stderr": "", "code": 0})
     with patch.object(computer, "_request", mock):
-        out = await computer.run_powershell("Write-Output x")
+        out = await computer.run_powershell("Write-Output x", user_id=1)
     assert "обрізано" in out
 
 
@@ -126,13 +134,15 @@ async def test_request_sends_token_header(computer_enabled: None):
             return FakeResp()
 
     with patch("app.computer.httpx.AsyncClient", return_value=FakeClient()):
-        await computer.run_powershell("Write-Output 1")
+        await computer.run_powershell("Write-Output 1", user_id=1)
     assert captured["headers"]["X-Hostagent-Token"] == "tok"
     assert captured["url"] == "http://host.test:8400/powershell"
 
 
 async def test_dispatch_run_powershell(computer_enabled: None):
     with patch.object(computer, "run_powershell", AsyncMock(return_value="done")) as mock:
-        out = await toolkit.dispatch("run_powershell", {"script": "Write-Output 1"})
+        out = await toolkit.dispatch(
+            "run_powershell", {"script": "Write-Output 1"}, user_id=1, allow_computer=True
+        )
     assert out == "done"
     mock.assert_awaited_once()

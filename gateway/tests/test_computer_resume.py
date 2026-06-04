@@ -9,6 +9,9 @@ class FakeTG:
     async def send_chat_action(self, chat_id, action):
         pass
 
+    async def send_message(self, chat_id, text, message_thread_id=None):
+        pass
+
 
 class FakeTools:
     pass
@@ -27,7 +30,10 @@ def test_resume_after_computer_includes_origin_in_payload():
         captured.append(payload)
         return "готово"
 
-    with patch("app.agent_turn.run_agent_turn", new=AsyncMock(side_effect=fake_turn)):
+    with (
+        patch("app.auth.computer_denied_message", return_value=None),
+        patch("app.agent_turn.run_agent_turn", new=AsyncMock(side_effect=fake_turn)),
+    ):
         out = _run(
             resume_after_computer(
                 tg,
@@ -45,4 +51,5 @@ def test_resume_after_computer_includes_origin_in_payload():
     assert "зроби скріншот" in payload["text"]
     assert "Файл записано" in payload["text"]
     assert payload["type"] == "computer_resume"
+    assert payload["mode"] == "computer"
     assert payload["message_thread_id"] == 99

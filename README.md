@@ -4,6 +4,7 @@ Self-hosted Telegram-бот на мікросервісах. Усе працює
 агент-луп у **Tools** (Python), пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**,
 синхронізація Edge↔Twin через **twin** (SyncServer + ModelRegistry). Жодних зовнішніх AI API.
 Запуск — один `docker compose up`. Цільова архітектура PortableAI — `docs/DESIGN.md`.
+Продуктовий roadmap (фази 0–7) — `docs/PRODUCT_ROADMAP.md`; ops-backlog — `ROADMAP.md`.
 
 > Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
 > Tools + агент-луп на двох моделях, polish (rate limit, circuit breaker, healthchecks).

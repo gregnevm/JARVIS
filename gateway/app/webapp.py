@@ -169,3 +169,42 @@ async def app_artifact_clear(
     except Exception as exc:  # noqa: BLE001
         logger.warning("artifact clear failed: %s", exc)
     return {"ok": True}
+
+
+@router.get("/app/remote")
+async def app_remote(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, Any]:
+    user_id = authorize(x_telegram_init_data)
+    tools: Any = request.app.state.tools
+    dash = await request.app.state.svc.dashboard()
+    remote = await tools.remote_status(user_id)
+    macros = await tools.list_macros()
+    return {
+        "core": dash,
+        "pending": remote.get("pending"),
+        "audit": remote.get("audit"),
+        "macros": macros.get("macros") or [],
+    }
+
+
+@router.post("/app/trust")
+async def app_trust(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, str]:
+    user_id = authorize(x_telegram_init_data)
+    await request.app.state.tools.grant_trust(user_id)
+    return {"status": "trusted"}
+
+
+@router.post("/app/macro/{name}")
+async def app_run_macro(
+    name: str,
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, str]:
+    user_id = authorize(x_telegram_init_data)
+    text = await request.app.state.tools.run_macro(user_id, name)
+    return {"text": text}

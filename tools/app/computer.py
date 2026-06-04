@@ -205,6 +205,20 @@ async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = F
         return await _fs_write_impl(str(args.get("path", "")), str(args.get("content", "")))
     if tool == "capture_screenshot":
         return await _capture_screenshot_impl()
+    if tool == "clipboard_write":
+        return await _clipboard_write_impl(str(args.get("text", "")))
+    if tool == "fs_write_bytes":
+        raw = args.get("data_b64", "")
+        try:
+            data = base64.b64decode(str(raw), validate=True)
+        except (ValueError, TypeError):
+            return "invalid base64"
+        code, _, err = await _request_raw(
+            "POST",
+            "/fs/write_bytes",
+            json={"path": str(args.get("path", "")), "data_b64": str(raw)},
+        )
+        return err or f"Записано: {args.get('path')} ({len(data)} байт) ✅"
     return f"Невідома computer-дія: {tool}"
 
 
@@ -243,7 +257,115 @@ async def fs_write(path: str, content: str, *, user_id: int = 0) -> str:
     return await wrap_execute(user_id, "fs_write", args, lambda: _fs_write_impl(path, content))
 
 
-async def capture_screenshot(*, user_id: int = 0) -> str:
+async def _request_raw(method: str, path: str, **kwargs: Any) -> tuple[int, bytes, str]:
+    """HTTP → (status, body, error)."""
+    if not _enabled():
+        return 0, b"", "Computer Use вимкнено."
+    url = f"{settings.hostagent_url.rstrip('/')}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=settings.computer_timeout) as cli:
+            resp = await cli.request(method, url, headers=_headers(), **kwargs)
+            if resp.status_code >= 400:
+                return resp.status_code, b"", resp.text[:300]
+            return resp.status_code, resp.content, ""
+    except httpx.HTTPError as exc:
+        return 0, b"", f"hostagent недоступний: {exc}"
+
+
+async def download_file(path: str, *, user_id: int = 0) -> tuple[bytes, str, str]:
+    """Повертає (bytes, filename, error)."""
+    from .computer_access import computer_denied_message
+
+    denied = computer_denied_message(user_id)
+    if denied:
+        return b"", "", denied
+    code, data, err = await _request_raw("GET", "/fs/download", params={"path": path})
+    if err:
+        return b"", "", err
+    name = Path(path).name or "file.bin"
+    return data, name, ""
+
+
+async def upload_file_bytes(path: str, data: bytes, *, user_id: int = 0) -> str:
+    args = {"path": path, "size": len(data)}
+    b64 = base64.b64encode(data).decode("ascii")
+
+    async def _do() -> str:
+        code, _, err = await _request_raw(
+            "POST", "/fs/write_bytes", json={"path": path, "data_b64": b64}
+        )
+        if err:
+            return err
+        return f"Записано на хост: {path} ({len(data)} байт) ✅"
+
+    return await wrap_execute(user_id, "fs_write_bytes", args, _do)
+
+
+async def _clipboard_read_impl() -> str:
+    data = await _request("GET", "/clipboard")
+    if "error" in data:
+        return str(data["error"])
+    text = str(data.get("text", ""))
+    return _truncate(f"Буфер обміну:\n{text or '(порожньо)'}")
+
+
+async def _clipboard_write_impl(text: str) -> str:
+    data = await _request("POST", "/clipboard", json={"text": text})
+    if "error" in data:
+        return str(data["error"])
+    return "Буфер обміну оновлено ✅"
+
+
+async def clipboard_read(*, user_id: int = 0) -> str:
     return await wrap_execute(
-        user_id, "capture_screenshot", {}, lambda: _capture_screenshot_impl()
+        user_id, "clipboard_read", {}, lambda: _clipboard_read_impl()
+    )
+
+
+async def clipboard_write(text: str, *, user_id: int = 0) -> str:
+    return await wrap_execute(
+        user_id,
+        "clipboard_write",
+        {"text": text[:2000]},
+        lambda: _clipboard_write_impl(text),
+    )
+
+
+async def see_screen(question: str = "", *, user_id: int = 0) -> str:
+    """Smart screen: screenshot → vision (якщо увімкнено)."""
+    shot = await capture_screenshot(user_id=user_id)
+    if "[[photo:" not in shot:
+        return shot
+    import re
+
+    m = re.search(r"\[\[photo:([^|\]]+)", shot)
+    if not m or not settings.computer_auto_vision or not settings.ollama_model_vision:
+        return shot
+    from .toolkit import describe_image
+
+    path = m.group(1).strip()
+    q = question.strip() or "Опиши що на екрані, зокрема помилки та важливі елементи UI."
+    desc = await describe_image(path, q)
+    return f"{shot}\n\n👁 Vision:\n{desc}"
+
+
+async def power_action(action: str, delay_seconds: int = 60, *, user_id: int = 0) -> str:
+    if not settings.computer_allow_power:
+        return "Power actions вимкнено (COMPUTER_ALLOW_POWER=false)."
+
+    async def _do() -> str:
+        data = await _request(
+            "POST",
+            "/power",
+            json={"action": action, "delay_seconds": delay_seconds},
+        )
+        if "error" in data:
+            return str(data["error"])
+        return f"Power {action} заплановано (delay={delay_seconds}s) ✅"
+
+    return await wrap_execute(
+        user_id,
+        "power_action",
+        {"action": action, "delay_seconds": delay_seconds},
+        _do,
     )

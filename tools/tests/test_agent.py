@@ -13,8 +13,10 @@ def test_mode_forced_chat():
     assert decide_mode("порахуй 2+2", "chat") == "chat"
 
 
-def test_mode_forced_computer():
-    assert decide_mode("anything", "computer") == "computer"
+def test_mode_forced_computer(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "enable_computer_use", True)
+    monkeypatch.setattr(settings, "computer_owner_user_ids", "1")
+    assert decide_mode("anything", "computer", user_id=1) == "computer"
 
 
 def test_parse_confirm_marker():
@@ -40,24 +42,53 @@ def test_hybrid_plain_to_chat():
     assert decide_mode("розкажи жарт", "hybrid") == "chat"
 
 
+def test_hybrid_image_gen_to_agent():
+    assert decide_mode("намалюй щеня", "hybrid") == "agent"
+
+
 def test_hybrid_note_to_agent():
     assert decide_mode("запиши нотатку: купити хліб", "hybrid") == "agent"
     assert decide_mode("покажи мої нотатки", "hybrid") == "agent"
 
 
-def test_decide_mode_screenshot_routes_agent_when_computer_enabled(monkeypatch: pytest.MonkeyPatch):
+def _enable_computer_for_owner(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "enable_computer_use", True)
-    assert decide_mode("зроби скріншот", "hybrid") == "agent"
-    assert decide_mode("take a screenshot please", "hybrid") == "agent"
-    assert decide_mode("зроби скріншот", "chat") == "chat"
+    monkeypatch.setattr(settings, "computer_owner_user_ids", "1")
+    monkeypatch.setattr(settings, "admin_user_ids", "1")
 
 
-def test_decide_mode_screen_region_without_kw_still_agent_when_computer_on(
+def test_decide_mode_screenshot_routes_computer_when_computer_enabled(monkeypatch: pytest.MonkeyPatch):
+    _enable_computer_for_owner(monkeypatch)
+    assert decide_mode("зроби скріншот", "hybrid", user_id=1) == "computer"
+    assert decide_mode("take a screenshot please", "hybrid", user_id=1) == "computer"
+    assert decide_mode("зроби скріншот", "chat", user_id=1) == "chat"
+    assert decide_mode("зроби скріншот", "hybrid", user_id=2) == "chat"
+
+
+def test_decide_mode_computer_keywords_hybrid(monkeypatch: pytest.MonkeyPatch):
+    _enable_computer_for_owner(monkeypatch)
+    assert decide_mode("запусти winget install vlc", "hybrid", user_id=1) == "computer"
+    assert decide_mode("прочитай файл C:\\Users\\test\\a.txt", "hybrid", user_id=1) == "computer"
+    assert decide_mode("docker ps на хості", "hybrid", user_id=1) == "computer"
+
+
+def test_decide_mode_note_stays_agent_not_computer(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "enable_computer_use", True)
+    assert decide_mode("запиши нотатку: купити хліб", "hybrid") == "agent"
+
+
+def test_decide_mode_hint_forces_computer_for_owner(monkeypatch: pytest.MonkeyPatch):
+    _enable_computer_for_owner(monkeypatch)
+    assert decide_mode("жарт", "hybrid", mode_hint="computer", user_id=1) == "computer"
+    assert decide_mode("жарт", "hybrid", mode_hint="computer", user_id=2) == "agent"
+
+
+def test_decide_mode_screen_region_without_kw_still_computer_when_computer_on(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """_SCREENSHOT_RE ловить «скрін екран» навіть без слова «скріншот» у _KW_RE."""
-    monkeypatch.setattr(settings, "enable_computer_use", True)
-    assert decide_mode("зроби скрін екран зараз", "hybrid") == "agent"
+    """_COMPUTER_RE ловить «скрін екран»."""
+    _enable_computer_for_owner(monkeypatch)
+    assert decide_mode("зроби скрін екран зараз", "hybrid", user_id=1) == "computer"
 
 
 # --- фейки ---
