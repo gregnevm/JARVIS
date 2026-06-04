@@ -232,6 +232,29 @@ services:
       retries: 5
       start_period: 5s
 
+  # ---------------------------------------------------------
+  # Cloudflared — публічний HTTPS для Telegram Mini App (Telegram вимагає https;
+  # локальний http бачить лише браузер на цій машині). Opt-in профіль:
+  #     docker compose --profile tunnel up -d
+  # Named tunnel = стабільний домен (URL не «стрибає» між рестартами):
+  #   1) Cloudflare Zero Trust → Networks → Tunnels → Create tunnel → скопіюй токен;
+  #   2) у тунелі Public Hostname: <домен> → Service http://gateway:8000;
+  #   3) у .env: CLOUDFLARE_TUNNEL_TOKEN=... та PUBLIC_APP_URL=https://<домен>/app;
+  #   4) docker compose --profile tunnel up -d  (gateway сам поставить кнопку-меню).
+  # Без домену — разовий quick tunnel (нестабільний URL):
+  #   docker run --rm --network jarvis_jarvis-net cloudflare/cloudflared:latest \
+  #     tunnel --no-autoupdate --url http://gateway:8000
+  # ---------------------------------------------------------
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - gateway
+    networks: [jarvis-net]
+    restart: unless-stopped
+    logging: *default-logging
+
   # =========================================================
   # --- OPTIONAL: Ollama у контейнері з GPU ---
   # За замовчуванням Ollama працює на ХОСТІ (host.docker.internal),

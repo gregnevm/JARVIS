@@ -100,6 +100,26 @@ class TelegramClient:
                         plain["reply_markup"] = reply_markup
                     await self._call("sendMessage", plain)
 
+    async def set_chat_menu_button(self, url: str, text: str = "Dashboard") -> None:
+        """Реєструє кнопку-меню (зліва від поля вводу) як вхід у Mini App.
+
+        Без chat_id ставить дефолт для всіх чатів бота. url має бути https.
+        """
+        try:
+            await self._call(
+                "setChatMenuButton",
+                {"menu_button": {"type": "web_app", "text": text, "web_app": {"url": url}}},
+            )
+        except httpx.HTTPError as exc:
+            logger.error("setChatMenuButton failed: %s", exc)
+
+    async def send_chat_action(self, chat_id: int, action: str = "typing") -> None:
+        """Показує індикатор (typing…/record_voice). Помилки лише логуються."""
+        try:
+            await self._call("sendChatAction", {"chat_id": chat_id, "action": action})
+        except httpx.HTTPError as exc:
+            logger.debug("sendChatAction failed: %s", exc)
+
     async def answer_callback_query(
         self, callback_query_id: str, text: str | None = None
     ) -> None:

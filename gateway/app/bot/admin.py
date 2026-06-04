@@ -10,6 +10,7 @@ import redis.asyncio as aioredis
 from ..auth import is_admin
 from ..services import ServicesClient
 from ..telegram import TelegramClient
+from .dashboard import esc
 from .keyboards import admin_confirm_keyboard, admin_menu_keyboard
 
 logger = logging.getLogger("jarvis.gateway.admin")
@@ -52,13 +53,13 @@ async def clear_pending(redis: aioredis.Redis, user_id: int) -> None:
 
 def _describe_action(action: str) -> str:
     if action == "mode:reset":
-        return "скинути режим агента до значення з `.env`"
+        return "скинути режим агента до значення з <code>.env</code>"
     if action.startswith("mode:"):
-        return f"встановити режим `{action.split(':', 1)[1]}`"
+        return f"встановити режим <code>{esc(action.split(':', 1)[1])}</code>"
     if action.startswith("rl:"):
         uid = action.split(":", 1)[1]
-        return f"скинути rate-limit для user `{uid}`"
-    return action
+        return f"скинути rate-limit для user <code>{esc(uid)}</code>"
+    return esc(action)
 
 
 async def execute_action(
@@ -69,22 +70,22 @@ async def execute_action(
     if action == "mode:reset":
         res = await svc.reset_mode()
         if res.get("error"):
-            return f"⚠️ Помилка: {res['error']}"
-        return f"✅ Режим скинуто → `{res.get('mode', '?')}` (з .env)"
+            return f"🔴 Помилка: {esc(res['error'])}"
+        return f"✅ Режим скинуто → <code>{esc(res.get('mode', '?'))}</code> (з .env)"
     if action.startswith("mode:"):
         mode = action.split(":", 1)[1]
         res = await svc.set_mode(mode)
         if res.get("error"):
-            return f"⚠️ Помилка: {res['error']}"
-        return f"✅ Режим: `{res.get('mode', mode)}`"
+            return f"🔴 Помилка: {esc(res['error'])}"
+        return f"✅ Режим: <code>{esc(res.get('mode', mode))}</code>"
     if action.startswith("rl:"):
         import time
 
         uid = action.split(":", 1)[1]
         window = int(time.time() // 60)
         await redis.delete(f"rl:{uid}:{window}", f"rl:{uid}:{window - 1}")
-        return f"✅ Rate-limit скинуто для `{uid}`"
-    return "⚠️ Невідома дія"
+        return f"✅ Rate-limit скинуто для <code>{esc(uid)}</code>"
+    return "🔴 Невідома дія"
 
 
 async def request_confirmation(
@@ -98,10 +99,10 @@ async def request_confirmation(
     desc = _describe_action(action)
     await tg.send_message(
         chat_id,
-        f"⚠️ *Підтверди адмін-дію*\n\n{desc}\n\n"
-        f"Код: `{code}` (діє 5 хв)\n"
-        "Натисни кнопку або надішли `/confirm КОД`",
-        parse_mode="Markdown",
+        f"⚠️ <b>Підтверди адмін-дію</b>\n\n{desc}\n\n"
+        f"Код: <code>{esc(code)}</code> (діє 5 хв)\n"
+        "Натисни кнопку або надішли <code>/confirm КОД</code>",
+        parse_mode="HTML",
         reply_markup=admin_confirm_keyboard(action, code),
     )
 
@@ -130,16 +131,17 @@ async def handle_admin_command(
             return True
         await clear_pending(redis, user_id)
         result = await execute_action(action, svc, redis)
-        await tg.send_message(chat_id, result, parse_mode="Markdown")
+        await tg.send_message(chat_id, result, parse_mode="HTML")
         return True
 
     if parts[0].split("@")[0] == "/admin" and len(parts) == 1:
         await tg.send_message(
             chat_id,
-            "🛠 *Admin panel*\n\n"
+            "🛠 <b>Admin panel</b>\n\n"
             "Обери дію — завжди буде запит підтвердження.\n"
-            "Або: `/admin mode agent`, `/admin reset`, `/admin rl USER_ID`",
-            parse_mode="Markdown",
+            "Або: <code>/admin mode agent</code>, <code>/admin reset</code>, "
+            "<code>/admin rl USER_ID</code>",
+            parse_mode="HTML",
             reply_markup=admin_menu_keyboard(),
         )
         return True
@@ -152,8 +154,8 @@ async def handle_admin_command(
     elif len(parts) >= 2 and parts[1] == "mode" and len(parts) == 2:
         await tg.send_message(
             chat_id,
-            "Вкажи режим: `/admin mode chat|agent|hybrid` або `/admin reset`",
-            parse_mode="Markdown",
+            "Вкажи режим: <code>/admin mode chat|agent|hybrid</code> або <code>/admin reset</code>",
+            parse_mode="HTML",
         )
         return True
     elif len(parts) >= 3 and parts[1] == "rl":
@@ -163,7 +165,8 @@ async def handle_admin_command(
     if action is None:
         await tg.send_message(
             chat_id,
-            "Невідома admin-команда. `/admin` — меню.",
+            "Невідома admin-команда. <code>/admin</code> — меню.",
+            parse_mode="HTML",
         )
         return True
 
@@ -208,7 +211,7 @@ async def handle_admin_callback(
             return True
         await clear_pending(redis, user_id)
         result = await execute_action(action, svc, redis)
-        await tg.send_message(chat_id, result, parse_mode="Markdown")
+        await tg.send_message(chat_id, result, parse_mode="HTML")
         return True
 
     # adm:Y:m:agent | adm:Y:r | adm:Y:rl:42 — пряме підтвердження з кнопки меню
@@ -225,5 +228,5 @@ async def handle_admin_callback(
 
     await clear_pending(redis, user_id)
     result = await execute_action(action, svc, redis)
-    await tg.send_message(chat_id, result, parse_mode="Markdown")
+    await tg.send_message(chat_id, result, parse_mode="HTML")
     return True

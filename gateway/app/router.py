@@ -101,6 +101,9 @@ async def handle_update(
         await handle_command(text, int(chat_id), int(user_id), tg, svc, redis)
         return
 
+    # Показуємо "typing…" поки агент думає (інференс на CPU може тривати секунди).
+    await tg.send_chat_action(int(chat_id), "typing")
+
     reply = await tools.process(
         {
             "user_id": user_id,

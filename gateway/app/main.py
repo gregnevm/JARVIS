@@ -14,6 +14,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from . import router
 from .config import settings
 from .services import ServicesClient
+from .webapp import router as webapp_router
 from .tools_client import ToolsClient
 from .ratelimit import RateLimiter
 from .telegram import TelegramClient
@@ -47,6 +48,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     poll_task: asyncio.Task[None] | None = None
     if mode == "polling":
         poll_task = asyncio.create_task(_poll_loop(app))
+
+    # Mini App: якщо є публічний https-URL — реєструємо кнопку-меню (вхід у дашборд).
+    if settings.public_app_url.startswith("https://"):
+        await app.state.tg.set_chat_menu_button(settings.public_app_url, "📊 Dashboard")
+        logger.info("Mini App menu button set → %s", settings.public_app_url)
 
     logger.info(
         "Gateway up. ingest=%s | Whitelist: %s | rate_limit=%s/min | voice_reply=%s",
@@ -101,6 +107,7 @@ async def _poll_loop(app: FastAPI) -> None:
 
 
 app = FastAPI(title="JARVIS Gateway", lifespan=lifespan)
+app.include_router(webapp_router)
 
 
 @app.get("/health")

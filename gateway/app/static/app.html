@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>JARVIS</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --bg2: #121826;
+    --card: rgba(255,255,255,.04);
+    --card-brd: rgba(255,255,255,.08);
+    --txt: #e8ecf4;
+    --muted: #8b95a8;
+    --accent: #5b8cff;
+    --accent2: #7c5bff;
+    --ok: #2dd4a7;
+    --bad: #ff5d6c;
+    --warn: #ffb454;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "SF Pro Display", "Segoe UI", system-ui, Roboto, sans-serif;
+    color: var(--txt);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(124,91,255,.18), transparent 60%),
+      radial-gradient(900px 500px at -10% 0%, rgba(91,140,255,.18), transparent 55%),
+      var(--bg);
+    min-height: 100vh;
+    padding: calc(env(safe-area-inset-top) + 18px) 16px calc(env(safe-area-inset-bottom) + 28px);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .logo {
+    width: 44px; height: 44px; border-radius: 13px; flex: 0 0 auto;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center; font-size: 22px;
+    box-shadow: 0 8px 26px rgba(91,140,255,.35);
+  }
+  .title { font-size: 21px; font-weight: 700; letter-spacing: .2px; }
+  .subtitle { font-size: 12.5px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 0 rgba(45,212,167,.6); }
+  .pulse.on { background: var(--ok); animation: pulse 2s infinite; }
+  .pulse.off { background: var(--bad); }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(45,212,167,.5);} 70%{box-shadow:0 0 0 9px rgba(45,212,167,0);} 100%{box-shadow:0 0 0 0 rgba(45,212,167,0);} }
+
+  .refresh { margin-left: auto; border: 1px solid var(--card-brd); background: var(--card);
+    color: var(--txt); width: 40px; height: 40px; border-radius: 12px; font-size: 17px; cursor: pointer; }
+  .refresh:active { transform: scale(.92); }
+  .refresh.spin { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .section-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.4px;
+    color: var(--muted); margin: 22px 4px 10px; font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card {
+    background: var(--card); border: 1px solid var(--card-brd); border-radius: var(--radius);
+    padding: 16px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    transition: transform .15s ease, border-color .15s ease;
+  }
+  .card.span2 { grid-column: 1 / -1; }
+  .card .k { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .card .v { font-size: 18px; font-weight: 650; margin-top: 7px; word-break: break-word; }
+  .card .v.mono { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; font-size: 14px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 10px var(--bad); }
+  .dot.mut { background: var(--muted); }
+  .badge { display:inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+  .badge.ok { background: rgba(45,212,167,.14); color: var(--ok); }
+  .badge.off { background: rgba(139,149,168,.15); color: var(--muted); }
+
+  /* segmented mode control */
+  .seg { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; background: rgba(0,0,0,.25);
+    padding: 6px; border-radius: 14px; margin-top: 12px; }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 11px 0; border-radius: 10px;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all .18s ease; }
+  .seg button.active { background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff; box-shadow: 0 6px 18px rgba(91,140,255,.4); }
+  .seg button:active { transform: scale(.96); }
+  .seg button:disabled { opacity: .55; }
+
+  .twin-row { display:flex; justify-content: space-between; align-items:center; padding: 10px 0;
+    border-bottom: 1px solid var(--card-brd); }
+  .twin-row:last-child { border-bottom: 0; }
+  .twin-row .lbl { color: var(--muted); font-size: 13.5px; }
+  .twin-row .val { font-weight: 600; font-size: 14.5px; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+  .err { background: rgba(255,93,108,.12); border: 1px solid rgba(255,93,108,.3); color: #ffd2d6;
+    border-radius: 14px; padding: 12px 14px; font-size: 13.5px; margin-bottom: 14px; display:none; }
+  .skeleton { color: transparent !important; background: linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.1), rgba(255,255,255,.04));
+    background-size: 200% 100%; animation: sk 1.3s infinite; border-radius: 7px; }
+  @keyframes sk { to { background-position: -200% 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🧩</div>
+    <div>
+      <div class="title">JARVIS</div>
+      <div class="subtitle"><span class="pulse" id="pulse"></span><span id="conn">під'єднання…</span></div>
+    </div>
+    <button class="refresh" id="refresh" title="Оновити">⟳</button>
+  </header>
+
+  <div class="err" id="err"></div>
+
+  <div class="section-label">Core</div>
+  <div class="grid">
+    <div class="card span2">
+      <div class="k"><span class="dot mut" id="ollamaDot"></span> Ollama</div>
+      <div class="v mono" id="ollamaHost">—</div>
+    </div>
+    <div class="card">
+      <div class="k">💬 Chat model</div>
+      <div class="v mono" id="chatModel">—</div>
+    </div>
+    <div class="card">
+      <div class="k">🤖 Agent model</div>
+      <div class="v mono" id="agentModel">—</div>
+    </div>
+    <div class="card">
+      <div class="k">⚙️ Code exec</div>
+      <div class="v"><span class="badge off" id="codeExec">—</span></div>
+    </div>
+    <div class="card">
+      <div class="k">🧠 Режим</div>
+      <div class="v" id="modeVal">—</div>
+    </div>
+  </div>
+
+  <div class="section-label">Роутинг моделей</div>
+  <div class="card span2">
+    <div class="seg" id="seg">
+      <button data-mode="chat">💬 Chat</button>
+      <button data-mode="agent">🤖 Agent</button>
+      <button data-mode="hybrid">⚖️ Hybrid</button>
+    </div>
+  </div>
+
+  <div class="section-label">Twin Sync</div>
+  <div class="card span2">
+    <div class="twin-row"><span class="lbl">Edge logs</span><span class="val" id="edges">—</span></div>
+    <div class="twin-row"><span class="lbl">Active LoRA</span><span class="val" id="lora">—</span></div>
+  </div>
+
+  <footer id="footer">—</footer>
+</div>
+
+<script>
+(function () {
+  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  const initData = tg ? tg.initData : "";
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    // Підхопити кольори теми Telegram, якщо вони доступні.
+    const tp = tg.themeParams || {};
+    const root = document.documentElement.style;
+    if (tp.bg_color) root.setProperty("--bg", tp.bg_color);
+    if (tp.text_color) root.setProperty("--txt", tp.text_color);
+    if (tp.hint_color) root.setProperty("--muted", tp.hint_color);
+    if (tp.button_color) root.setProperty("--accent", tp.button_color);
+    try { tg.setHeaderColor && tg.setHeaderColor("#0b0f17"); } catch (e) {}
+  }
+  const haptic = (t) => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(t || "light"); } catch (e) {} };
+
+  const $ = (id) => document.getElementById(id);
+  const headers = () => initData ? { "X-Telegram-Init-Data": initData } : {};
+  let busy = false;
+
+  function skeleton(on) {
+    ["ollamaHost","chatModel","agentModel"].forEach(id => $(id).classList.toggle("skeleton", on));
+  }
+
+  function render(d) {
+    const c = d.core || {};
+    const up = !!c.ollama_up && !c.error;
+    $("pulse").className = "pulse " + (up ? "on" : "off");
+    $("conn").textContent = c.error ? "tools недоступні" : (up ? "онлайн" : "Ollama offline");
+
+    $("ollamaDot").className = "dot " + (up ? "ok" : "bad");
+    $("ollamaHost").textContent = c.ollama_host || "—";
+    $("chatModel").textContent = c.chat_model || "—";
+    $("agentModel").textContent = c.agent_model || "—";
+
+    const ce = !!c.code_exec;
+    const ceEl = $("codeExec");
+    ceEl.textContent = ce ? "увімкнено" : "вимкнено";
+    ceEl.className = "badge " + (ce ? "ok" : "off");
+
+    const mode = c.agent_mode || "?";
+    $("modeVal").textContent = mode;
+    document.querySelectorAll("#seg button").forEach(b =>
+      b.classList.toggle("active", b.dataset.mode === mode));
+
+    const tw = d.twin || {};
+    const edges = tw.edges || {};
+    const total = Object.values(edges).reduce((a, b) => a + b, 0);
+    $("edges").textContent = total + " · " + Object.keys(edges).length + " edge";
+    const lora = tw.active_lora;
+    $("lora").textContent = lora ? ("v" + lora.version + " · eval " + lora.eval_score) : "немає";
+
+    const t = new Date((d.ts || Date.now() / 1000) * 1000);
+    $("footer").textContent = "оновлено " + t.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    $("err").style.display = "none";
+  }
+
+  function fail(msg) {
+    const e = $("err");
+    e.textContent = "⚠️ " + msg;
+    e.style.display = "block";
+    $("pulse").className = "pulse off";
+    $("conn").textContent = "помилка";
+  }
+
+  async function load(manual) {
+    if (busy) return;
+    busy = true;
+    if (manual) $("refresh").classList.add("spin");
+    skeleton(true);
+    try {
+      const r = await fetch("app/data", { headers: headers(), cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      render(await r.json());
+    } catch (e) {
+      fail(e.message || "не вдалося завантажити");
+    } finally {
+      skeleton(false);
+      busy = false;
+      if (manual) setTimeout(() => $("refresh").classList.remove("spin"), 400);
+    }
+  }
+
+  async function setMode(mode) {
+    haptic("medium");
+    document.querySelectorAll("#seg button").forEach(b => b.disabled = true);
+    try {
+      const r = await fetch("app/mode", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, headers()),
+        body: JSON.stringify({ mode: mode, init_data: initData }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      await load(false);
+    } catch (e) {
+      fail("зміна режиму: " + (e.message || ""));
+    } finally {
+      document.querySelectorAll("#seg button").forEach(b => b.disabled = false);
+    }
+  }
+
+  document.querySelectorAll("#seg button").forEach(b =>
+    b.addEventListener("click", () => setMode(b.dataset.mode)));
+  $("refresh").addEventListener("click", () => { haptic("light"); load(true); });
+
+  load(true);
+  setInterval(() => { if (!document.hidden) load(false); }, 6000);
+})();
+</script>
+</body>
+</html>

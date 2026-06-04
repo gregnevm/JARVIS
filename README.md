@@ -53,7 +53,7 @@ RAG-контекст із Memory і тул-луп на AGENT-моделі.
 ### Які моделі завантажити
 
 ```bash
-ollama pull qwen3:4b                 # OLLAMA_MODEL_CHAT — швидкий чат
+ollama pull gemma3:4b                # OLLAMA_MODEL_CHAT — швидкий non-thinking чат
 ollama pull qwen2.5:7b-instruct      # OLLAMA_MODEL_AGENT — надійний tool calling
 ollama pull nomic-embed-text         # EMBED_MODEL — ембединги (768 вимірів)
 ```
@@ -159,6 +159,30 @@ curl -X POST "https://api.telegram.org/bot$TOKEN/setWebhook" \
 > Масштаб «вшир» (багато воркерів) не залежить від polling vs webhook: Telegram
 > віддає апдейти одному споживачу на токен. Масштабована вісь — обробка:
 > *ingestion → черга (Redis) → N воркерів*. Див. `ROADMAP.md`.
+
+---
+
+## Telegram Mini App (веб-дашборд)
+
+Дашборд — це справжній веб-апп (`gateway/app/static/app.html`), а не текст у чаті:
+статус сервісів, моделі, перемикач режиму роутингу наживо, Twin/LoRA. Подається
+gateway-ом на `GET /app`, дані — `GET /app/data`, зміна режиму — `POST /app/mode`.
+Доступ авторизується через Telegram `initData` (HMAC від bot-token + whitelist).
+
+**Локально (одразу):** відкрий у браузері **http://localhost:8000/app**
+(`WEBAPP_DEV_OPEN=true` пускає без Telegram-підпису).
+
+**Усередині Telegram (Mini App).** Telegram відкриває апп лише по **HTTPS**, тож
+потрібен публічний домен. Найпростіше — cloudflared-контейнер (профіль `tunnel`):
+
+1. Cloudflare Zero Trust → **Networks → Tunnels → Create tunnel**, скопіюй токен.
+2. У тунелі **Public Hostname**: `<домен>` → Service `http://gateway:8000`.
+3. У `.env`: `CLOUDFLARE_TUNNEL_TOKEN=...` та `PUBLIC_APP_URL=https://<домен>/app`.
+4. `docker compose --profile tunnel up -d` — gateway сам поставить кнопку-меню
+   «📊 Dashboard» (зліва від поля вводу) і inline-кнопку в `/start`.
+
+Named tunnel дає стабільний URL (на відміну від quick tunnel, який «стрибає»).
+У проді постав `WEBAPP_DEV_OPEN=false` — тоді `/app` пускає лише з Telegram.
 
 ---
 
