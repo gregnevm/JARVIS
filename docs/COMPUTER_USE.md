@@ -1,6 +1,8 @@
 # JARVIS — Computer Use (Agent Mode)
 
-> **Статус:** план (ще не реалізовано).
+> **Статус:** C0+C1+C2 реалізовано (2026-06-04). Підтвердження мутуючих дій у Telegram
+> + аудит `data/logs/computer.jsonl`. Admin PowerShell за замовч. вимкнено —
+> `COMPUTER_ALLOW_ADMIN=false` і `HOSTAGENT_ALLOW_ADMIN=0`.
 > **Мета:** дати агентові JARVIS здатність **реально керувати комп'ютером** —
 > AIO, повністю self-hosted, з вшитим принципом «завжди найшвидшим/найпрямішим шляхом».
 > **Прив'язка до коду:** надбудова над наявним тул-лупом (`tools/app/agent.py`
@@ -143,11 +145,12 @@ Vision у браузері (T4) вмикається лише якщо стор�
 
 ## 6. Фази впровадження (мілстоуни)
 
-- **C0 — каркас host-agent**: FastAPI на хості, `/health`, `/powershell` (non-admin),
-  `/fs/*`, токен. Контейнер `tools` його пінгує.
-- **C1 — toolkit T0/T1**: `run_powershell`, `run_cli`, `fs_*` у `toolkit.py` +
-  `AGENT_MODE=computer` + промпт «драбини». Усе під прапорами.
-- **C2 — підтвердження + аудит**: inline-кнопки в gateway, `computer.jsonl`, whitelists.
+- **C0 — каркас host-agent** ✅: `hostagent/` FastAPI на хості, `/health`, `/powershell` (non-admin),
+  `/fs/*`, `/cli`, токен. Див. `hostagent/README.md`, `hostagent/run.bat`.
+- **C1 — toolkit T0/T1** ✅: `run_powershell`, `run_cli`, `fs_*` у `toolkit.py` +
+  `AGENT_MODE=computer` + промпт «драбини». Усе під прапорами (`ENABLE_COMPUTER_USE`).
+- **C2 — підтвердження + аудит** ✅: inline-кнопки `cmp:Y/N` у gateway, `computer.jsonl`,
+  `COMPUTER_REQUIRE_CONFIRM` (read-only без підтвердження).
 - **C3 — браузер T2**: Playwright, DOM-інструменти.
 - **C4 — T3 UIA**: pywinauto-керування вікнами/контролами за назвою.
 - **C5 — admin-режим**: `COMPUTER_ALLOW_ADMIN`, окремий whitelist, посилене підтвердження.

@@ -19,6 +19,7 @@ def main_menu_keyboard(app_url: str | None = None) -> dict[str, Any]:
                 {"text": "🤖 Agent", "callback_data": "mode:agent"},
                 {"text": "⚖️ Hybrid", "callback_data": "mode:hybrid"},
             ],
+            [{"text": "💻 Computer", "callback_data": "mode:computer"}],
             [
                 {"text": "🔄 Sync / LoRA", "callback_data": "dash:sync"},
                 {"text": "❓ Довідка", "callback_data": "dash:help"},
@@ -49,6 +50,17 @@ def admin_confirm_keyboard(action: str, code: str) -> dict[str, Any]:
             [
                 {"text": "✅ Підтвердити", "callback_data": f"adm:Y:{code}"},
                 {"text": "❌ Скасувати", "callback_data": "adm:N:0"},
+            ]
+        ]
+    }
+
+
+def computer_confirm_keyboard(code: str) -> dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Підтвердити", "callback_data": f"cmp:Y:{code}"},
+                {"text": "❌ Скасувати", "callback_data": "cmp:N:0"},
             ]
         ]
     }

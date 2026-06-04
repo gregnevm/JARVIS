@@ -32,7 +32,14 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("jarvis.gateway")
 
 # Апдейти, які нас цікавлять (інші Telegram навіть не присилає → менше шуму/трафіку).
-ALLOWED_UPDATES = ["message", "edited_message", "callback_query"]
+# message_reaction треба явно запросити (Telegram не шле його за замовчуванням).
+ALLOWED_UPDATES = [
+    "message",
+    "edited_message",
+    "callback_query",
+    "inline_query",
+    "message_reaction",
+]
 
 
 @asynccontextmanager

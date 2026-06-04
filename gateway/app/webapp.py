@@ -23,6 +23,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from . import artifacts as app_artifacts
 from .config import settings
 
 logger = logging.getLogger("jarvis.gateway.webapp")
@@ -117,7 +118,54 @@ async def app_set_mode(
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, Any]:
     authorize(x_telegram_init_data or body.init_data)
-    if body.mode not in {"chat", "agent", "hybrid"}:
+    if body.mode not in {"chat", "agent", "hybrid", "computer"}:
         raise HTTPException(status_code=400, detail="bad mode")
     res: dict[str, Any] = await request.app.state.svc.set_mode(body.mode)
     return res
+
+
+@router.get("/app/artifact")
+async def app_artifact(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Поточний артефакт Канвасу (останній показаний)."""
+    user_id = authorize(x_telegram_init_data)
+    try:
+        rec = await app_artifacts.get_current(request.app.state.redis, user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("artifact get failed: %s", exc)
+        return {"empty": True}
+    if not rec:
+        return {"empty": True}
+    return {"empty": False, "artifact": rec}
+
+
+@router.get("/app/artifacts")
+async def app_artifacts_list(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Історія артефактів (новіші першими) + поточний."""
+    user_id = authorize(x_telegram_init_data)
+    redis = request.app.state.redis
+    try:
+        items = await app_artifacts.list_history(redis, user_id)
+        current = await app_artifacts.get_current(redis, user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("artifacts list failed: %s", exc)
+        return {"items": [], "current": None}
+    return {"items": items, "current": current}
+
+
+@router.delete("/app/artifact")
+async def app_artifact_clear(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, bool]:
+    user_id = authorize(x_telegram_init_data)
+    try:
+        await app_artifacts.clear_user(request.app.state.redis, user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("artifact clear failed: %s", exc)
+    return {"ok": True}

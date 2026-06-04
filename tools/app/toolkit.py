@@ -170,6 +170,110 @@ def _parse_docx(p: Path) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# ocr_image — текст із зображення (tesseract через pytesseract). Lazy + graceful.
+# --------------------------------------------------------------------------- #
+def ocr_image(path: str, lang: str = "ukr+eng") -> str:
+    p = Path(path)
+    if not p.is_file():
+        return f"Файл не знайдено: {path}"
+    try:
+        import pytesseract
+        from PIL import Image
+    except Exception:  # noqa: BLE001
+        return "OCR недоступний (немає pytesseract/Pillow або системного tesseract)."
+    try:
+        with Image.open(str(p)) as img:
+            text = pytesseract.image_to_string(img, lang=lang)
+    except Exception as exc:  # noqa: BLE001
+        # Часта причина — не встановлений мовний пакет; пробуємо англійською.
+        try:
+            with Image.open(str(p)) as img:
+                text = pytesseract.image_to_string(img)
+        except Exception:  # noqa: BLE001
+            return f"Помилка OCR: {exc}"
+    text = (text or "").strip()
+    return text[: settings.fetch_max_chars] or "На зображенні не знайдено тексту."
+
+
+# --------------------------------------------------------------------------- #
+# describe_image — опис зображення vision-моделлю Ollama (llava/qwen-vl тощо).
+# --------------------------------------------------------------------------- #
+async def describe_image(path: str, question: str = "") -> str:
+    if not settings.ollama_model_vision:
+        return "Опис зображень вимкнено (не задано OLLAMA_MODEL_VISION)."
+    p = Path(path)
+    if not p.is_file():
+        return f"Файл не знайдено: {path}"
+    import base64
+
+    try:
+        b64 = base64.b64encode(p.read_bytes()).decode("ascii")
+    except OSError as exc:
+        return f"Не вдалося прочитати зображення: {exc}"
+    prompt = question.strip() or "Опиши детально, що зображено. Якщо є текст — наведи його."
+    payload = {
+        "model": settings.ollama_model_vision,
+        "messages": [{"role": "user", "content": prompt, "images": [b64]}],
+        "stream": False,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=settings.ollama_timeout) as cli:
+            resp = await cli.post(f"{settings.ollama_host.rstrip('/')}/api/chat", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        return f"Vision-модель недоступна: {exc}"
+    msg = data.get("message") or {}
+    text = str(msg.get("content") or "").strip()
+    return text[: settings.fetch_max_chars] or "Vision-модель не дала опису."
+
+
+# --------------------------------------------------------------------------- #
+# generate_image — генерація зображення (A1111/Forge або OpenAI-сумісний бекенд).
+# Зберігає файл у /data/uploads і повертає директиву [[photo:<шлях>]] для агента.
+# --------------------------------------------------------------------------- #
+async def generate_image(prompt: str) -> str:
+    prompt = (prompt or "").strip()
+    if not settings.image_gen_url:
+        return "Генерація зображень вимкнена (не задано IMAGE_GEN_URL)."
+    if not prompt:
+        return "Порожній опис для генерації."
+    import base64
+
+    base = settings.image_gen_url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=settings.image_gen_timeout) as cli:
+            if "/v1" in base:  # OpenAI-сумісний images API
+                body: dict[str, Any] = {"prompt": prompt, "n": 1, "response_format": "b64_json"}
+                if settings.image_gen_model:
+                    body["model"] = settings.image_gen_model
+                resp = await cli.post(f"{base}/images/generations", json=body)
+                resp.raise_for_status()
+                item = (resp.json().get("data") or [{}])[0]
+                raw = item.get("b64_json")
+                img_bytes = base64.b64decode(raw) if raw else None
+            else:  # Automatic1111 / Forge
+                resp = await cli.post(
+                    f"{base}/sdapi/v1/txt2img", json={"prompt": prompt, "steps": 25}
+                )
+                resp.raise_for_status()
+                images = resp.json().get("images") or []
+                img_bytes = base64.b64decode(images[0]) if images else None
+    except (httpx.HTTPError, ValueError) as exc:
+        return f"Не вдалося згенерувати зображення: {exc}"
+    if not img_bytes:
+        return "Бекенд генерації не повернув зображення."
+    out_dir = Path(settings.data_dir) / "uploads"
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out = out_dir / f"gen_{int(time.time())}.png"
+        out.write_bytes(img_bytes)
+    except OSError as exc:
+        return f"Не вдалося зберегти зображення: {exc}"
+    return f"Зображення згенеровано. Поверни його користувачу: [[photo:{out}]]"
+
+
+# --------------------------------------------------------------------------- #
 # code_exec — Python у subprocess (тільки якщо ENABLE_CODE_EXEC=true)
 # --------------------------------------------------------------------------- #
 def code_exec(code: str) -> str:
@@ -257,6 +361,13 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             {"query": {**_STR, "description": "пошуковий запит"}}, ["query"]),
     _schema("web_fetch", "Завантажити сторінку за URL і повернути її текст.",
             {"url": {**_STR, "description": "повний http(s) URL"}}, ["url"]),
+    _schema("parse_file",
+            "Прочитати вміст файлу за шляхом (txt/md/csv/json/log/pdf/docx). "
+            "Використовуй для файлів, які надіслав користувач (шлях у /data/uploads/...).",
+            {"path": {**_STR, "description": "абсолютний шлях до файлу"}}, ["path"]),
+    _schema("ocr_image",
+            "Витягти текст із зображення (OCR). Для скрінів/фото документів.",
+            {"path": {**_STR, "description": "шлях до зображення"}}, ["path"]),
     _schema("take_note", "Зберегти персональну нотатку користувача на майбутнє.",
             {"text": {**_STR, "description": "текст нотатки"}}, ["text"]),
     _schema("recall_notes", "Показати останні збережені нотатки користувача.",
@@ -269,6 +380,26 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             ["text", "delay_minutes"]),
     _schema("list_reminders", "Показати активні (ще не спрацьовані) нагадування користувача.",
             {}, []),
+    _schema(
+        "show_in_app",
+        "Показати багатий контент у Mini App (Канвас) — коли краще побачити, ніж читати "
+        "текстом: графік/діаграма, таблиця, дашборд, мапа, відформатований звіт, зображення "
+        "чи зовнішня сторінка. Для kind='html' можна вставляти <script> і CDN (напр. Chart.js) — "
+        "це окрема пісочниця. Поряд із цим дай користувачу і короткий текстовий підсумок.",
+        {
+            "kind": {
+                "type": "string",
+                "enum": ["html", "markdown", "url", "image", "code"],
+                "description": "тип контенту",
+            },
+            "content": {
+                **_STR,
+                "description": "HTML-розмітка / Markdown / http(s)-URL / посилання на зображення / код",
+            },
+            "title": {**_STR, "description": "короткий заголовок (необов'язково)"},
+        },
+        ["kind", "content"],
+    ),
 ]
 
 _CODE_SCHEMA = _schema(
@@ -276,12 +407,76 @@ _CODE_SCHEMA = _schema(
     {"code": {**_STR, "description": "Python-код"}}, ["code"],
 )
 
+_COMPUTER_SCHEMAS: list[dict[str, Any]] = [
+    _schema(
+        "run_powershell",
+        "T0 PowerShell — найпряміший шлях на Windows. Спершу цей tier для OS-задач.",
+        {
+            "script": {**_STR, "description": "PowerShell-скрипт або команда"},
+            "as_admin": {"type": "boolean", "description": "elevated (лише якщо дозволено)"},
+        },
+        ["script"],
+    ),
+    _schema(
+        "run_cli",
+        "T1 CLI — запуск exe без shell (git, winget, curl тощо).",
+        {
+            "exe": {**_STR, "description": "шлях або ім'я exe"},
+            "args": {"type": "array", "items": {"type": "string"}, "description": "аргументи"},
+            "cwd": {**_STR, "description": "робоча директорія (необов'язково)"},
+        },
+        ["exe"],
+    ),
+    _schema(
+        "fs_list",
+        "T0 файли — список каталогу на хості (read-only).",
+        {"path": {**_STR, "description": "абсолютний шлях до каталогу"}},
+        ["path"],
+    ),
+    _schema(
+        "fs_read",
+        "T0 файли — прочитати файл на хості (read-only).",
+        {"path": {**_STR, "description": "абсолютний шлях до файлу"}},
+        ["path"],
+    ),
+    _schema(
+        "fs_write",
+        "T0 файли — записати текст у файл на хості (мутуюча дія).",
+        {
+            "path": {**_STR, "description": "абсолютний шлях до файлу"},
+            "content": {**_STR, "description": "вміст для запису"},
+        },
+        ["path", "content"],
+    ),
+]
 
-def agent_tool_schemas() -> list[dict[str, Any]]:
-    """Схеми, які віддаємо моделі. code_exec — лише якщо увімкнено."""
+
+_VISION_SCHEMA = _schema(
+    "describe_image",
+    "Описати зображення vision-моделлю (що на фото/скріні). Шлях — у /data/uploads/...",
+    {"path": {**_STR, "description": "шлях до зображення"},
+     "question": {**_STR, "description": "що саме спитати про зображення (необов'язково)"}},
+    ["path"],
+)
+
+_IMAGEGEN_SCHEMA = _schema(
+    "generate_image",
+    "Згенерувати зображення за текстовим описом і повернути його користувачу.",
+    {"prompt": {**_STR, "description": "опис бажаного зображення"}}, ["prompt"],
+)
+
+
+def agent_tool_schemas(*, computer: bool = False) -> list[dict[str, Any]]:
+    """Схеми, які віддаємо моделі. Опційні (vision/imagegen/code/computer) — за умовою."""
     schemas = list(TOOL_SCHEMAS)
+    if settings.ollama_model_vision:
+        schemas.append(_VISION_SCHEMA)
+    if settings.image_gen_url:
+        schemas.append(_IMAGEGEN_SCHEMA)
     if settings.enable_code_exec:
         schemas.append(_CODE_SCHEMA)
+    if settings.enable_computer_use and computer:
+        schemas.extend(_COMPUTER_SCHEMAS)
     return schemas
 
 
@@ -299,6 +494,14 @@ async def dispatch(name: str, arguments: dict[str, Any], user_id: int = 0) -> st
             return await web_fetch(str(arguments.get("url", "")))
         if name == "parse_file":
             return parse_file(str(arguments.get("path", "")))
+        if name == "ocr_image":
+            return await asyncio.to_thread(ocr_image, str(arguments.get("path", "")))
+        if name == "describe_image":
+            return await describe_image(
+                str(arguments.get("path", "")), str(arguments.get("question", ""))
+            )
+        if name == "generate_image":
+            return await generate_image(str(arguments.get("prompt", "")))
         if name == "code_exec":
             return await asyncio.to_thread(code_exec, str(arguments.get("code", "")))
         if name == "take_note":
@@ -322,6 +525,47 @@ async def dispatch(name: str, arguments: dict[str, Any], user_id: int = 0) -> st
             from .reminders import list_reminders
 
             return await list_reminders(user_id)
+        if name == "show_in_app":
+            from .artifacts import show_in_app
+
+            return await show_in_app(
+                user_id,
+                str(arguments.get("kind", "")),
+                str(arguments.get("content", "")),
+                str(arguments.get("title", "")),
+            )
+        if name == "run_powershell":
+            from . import computer
+
+            as_admin = bool(arguments.get("as_admin", False))
+            return await computer.run_powershell(
+                str(arguments.get("script", "")), as_admin, user_id=user_id
+            )
+        if name == "run_cli":
+            from . import computer
+
+            raw_args = arguments.get("args", [])
+            args = [str(a) for a in raw_args] if isinstance(raw_args, list) else []
+            cwd = str(arguments.get("cwd", "")) or None
+            return await computer.run_cli(
+                str(arguments.get("exe", "")), args, cwd, user_id=user_id
+            )
+        if name == "fs_list":
+            from . import computer
+
+            return await computer.fs_list(str(arguments.get("path", "")), user_id=user_id)
+        if name == "fs_read":
+            from . import computer
+
+            return await computer.fs_read(str(arguments.get("path", "")), user_id=user_id)
+        if name == "fs_write":
+            from . import computer
+
+            return await computer.fs_write(
+                str(arguments.get("path", "")),
+                str(arguments.get("content", "")),
+                user_id=user_id,
+            )
     except Exception as exc:  # noqa: BLE001
         logger.exception("tool %s failed", name)
         return f"Інструмент {name} впав: {exc}"

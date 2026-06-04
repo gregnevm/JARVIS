@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -116,7 +117,12 @@ class TelegramClient:
         return int(mid) if isinstance(mid, int) else None
 
     async def edit_message_text(
-        self, chat_id: int, message_id: int, text: str, parse_mode: str | None = None
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        parse_mode: str | None = None,
+        reply_markup: dict[str, Any] | None = None,
     ) -> None:
         """editMessageText. 'message is not modified' та інші помилки лише логуються."""
         payload: dict[str, Any] = {
@@ -126,10 +132,48 @@ class TelegramClient:
         }
         if parse_mode:
             payload["parse_mode"] = parse_mode
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         try:
             await self._call("editMessageText", payload)
         except httpx.HTTPError as exc:
             logger.debug("editMessageText failed: %s", exc)
+
+    async def set_message_reaction(
+        self, chat_id: int, message_id: int, emoji: str, is_big: bool = False
+    ) -> bool:
+        """Ставить емодзі-реакцію на повідомлення (setMessageReaction)."""
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "reaction": [{"type": "emoji", "emoji": emoji}],
+            "is_big": is_big,
+        }
+        try:
+            await self._call("setMessageReaction", payload)
+            return True
+        except httpx.HTTPError as exc:
+            logger.debug("setMessageReaction failed: %s", exc)
+            return False
+
+    async def answer_inline_query(
+        self,
+        inline_query_id: str,
+        results: list[dict[str, Any]],
+        cache_time: int = 0,
+    ) -> None:
+        """Відповідь на inline-запит (@bot ...) списком результатів."""
+        try:
+            await self._call(
+                "answerInlineQuery",
+                {
+                    "inline_query_id": inline_query_id,
+                    "results": results,
+                    "cache_time": cache_time,
+                },
+            )
+        except httpx.HTTPError as exc:
+            logger.error("answerInlineQuery failed: %s", exc)
 
     async def set_chat_menu_button(self, url: str, text: str = "Dashboard") -> None:
         """Реєструє кнопку-меню (зліва від поля вводу) як вхід у Mini App.
@@ -183,3 +227,86 @@ class TelegramClient:
             resp.raise_for_status()
         except httpx.HTTPError as exc:
             logger.error("sendVoice failed: %s", exc)
+
+    # ----------------------------------------------------------------------- #
+    # Вихідні медіа: фото/документ/відео/аудіо/анімація/стікер/локація.
+    # Джерело (src) може бути: http(s) URL, локальний шлях (multipart-аплоуд)
+    # або Telegram file_id. Усе визначаємо автоматично у _send_media().
+    # ----------------------------------------------------------------------- #
+    async def _send_media(
+        self,
+        method: str,
+        field: str,
+        chat_id: int,
+        src: str | bytes,
+        caption: str | None = None,
+        parse_mode: str | None = None,
+    ) -> bool:
+        """Універсальний відправник медіа. True/False — успіх. Помилки логуються."""
+        data: dict[str, str] = {"chat_id": str(chat_id)}
+        if caption:
+            data["caption"] = caption[:1024]
+            if parse_mode:
+                data["parse_mode"] = parse_mode
+        try:
+            if isinstance(src, bytes):
+                files = {field: (f"{field}.bin", src)}
+                resp = await self._client.post(f"{self._api}/{method}", data=data, files=files)
+            elif isinstance(src, str) and src.startswith(("http://", "https://")):
+                resp = await self._client.post(
+                    f"{self._api}/{method}", json={**data, field: src}
+                )
+            elif isinstance(src, str) and os.path.isfile(src):
+                with open(src, "rb") as fh:
+                    files = {field: (os.path.basename(src), fh.read())}
+                resp = await self._client.post(f"{self._api}/{method}", data=data, files=files)
+            else:
+                # Інакше трактуємо як file_id (вже завантажений у Telegram файл).
+                resp = await self._client.post(
+                    f"{self._api}/{method}", json={**data, field: src}
+                )
+            resp.raise_for_status()
+            return True
+        except (httpx.HTTPError, OSError) as exc:
+            logger.error("%s failed: %s", method, exc)
+            return False
+
+    async def send_photo(
+        self, chat_id: int, src: str | bytes, caption: str | None = None
+    ) -> bool:
+        return await self._send_media("sendPhoto", "photo", chat_id, src, caption)
+
+    async def send_document(
+        self, chat_id: int, src: str | bytes, caption: str | None = None
+    ) -> bool:
+        return await self._send_media("sendDocument", "document", chat_id, src, caption)
+
+    async def send_video(
+        self, chat_id: int, src: str | bytes, caption: str | None = None
+    ) -> bool:
+        return await self._send_media("sendVideo", "video", chat_id, src, caption)
+
+    async def send_audio(
+        self, chat_id: int, src: str | bytes, caption: str | None = None
+    ) -> bool:
+        return await self._send_media("sendAudio", "audio", chat_id, src, caption)
+
+    async def send_animation(
+        self, chat_id: int, src: str | bytes, caption: str | None = None
+    ) -> bool:
+        return await self._send_media("sendAnimation", "animation", chat_id, src, caption)
+
+    async def send_sticker(self, chat_id: int, src: str) -> bool:
+        return await self._send_media("sendSticker", "sticker", chat_id, src)
+
+    async def send_location(self, chat_id: int, latitude: float, longitude: float) -> bool:
+        """Надсилає геолокацію. Помилки логуються, не кидаються."""
+        try:
+            resp = await self._call(
+                "sendLocation",
+                {"chat_id": chat_id, "latitude": latitude, "longitude": longitude},
+            )
+            return bool(resp.get("ok", True))
+        except httpx.HTTPError as exc:
+            logger.error("sendLocation failed: %s", exc)
+            return False

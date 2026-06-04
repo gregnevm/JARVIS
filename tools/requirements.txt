@@ -7,3 +7,6 @@ simpleeval>=0.9.13
 beautifulsoup4>=4.12
 pypdf>=4.2
 python-docx>=1.1
+# OCR (опційно): pytesseract потребує системного бінарника tesseract-ocr.
+Pillow>=10.0
+pytesseract>=0.3.10

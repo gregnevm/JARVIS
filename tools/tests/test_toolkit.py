@@ -86,8 +86,8 @@ def test_schemas_default_excludes_code_exec(monkeypatch):
     monkeypatch.setattr(settings, "enable_code_exec", False)
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
     assert names == [
-        "calc", "web_search", "web_fetch", "take_note", "recall_notes",
-        "set_reminder", "list_reminders",
+        "calc", "web_search", "web_fetch", "parse_file", "ocr_image", "take_note",
+        "recall_notes", "set_reminder", "list_reminders", "show_in_app",
     ]
     assert "code_exec" not in names
 
@@ -113,6 +113,28 @@ def test_parse_file_unsupported(tmp_path: Path):
     f = tmp_path / "pic.xyz"
     f.write_text("x", encoding="utf-8")
     assert toolkit.parse_file(str(f)).startswith("Непідтримуваний формат")
+
+
+# --- зображення (vision / OCR / генерація) ---
+async def test_describe_image_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "ollama_model_vision", "")
+    assert (await toolkit.describe_image("/x.jpg")).startswith("Опис зображень вимкнено")
+
+
+async def test_generate_image_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "image_gen_url", "")
+    assert (await toolkit.generate_image("кіт")).startswith("Генерація зображень вимкнена")
+
+
+def test_ocr_image_missing_file():
+    assert toolkit.ocr_image("/no/such/img.png").startswith("Файл не знайдено")
+
+
+def test_vision_imagegen_schemas_gated(monkeypatch):
+    monkeypatch.setattr(settings, "ollama_model_vision", "llava:7b")
+    monkeypatch.setattr(settings, "image_gen_url", "http://localhost:7860")
+    names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
+    assert "describe_image" in names and "generate_image" in names
 
 
 # --- dispatch ---

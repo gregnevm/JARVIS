@@ -97,7 +97,7 @@ async def handle_command(
         await tg.send_message(
             chat_id,
             f"🧠 Поточний режим: <code>{esc(cur)}</code>\n"
-            "Обери кнопкою або: <code>/mode chat|agent|hybrid</code>",
+            "Обери кнопкою або: <code>/mode chat|agent|hybrid|computer</code>",
             parse_mode="HTML",
             reply_markup=mode_keyboard(),
         )
@@ -111,6 +111,7 @@ async def handle_callback(
     tg: TelegramClient,
     svc: ServicesClient,
     redis: Any = None,
+    tools: Any = None,
 ) -> None:
     cq_id = callback.get("id")
     data = str(callback.get("data") or "")
@@ -127,6 +128,12 @@ async def handle_callback(
         from .admin import handle_admin_callback
 
         if await handle_admin_callback(data, int(chat_id), int(user_id), tg, svc, redis):
+            return
+
+    if data.startswith("cmp:") and tools is not None and user_id is not None:
+        from .computer import handle_computer_callback
+
+        if await handle_computer_callback(data, int(chat_id), int(user_id), tg, tools):
             return
 
     if data.startswith("mode:"):

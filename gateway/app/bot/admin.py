@@ -149,12 +149,12 @@ async def handle_admin_command(
     action = None
     if len(parts) >= 2 and parts[1] == "reset":
         action = "mode:reset"
-    elif len(parts) >= 3 and parts[1] == "mode" and parts[2] in ("chat", "agent", "hybrid"):
+    elif len(parts) >= 3 and parts[1] == "mode" and parts[2] in ("chat", "agent", "hybrid", "computer"):
         action = f"mode:{parts[2]}"
     elif len(parts) >= 2 and parts[1] == "mode" and len(parts) == 2:
         await tg.send_message(
             chat_id,
-            "Вкажи режим: <code>/admin mode chat|agent|hybrid</code> або <code>/admin reset</code>",
+            "Вкажи режим: <code>/admin mode chat|agent|hybrid|computer</code> або <code>/admin reset</code>",
             parse_mode="HTML",
         )
         return True

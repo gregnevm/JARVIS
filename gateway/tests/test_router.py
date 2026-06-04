@@ -20,17 +20,20 @@ class FakeTG:
         self.sent: list[tuple[int, str]] = []
         self.edits: list[tuple[int, str]] = []
         self.voices: list[tuple[int, bytes]] = []
+        self.media: list[tuple[str, int, object]] = []
         self._file_path = file_path
         self._content = content
 
-    async def send_message(self, chat_id, text, parse_mode=None):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
         self.sent.append((chat_id, text))
 
     async def send_message_id(self, chat_id, text, parse_mode=None):
         self.sent.append((chat_id, text))
         return 99
 
-    async def edit_message_text(self, chat_id, message_id, text, parse_mode=None):
+    async def edit_message_text(
+        self, chat_id, message_id, text, parse_mode=None, reply_markup=None
+    ):
         self.edits.append((chat_id, text))
 
     async def send_chat_action(self, chat_id, action="typing"):
@@ -38,6 +41,34 @@ class FakeTG:
 
     async def send_voice(self, chat_id, audio, caption=None):
         self.voices.append((chat_id, audio))
+
+    async def send_photo(self, chat_id, src, caption=None):
+        self.media.append(("photo", chat_id, src))
+        return True
+
+    async def send_document(self, chat_id, src, caption=None):
+        self.media.append(("document", chat_id, src))
+        return True
+
+    async def send_video(self, chat_id, src, caption=None):
+        self.media.append(("video", chat_id, src))
+        return True
+
+    async def send_audio(self, chat_id, src, caption=None):
+        self.media.append(("audio", chat_id, src))
+        return True
+
+    async def send_animation(self, chat_id, src, caption=None):
+        self.media.append(("animation", chat_id, src))
+        return True
+
+    async def send_sticker(self, chat_id, src):
+        self.media.append(("sticker", chat_id, src))
+        return True
+
+    async def send_location(self, chat_id, latitude, longitude):
+        self.media.append(("location", chat_id, (latitude, longitude)))
+        return True
 
     async def get_file_path(self, file_id):
         return self._file_path
@@ -230,3 +261,52 @@ async def test_voice_reply_skipped_when_tts_none(monkeypatch):
     tools = FakeTools("ВІДПОВІДЬ")
     await _route(tg, tools, FakeSTT("розпізнано"), FakeLimiter(True), _msg(voice={"file_id": "abc"}), None)
     assert tg.voices == []  # tts=None → лише текст
+
+
+# --- будь-який контент: фото / документ / локація + повернення медіа ---
+async def test_photo_flow(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "allowed_user_ids", "42")
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    tg = FakeTG(file_path="photos/p.jpg", content=b"JPEGDATA")
+    tools = FakeTools("ОК")
+    msg = _msg(
+        photo=[{"file_id": "ph1", "width": 90, "height": 90},
+               {"file_id": "ph2", "width": 800, "height": 600, "file_size": 1234}],
+        caption="що тут?",
+    )
+    await _route(tg, tools, FakeSTT(), FakeLimiter(True), msg)
+    assert tools.calls and tools.calls[0]["type"] == "photo"
+    assert "що тут?" in tools.calls[0]["text"]           # підпис пробросили агенту
+    assert any(str(tmp_path) in t for t in [tools.calls[0]["text"]])  # шлях у промпті
+    assert any("прийняв" in t for _, t in tg.sent)        # ехо отримання
+
+
+async def test_document_flow_inline_text(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "allowed_user_ids", "42")
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    tg = FakeTG(file_path="docs/notes.txt", content="Привіт із файлу".encode("utf-8"))
+    tools = FakeTools("ОК")
+    msg = _msg(document={"file_id": "d1", "file_name": "notes.txt", "mime_type": "text/plain"})
+    await _route(tg, tools, FakeSTT(), FakeLimiter(True), msg)
+    assert tools.calls[0]["type"] == "document"
+    assert "Привіт із файлу" in tools.calls[0]["text"]    # текстовий файл вшито в промпт
+
+
+async def test_location_flow(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_user_ids", "42")
+    tg = FakeTG()
+    tools = FakeTools("ОК")
+    msg = _msg(location={"latitude": 50.45, "longitude": 30.52})
+    await _route(tg, tools, FakeSTT(), FakeLimiter(True), msg)
+    assert tools.calls[0]["type"] == "event"
+    assert "50.45" in tools.calls[0]["text"] and "30.52" in tools.calls[0]["text"]
+
+
+async def test_reply_with_media_directive(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_user_ids", "42")
+    tg = FakeTG()
+    tools = FakeTools("Ось картинка [[photo:http://x/y.jpg|котик]]")
+    await _route(tg, tools, FakeSTT(), FakeLimiter(True), _msg(text="дай фото"))
+    assert any("Ось картинка" in t for _, t in tg.sent)   # чистий текст без директиви
+    assert not any("[[photo" in t for _, t in tg.sent)    # директиву вирізано
+    assert ("photo", 5, "http://x/y.jpg") in tg.media     # фото надіслано

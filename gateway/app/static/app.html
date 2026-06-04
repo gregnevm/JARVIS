@@ -98,6 +98,28 @@
   .skeleton { color: transparent !important; background: linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.1), rgba(255,255,255,.04));
     background-size: 200% 100%; animation: sk 1.3s infinite; border-radius: 7px; }
   @keyframes sk { to { background-position: -200% 0; } }
+
+  /* canvas / artifact zone */
+  .canvas-card { padding: 0; overflow: hidden; }
+  .canvas-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    border-bottom: 1px solid var(--card-brd); background: rgba(0,0,0,.18); }
+  .canvas-kind { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+    color: var(--accent); background: rgba(91,140,255,.14); padding: 3px 8px; border-radius: 7px; }
+  .canvas-title { font-size: 13px; color: var(--txt); font-weight: 600; flex: 1 1 auto;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .canvas-btn { border: 1px solid var(--card-brd); background: var(--card); color: var(--txt);
+    width: 30px; height: 30px; border-radius: 9px; font-size: 14px; cursor: pointer; flex: 0 0 auto; }
+  .canvas-btn:active { transform: scale(.9); }
+  .canvas-empty { padding: 26px 18px; color: var(--muted); font-size: 13.5px; line-height: 1.5; text-align: center; }
+  .canvas-frame { width: 100%; height: 360px; border: 0; display: block; background: #fff; }
+  .canvas-card.expanded .canvas-frame { height: 78vh; }
+  .art-history { display: flex; gap: 6px; padding: 8px 12px; overflow-x: auto;
+    border-bottom: 1px solid var(--card-brd); scrollbar-width: thin; }
+  .art-history:empty { display: none; }
+  .art-chip { flex: 0 0 auto; font-size: 11px; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--card-brd); background: var(--card); color: var(--muted); cursor: pointer;
+    max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .art-chip.active { color: var(--txt); border-color: var(--accent); background: rgba(91,140,255,.12); }
 </style>
 </head>
 <body>
@@ -144,6 +166,24 @@
       <button data-mode="agent">🤖 Agent</button>
       <button data-mode="hybrid">⚖️ Hybrid</button>
     </div>
+  </div>
+
+  <div class="section-label">Канвас</div>
+  <div class="card span2 canvas-card" id="canvasCard">
+    <div class="canvas-bar">
+      <span class="canvas-kind" id="artKind">—</span>
+      <span class="canvas-title" id="artTitle"></span>
+      <button class="canvas-btn" id="artOpen" title="Розгорнути" hidden>⤢</button>
+      <button class="canvas-btn" id="artClear" title="Очистити" hidden>✕</button>
+    </div>
+    <div class="art-history" id="artHistory"></div>
+    <div class="canvas-empty" id="artEmpty">
+      Тут JARVIS показує контент — графіки, таблиці, дашборди, мапи, зображення чи сторінки.<br>
+      Попроси його «покажи …» у чаті.
+    </div>
+    <iframe id="artFrame" class="canvas-frame"
+      sandbox="allow-scripts allow-popups allow-forms allow-modals"
+      referrerpolicy="no-referrer" hidden></iframe>
   </div>
 
   <div class="section-label">Twin Sync</div>
@@ -260,10 +300,139 @@
 
   document.querySelectorAll("#seg button").forEach(b =>
     b.addEventListener("click", () => setMode(b.dataset.mode)));
-  $("refresh").addEventListener("click", () => { haptic("light"); load(true); });
+  $("refresh").addEventListener("click", () => { haptic("light"); load(true); loadArtifact(); });
+
+  // ---- Канвас (artifact zone): агент пушить контент через show_in_app ----
+  const THEME = "body{margin:0;padding:14px;background:#0b0f17;color:#e8ecf4;" +
+    "font:15px/1.55 -apple-system,'Segoe UI',system-ui,Roboto,sans-serif;-webkit-text-size-adjust:100%}" +
+    "img{max-width:100%;height:auto;border-radius:10px}" +
+    "pre{background:#121826;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;overflow:auto}" +
+    "code{font-family:ui-monospace,Menlo,monospace;font-size:13px}" +
+    "a{color:#5b8cff}table{border-collapse:collapse;width:100%;font-size:14px}" +
+    "th,td{border:1px solid rgba(255,255,255,.12);padding:6px 9px;text-align:left}" +
+    "th{background:rgba(255,255,255,.05)}h1,h2,h3{line-height:1.25}";
+
+  const esc = (s) => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const wrap = (body) => "<!doctype html><html><head><meta charset='utf-8'>" +
+    "<meta name='viewport' content='width=device-width,initial-scale=1'><style>" + THEME +
+    "</style></head><body>" + body + "</body></html>";
+
+  function buildDoc(kind, content) {
+    if (kind === "html") return content;        // модель сама контролює документ (Chart.js тощо)
+    if (kind === "image") return wrap("<img src='" + esc(content).replace(/'/g, "&#39;") + "' alt=''>");
+    if (kind === "code") return wrap("<pre><code>" + esc(content) + "</code></pre>");
+    if (kind === "markdown") {
+      return "<!doctype html><html><head><meta charset='utf-8'>" +
+        "<meta name='viewport' content='width=device-width,initial-scale=1'><style>" + THEME + "</style>" +
+        "<script src='https://cdn.jsdelivr.net/npm/marked/marked.min.js'><\/script></head><body>" +
+        "<div id='md'></div><script>var s=" + JSON.stringify(content) +
+        ";try{document.getElementById('md').innerHTML=marked.parse(s);}catch(e){" +
+        "var p=document.createElement('pre');p.textContent=s;document.getElementById('md').appendChild(p);}<\/script>" +
+        "</body></html>";
+    }
+    return wrap("<pre>" + esc(content) + "</pre>");
+  }
+
+  let lastArtId = null;
+  let artItems = [];
+
+  function showArtControls(on) {
+    $("artOpen").hidden = !on;
+    $("artClear").hidden = !on;
+  }
+
+  function renderArtifact(a) {
+    const f = $("artFrame");
+    $("artKind").textContent = a.kind;
+    $("artTitle").textContent = a.title || "";
+    $("artEmpty").style.display = "none";
+    f.hidden = false;
+    f.removeAttribute("src");
+    if (a.kind === "url") {
+      f.removeAttribute("srcdoc");
+      f.src = a.content;
+    } else {
+      f.srcdoc = buildDoc(a.kind, a.content);
+    }
+    showArtControls(true);
+  }
+
+  function chipLabel(a) {
+    const t = a.title || a.kind || "?";
+    const d = new Date((a.ts || 0) * 1000);
+    const hm = d.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+    return t.length > 18 ? t.slice(0, 16) + "…" : t + " · " + hm;
+  }
+
+  function renderHistory(items, current) {
+    artItems = items || [];
+    const hist = $("artHistory");
+    hist.innerHTML = "";
+    if (!artItems.length) { hist.hidden = true; return; }
+    hist.hidden = false;
+    const curId = current && current.id;
+    artItems.forEach(a => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "art-chip" + (a.id === curId ? " active" : "");
+      b.textContent = chipLabel(a);
+      b.addEventListener("click", () => {
+        haptic("light");
+        lastArtId = a.id;
+        renderArtifact(a);
+        hist.querySelectorAll(".art-chip").forEach(c => c.classList.toggle("active", c === b));
+      });
+      hist.appendChild(b);
+    });
+  }
+
+  function clearArtifactUI() {
+    const f = $("artFrame");
+    f.hidden = true;
+    f.removeAttribute("srcdoc");
+    f.removeAttribute("src");
+    $("artKind").textContent = "—";
+    $("artTitle").textContent = "";
+    $("artEmpty").style.display = "block";
+    $("canvasCard").classList.remove("expanded");
+    $("artHistory").innerHTML = "";
+    $("artHistory").hidden = true;
+    showArtControls(false);
+    lastArtId = null;
+    artItems = [];
+  }
+
+  async function loadArtifact() {
+    try {
+      const r = await fetch("app/artifacts", { headers: headers(), cache: "no-store" });
+      if (!r.ok) return;
+      const d = await r.json();
+      const items = d.items || [];
+      const cur = d.current;
+      if (!items.length && !cur) { if (lastArtId) clearArtifactUI(); return; }
+      renderHistory(items, cur);
+      const show = cur || items[0];
+      if (!show) return;
+      if (show.id !== lastArtId) {
+        lastArtId = show.id;
+        renderArtifact(show);
+      }
+    } catch (e) { /* мовчки — канвас необов'язковий */ }
+  }
+
+  $("artClear").addEventListener("click", async () => {
+    haptic("light");
+    clearArtifactUI();
+    try { await fetch("app/artifact", { method: "DELETE", headers: headers() }); } catch (e) {}
+  });
+  $("artOpen").addEventListener("click", () => {
+    haptic("light");
+    $("canvasCard").classList.toggle("expanded");
+  });
 
   load(true);
-  setInterval(() => { if (!document.hidden) load(false); }, 6000);
+  loadArtifact();
+  setInterval(() => { if (!document.hidden) { load(false); loadArtifact(); } }, 6000);
 })();
 </script>
 </body>

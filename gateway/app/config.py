@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     tts_url: str = "http://tts:8300"
     # Голосова відповідь (TTS) на голосові повідомлення. Вимкнено за замовчуванням.
     enable_voice_reply: bool = False
+    # Реагувати на реакції користувача (emoji) до повідомлень бота короткою відповіддю.
+    enable_reaction_replies: bool = True
+    # Скільки секунд збирати альбом (media_group), перш ніж обробити його як один запит.
+    album_collect_seconds: float = 2.0
     # Стрім відповіді в Telegram (editMessageText «друкує» текст наживо). Вимкнеш —
     # бот шле одне фінальне повідомлення (старий шлях). Фолбек на класику авто.
     enable_streaming: bool = True

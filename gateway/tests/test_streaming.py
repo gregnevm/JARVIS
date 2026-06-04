@@ -14,10 +14,12 @@ class FakeTG:
         self.sent.append((chat_id, text))
         return self._mid
 
-    async def edit_message_text(self, chat_id, message_id, text, parse_mode=None):
+    async def edit_message_text(
+        self, chat_id, message_id, text, parse_mode=None, reply_markup=None
+    ):
         self.edits.append((chat_id, message_id, text))
 
-    async def send_message(self, chat_id, text, parse_mode=None):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None):
         self.sent.append((chat_id, text))
 
 

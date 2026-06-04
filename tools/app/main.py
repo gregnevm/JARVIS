@@ -52,6 +52,11 @@ class AgentRequest(BaseModel):
     text: str
 
 
+class ComputerConfirmRequest(BaseModel):
+    user_id: int
+    code: str = ""
+
+
 class ModeRequest(BaseModel):
     mode: str
 
@@ -175,3 +180,21 @@ async def agent_stream_ep(req: AgentRequest) -> StreamingResponse:
             )
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+@app.post("/computer/confirm")
+async def computer_confirm_ep(req: ComputerConfirmRequest) -> dict[str, str]:
+    from .computer_confirm import execute_confirmed
+
+    if not req.code.strip():
+        raise HTTPException(status_code=400, detail="code required")
+    result = await execute_confirmed(req.user_id, req.code.strip())
+    return {"result": result}
+
+
+@app.post("/computer/cancel")
+async def computer_cancel_ep(req: ComputerConfirmRequest) -> dict[str, str]:
+    from .computer_confirm import clear_pending
+
+    await clear_pending(req.user_id)
+    return {"status": "cancelled"}

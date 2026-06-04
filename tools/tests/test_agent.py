@@ -11,8 +11,15 @@ def test_mode_forced_chat():
     assert decide_mode("порахуй 2+2", "chat") == "chat"
 
 
-def test_mode_forced_agent():
-    assert decide_mode("просто привіт", "agent") == "agent"
+def test_mode_forced_computer():
+    assert decide_mode("anything", "computer") == "computer"
+
+
+def test_parse_confirm_marker():
+    from app.agent import _parse_confirm
+
+    got = _parse_confirm("[[COMPUTER_CONFIRM:deadbe]] Write file")
+    assert got == {"code": "deadbe", "desc": "Write file"}
 
 
 def test_hybrid_math_to_agent():
