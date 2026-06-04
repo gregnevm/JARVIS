@@ -263,8 +263,14 @@ whitelist, роутинг text/voice. У CI (`.github/workflows/ci.yml`) усе 
 - `hybrid` — евристика: математика / URL / пошукові ключі → agent, решта → chat.
 
 **Інструменти агента:** `calc` (simpleeval), `web_search` (DuckDuckGo),
-`web_fetch` (текст сторінки), `code_exec` (лише якщо `ENABLE_CODE_EXEC=true`).
+`web_fetch` (текст сторінки), `take_note`/`recall_notes` (персональні нотатки),
+`set_reminder`/`list_reminders` (нагадування), `code_exec` (лише якщо `ENABLE_CODE_EXEC=true`).
 Кожен доступний і окремим ендпойнтом Tools-сервісу (`/calc`, `/search`, `/web_fetch`, …).
+
+**Нагадування:** «нагадай через 2 години / завтра о 9 …» → агент кладе нагадування
+в Redis ZSET (спільний tools↔gateway). Gateway-поллер щохвилини-двадцять дістає
+прострочені й шле «⏰ Нагадування: …». Поточний час інжектиться в agent-промпт,
+тож модель сама рахує `delay_minutes` для конкретного часу.
 
 **Стрім відповіді** (`ENABLE_STREAMING=true`, дефолт): Tools віддає інференс як
 NDJSON-стрім (`/agent/stream`), gateway шле плейсхолдер «✍️ думаю…» і поступово

@@ -10,6 +10,7 @@ import json
 import logging
 import re
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Any
 
 from .config import settings
@@ -24,9 +25,11 @@ FALLBACK = "Не зміг сформувати відповідь. Спробу�
 SYSTEM_CHAT = "Ти JARVIS — лаконічний помічник. Відповідай українською, стисло і по суті."
 SYSTEM_AGENT = (
     "Ти JARVIS — помічник з інструментами. Користуйся ними, коли треба порахувати, "
-    "знайти свіжу інформацію або відкрити сторінку. Не вигадуй фактів — перевіряй "
-    "інструментами. Аргументи інструментів передавай мовою оригіналу (українською) — "
-    "НЕ транслітеруй. Фінальну відповідь дай українською, стисло, звичайним текстом."
+    "знайти свіжу інформацію, відкрити сторінку чи поставити нагадування. Не вигадуй "
+    "фактів — перевіряй інструментами. Для нагадування на конкретний час порахуй "
+    "delay_minutes від «Зараз». Аргументи інструментів передавай мовою оригіналу "
+    "(українською) — НЕ транслітеруй. Фінальну відповідь дай українською, стисло, "
+    "звичайним текстом."
 )
 
 _URL_RE = re.compile(r"https?://", re.IGNORECASE)
@@ -93,6 +96,12 @@ def _assistant_msg(msg: dict[str, Any]) -> dict[str, Any]:
 
 def _sys_with_ctx(base: str, ctx: str) -> str:
     return base + (f" Релевантний контекст з памʼяті: {ctx}" if ctx else "")
+
+
+def _agent_system(ctx: str) -> str:
+    """Системний промпт agent-режиму з поточним часом (для нагадувань) і контекстом."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
+    return _sys_with_ctx(f"{SYSTEM_AGENT} Зараз: {now}.", ctx)
 
 
 class AgentRunner:
@@ -184,7 +193,7 @@ class AgentRunner:
         примусова відповідь без тулів стрімиться токенами.
         """
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _sys_with_ctx(SYSTEM_AGENT, ctx)},
+            {"role": "system", "content": _agent_system(ctx)},
             {"role": "user", "content": text},
         ]
         tools = agent_tool_schemas()
@@ -228,7 +237,7 @@ class AgentRunner:
 
     async def _agent(self, text: str, ctx: str, user_id: int) -> tuple[str, int]:
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _sys_with_ctx(SYSTEM_AGENT, ctx)},
+            {"role": "system", "content": _agent_system(ctx)},
             {"role": "user", "content": text},
         ]
         tools = agent_tool_schemas()
