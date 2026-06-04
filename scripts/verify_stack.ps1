@@ -1,5 +1,8 @@
 # JARVIS stack verification (.env + live services).
 # Run: .\scripts\verify_stack.ps1
+# Prod:  .\scripts\verify_stack.ps1 -StrictProd  (WEBAPP_DEV_OPEN=true => FAIL)
+
+param([switch]$StrictProd)
 
 $ErrorActionPreference = "Continue"
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -109,6 +112,38 @@ else { Ok "telegram token set" }
 
 if ([string]::IsNullOrWhiteSpace((EnvVal "PUBLIC_APP_URL"))) {
     Warn "PUBLIC_APP_URL empty - no Telegram Mini App menu button"
+}
+
+$hw = EnvVal "HEALTH_WATCH_INTERVAL"
+if ($hw -eq "0") { Warn "HEALTH_WATCH_INTERVAL=0 (alerts off)" }
+elseif ([string]::IsNullOrWhiteSpace($hw)) { Ok "health_watch: default 300s" }
+else { Ok "health_watch: ${hw}s" }
+
+if ((EnvVal "ENABLE_COMPUTER_USE") -eq "true") {
+    if ([string]::IsNullOrWhiteSpace((EnvVal "HOSTAGENT_FS_ROOTS"))) {
+        Warn "HOSTAGENT_FS_ROOTS empty - FS paths not restricted on host"
+    } else { Ok "HOSTAGENT_FS_ROOTS set" }
+}
+
+if ((EnvVal "WEBAPP_DEV_OPEN") -eq "true") {
+    if ($StrictProd) { Bad "WEBAPP_DEV_OPEN=true (set false in prod)" }
+    else { Warn "WEBAPP_DEV_OPEN=true - /app open without Telegram (use false in prod)" }
+}
+
+if ((EnvVal "ENABLE_BROWSER") -eq "true") {
+    try {
+        $st2 = Invoke-RestMethod -Uri "http://127.0.0.1:8200/status" -TimeoutSec 8
+        if ($st2.enable_browser) { Ok "browser: ENABLE_BROWSER=true" }
+        else { Bad "ENABLE_BROWSER in .env but tools status false" }
+    } catch { Warn "browser: status check failed" }
+    try {
+        $body = '{"name":"browser_open","arguments":{"url":"https://example.com"},"user_id":1}'
+        $d = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8200/tool/dispatch" `
+            -ContentType "application/json" -Body $body -TimeoutSec 90
+        if ($d.text -match "example|Example|вимкнено|Некоректний|title") {
+            Ok "browser: tool/dispatch browser_open"
+        } else { Warn "browser: unexpected dispatch: $($d.text.Substring(0, [Math]::Min(60, $d.text.Length)))" }
+    } catch { Warn "browser: C3 dispatch smoke failed — rebuild tools?" }
 }
 
 Write-Host "`nSummary: fail=$fail warn=$warn`n" -ForegroundColor Cyan

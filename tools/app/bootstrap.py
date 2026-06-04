@@ -72,6 +72,9 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
                     out["twin"] = r.json()
         except httpx.HTTPError:
             out["twin"] = None
+    from .metrics import summary
+
+    out["metrics"] = await summary()
     return out
 
 

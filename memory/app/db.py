@@ -103,3 +103,25 @@ class DB:
                 limit,
             )
         return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+
+    async def list_sessions(self, user_id: int, limit: int = 10) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT s.id, s.updated_at, "
+                "(SELECT LEFT(m.content, 120) FROM messages m "
+                " WHERE m.session_id = s.id ORDER BY m.created_at DESC LIMIT 1) AS preview "
+                "FROM sessions s WHERE s.user_id=$1 "
+                "ORDER BY s.updated_at DESC LIMIT $2",
+                user_id,
+                limit,
+            )
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            out.append(
+                {
+                    "session_id": int(r["id"]),
+                    "updated_at": r["updated_at"].isoformat() if r["updated_at"] else "",
+                    "preview": (r["preview"] or "").strip(),
+                }
+            )
+        return out

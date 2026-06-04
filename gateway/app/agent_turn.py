@@ -7,6 +7,7 @@ import redis.asyncio as aioredis
 
 from .config import settings
 from .outbound import deliver
+from .runtime_flags import streaming_enabled
 from .streaming import stream_reply
 from .telegram import TelegramClient
 from .tools_client import ToolsClient
@@ -28,7 +29,7 @@ async def run_agent_turn(
         thread_id = int(payload["message_thread_id"])
     uid = user_id if user_id is not None else int(payload.get("user_id") or chat_id)
 
-    if settings.enable_streaming:
+    if await streaming_enabled(redis):
         reply = await stream_reply(
             tg,
             tools,

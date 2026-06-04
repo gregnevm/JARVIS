@@ -87,6 +87,13 @@ async def test_admin_blocked(computer_enabled: None):
     assert "COMPUTER_ALLOW_ADMIN" in out
 
 
+async def test_admin_requires_admin_user_id(computer_enabled: None, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "computer_allow_admin", True)
+    monkeypatch.setattr(settings, "admin_user_ids", "99")
+    out = await computer.run_powershell("Write-Output 1", as_admin=True, user_id=1)
+    assert "ADMIN_USER_IDS" in out
+
+
 async def test_cli_whitelist_blocks(computer_enabled: None):
     out = await computer.run_cli("rm", ["-rf", "/"], user_id=1)
     assert "CLI_WHITELIST" in out

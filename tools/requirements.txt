@@ -10,3 +10,5 @@ python-docx>=1.1
 # OCR (опційно): pytesseract потребує системного бінарника tesseract-ocr.
 Pillow>=10.0
 pytesseract>=0.3.10
+# C3 Browser (опційно): ENABLE_BROWSER=true + chromium у Docker image
+playwright>=1.44

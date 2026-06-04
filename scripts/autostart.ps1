@@ -1,10 +1,13 @@
 # JARVIS autostart — idempotent bring-up (safe to re-run).
+#   -SkipVerify  skip verify_stack.ps1 at the end (faster logon)
 #   1) Ollama serve (0.0.0.0:11434, keep_alive 24h, Vulkan)
 #   2) Docker Desktop engine + wait until ready
 #   3) docker compose up -d
 #   4) host-agent on Windows (127.0.0.1:8400)
 #   5) Ollama API health check
 # Register watchdog: scripts/install_autostart.ps1
+
+param([switch]$SkipVerify)
 
 $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot -Parent
@@ -235,6 +238,20 @@ for ($i = 0; $i -lt 15; $i++) {
         Log "Ollama API: ok"
         break
     } catch { Start-Sleep -Seconds 2 }
+}
+
+if (-not $SkipVerify) {
+    $verify = Join-Path $root 'scripts\verify_stack.ps1'
+    if (Test-Path $verify) {
+        Log 'verify_stack: starting...'
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $verify 2>&1 | ForEach-Object { Log "verify: $_" }
+        if ($LASTEXITCODE -eq 0) { Log 'verify_stack: ok' }
+        else { Log "verify_stack: FAIL (exit $LASTEXITCODE)" }
+    } else {
+        Log 'verify_stack: script missing'
+    }
+} else {
+    Log 'verify_stack: skipped (-SkipVerify)'
 }
 
 Log "=== autostart done ==="

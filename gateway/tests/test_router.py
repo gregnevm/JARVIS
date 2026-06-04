@@ -255,6 +255,11 @@ async def test_voice_unrecognized(monkeypatch):
 
 async def test_voice_reply_when_enabled(monkeypatch):
     monkeypatch.setattr(settings, "allowed_user_ids", "42")
+
+    async def _voice_on(_redis):
+        return True
+
+    monkeypatch.setattr("app.runtime_flags.voice_reply_enabled", _voice_on)
     tg = FakeTG(file_path="voice/f.ogg", content=b"audio")
     tools = FakeTools("ВІДПОВІДЬ")
     await _route(

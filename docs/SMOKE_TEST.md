@@ -27,5 +27,14 @@ gateway `ingest=polling`, tools → hostagent з Docker.
 | 18 | Computer confirm | Mutating + ✅ | Результат + follow-up від агента |
 | 19 | Deep link | `/start mode_agent` | Режим змінено |
 | 20 | cancel reminder | «скасуй нагадування …» після /reminders | Скасовано |
+| 21 | `/macro list` | Список макросів (deploy, stack-status, …) | HTML-список |
+| 22 | `/macro run stack-status` | Read-only CLI macro | Вивід `docker compose ps` |
+| 23 | Health watch | Зупинити Ollama ~5 хв → старт | 🔴 alert → ✅ online (якщо `HEALTH_WATCH_INTERVAL>0`) |
+| 24 | Browser C3 | `ENABLE_BROWSER=true`, `/mode computer`, «відкрий https://example.com» | Текст сторінки; click/fill → ✅/❌ |
+| 25 | `/reminders ics` | Після `set_reminder` | Файл `.ics` у Telegram |
+| 26 | UIA C4 | `/mode computer`, «список вікон» | `window_list` / focus |
+
+**Автоматична перевірка хоста:** `.\scripts\verify_stack.ps1` (compose, HTTP, Ollama, host-agent).
 
 Якщо щось падає: `docker compose logs -f gateway tools` та `data/autostart.log` (autostart).
+Після ребуту: autostart → verify → пункти 1–5 у Telegram.

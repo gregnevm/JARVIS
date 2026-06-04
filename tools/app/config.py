@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     # Vision-модель для розпізнавання зображень (напр. "llava:7b", "qwen2.5vl:7b").
     # Порожньо = describe_image вимкнено.
     ollama_model_vision: str = ""
+    # C6.1: перед describe_image/see_screen вивантажити chat+agent з VRAM; vision keep_alive=0.
+    ollama_vision_on_demand: bool = False
 
     # Генерація зображень (опційно):
     #   pollinations — IMAGE_GEN_URL=pollinations (хмара, без ключа; Windows OK)
@@ -57,6 +59,8 @@ class Settings(BaseSettings):
     computer_auto_learn_whitelist: bool = True
     computer_auto_trust_learned: bool = True
     enable_browser: bool = False
+    # Мутуючі computer-дії на user_id за годину; 0 = без ліміту.
+    computer_rate_limit_per_hour: int = 120
     computer_auto_vision: bool = True
     computer_allow_power: bool = False
     hostagent_drop_dir: str = ""
@@ -70,6 +74,8 @@ class Settings(BaseSettings):
     # Circuit breaker Ollama: N підряд помилок → пауза cooldown секунд (fail-fast).
     ollama_fail_threshold: int = 3
     ollama_cooldown: float = 60.0
+    # D.4: retrain коли +N кураційних turns після останнього export (0 = вимкнено).
+    train_retrain_min_curated: int = 200
 
 
 settings = Settings()

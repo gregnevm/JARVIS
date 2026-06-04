@@ -34,6 +34,9 @@ async def _ensure_page():
 async def browser_open(url: str) -> str:
     if not browser_enabled():
         return "Browser вимкнено (ENABLE_BROWSER=false)."
+    url = (url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return "Некоректний URL (потрібен http/https)."
     page = await _ensure_page()
     global _page_url
     await page.goto(url, wait_until="domcontentloaded", timeout=30000)

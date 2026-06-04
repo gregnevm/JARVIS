@@ -37,6 +37,7 @@ def confirm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeRedis:
     fake = FakeRedis()
     monkeypatch.setattr(settings, "enable_computer_use", True)
     monkeypatch.setattr(settings, "computer_require_confirm", True)
+    monkeypatch.setattr(settings, "computer_owner_user_ids", "1,7,42")
     monkeypatch.setattr(settings, "hostagent_token", "tok")
     monkeypatch.setattr(settings, "data_dir", str(tmp_path))
     monkeypatch.setattr("app.computer_confirm._redis", fake)
@@ -66,6 +67,8 @@ async def test_wrap_execute_returns_confirm_marker(confirm_env: FakeRedis):
 
 async def test_wrap_execute_skips_confirm_when_disabled(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "computer_require_confirm", False)
+    monkeypatch.setattr(settings, "enable_computer_use", True)
+    monkeypatch.setattr(settings, "computer_owner_user_ids", "1")
 
     async def exec_fn() -> str:
         return "done"

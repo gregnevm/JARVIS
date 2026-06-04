@@ -69,7 +69,7 @@ def format_help() -> str:
         "<b>/start app</b> · deep link до Mini App\n"
         "<b>/status</b> · стан сервісів\n"
         "<b>/brief</b> · короткий бриф (система + нагадування)\n"
-        "<b>/reminders</b> · активні нагадування\n"
+        "<b>/reminders</b> · активні нагадування · <code>/reminders ics</code>\n"
         "<b>/mode</b> · поточний режим\n"
         "<b>/mode</b> <code>chat|agent|hybrid|computer</code> · змінити роутинг\n"
         "<b>/sync</b> · Twin ingest + LoRA\n"

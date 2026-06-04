@@ -207,6 +207,47 @@ async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = F
         return await _capture_screenshot_impl()
     if tool == "clipboard_write":
         return await _clipboard_write_impl(str(args.get("text", "")))
+    if tool == "clipboard_read":
+        return await _clipboard_read_impl()
+    if tool == "window_list":
+        return await _window_list_impl()
+    if tool == "window_focus":
+        return await _window_focus_impl(str(args.get("title", "")))
+    if tool == "uia_invoke":
+        return await _uia_invoke_impl(
+            str(args.get("window", "")),
+            str(args.get("control_name", "")),
+            str(args.get("action", "click")),
+        )
+    if tool == "browser_open":
+        from . import browser
+
+        return await browser.browser_open(str(args.get("url", "")))
+    if tool == "browser_read":
+        from . import browser
+
+        return await browser.browser_read()
+    if tool == "browser_click":
+        from . import browser
+
+        return await browser.browser_click(str(args.get("selector", "")))
+    if tool == "browser_fill":
+        from . import browser
+
+        return await browser.browser_fill(
+            str(args.get("selector", "")), str(args.get("value", ""))
+        )
+    if tool == "browser_eval":
+        from . import browser
+
+        return await browser.browser_eval(str(args.get("js", "")))
+    if tool == "screen_click":
+        try:
+            x = int(args.get("x", 0))
+            y = int(args.get("y", 0))
+        except (TypeError, ValueError):
+            return "invalid coordinates"
+        return await _screen_click_impl(x, y)
     if tool == "fs_write_bytes":
         raw = args.get("data_b64", "")
         try:
@@ -223,6 +264,12 @@ async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = F
 
 
 async def run_powershell(script: str, as_admin: bool = False, *, user_id: int = 0) -> str:
+    if as_admin:
+        from .computer_access import admin_powershell_denied_message
+
+        denied = admin_powershell_denied_message(user_id)
+        if denied:
+            return denied
     args = {"script": script, "as_admin": as_admin}
     return await wrap_execute(
         user_id,
@@ -347,6 +394,77 @@ async def see_screen(question: str = "", *, user_id: int = 0) -> str:
     q = question.strip() or "Опиши що на екрані, зокрема помилки та важливі елементи UI."
     desc = await describe_image(path, q)
     return f"{shot}\n\n👁 Vision:\n{desc}"
+
+
+async def _window_list_impl() -> str:
+    data = await _request("GET", "/window/list")
+    if "error" in data:
+        return str(data["error"])
+    windows = data.get("windows") or []
+    if not windows:
+        return "Відкритих вікон з заголовком не знайдено."
+    lines = []
+    for w in windows[:40]:
+        if isinstance(w, dict):
+            lines.append(
+                f"- {w.get('ProcessName', '?')}: {w.get('MainWindowTitle', '')[:80]}"
+            )
+    return _truncate("Вікна:\n" + "\n".join(lines))
+
+
+async def _window_focus_impl(title: str) -> str:
+    data = await _request("POST", "/window/focus", params={"title": title})
+    if "error" in data:
+        return str(data["error"])
+    return f"Фокус: {data.get('title', title)} ✅"
+
+
+async def _uia_invoke_impl(window: str, control_name: str, action: str) -> str:
+    data = await _request(
+        "POST",
+        "/uia/invoke",
+        json={"window": window, "control_name": control_name, "action": action},
+    )
+    if "error" in data:
+        return str(data["error"])
+    return f"UIA: {control_name} ({action}) ✅"
+
+
+async def window_list(*, user_id: int = 0) -> str:
+    return await wrap_execute(user_id, "window_list", {}, lambda: _window_list_impl())
+
+
+async def window_focus(title: str, *, user_id: int = 0) -> str:
+    args = {"title": title}
+    return await wrap_execute(
+        user_id, "window_focus", args, lambda: _window_focus_impl(title)
+    )
+
+
+async def _screen_click_impl(x: int, y: int) -> str:
+    data = await _request("POST", "/screen/click", json={"x": x, "y": y})
+    if "error" in data:
+        return str(data["error"])
+    return f"Клік ({x}, {y}) ✅"
+
+
+async def screen_click(x: int, y: int, *, user_id: int = 0) -> str:
+    args = {"x": x, "y": y}
+    return await wrap_execute(
+        user_id, "screen_click", args, lambda: _screen_click_impl(x, y)
+    )
+
+
+async def uia_invoke(
+    window: str, control_name: str, action: str = "click", *, user_id: int = 0
+) -> str:
+    args = {"window": window, "control_name": control_name, "action": action}
+    return await wrap_execute(
+        user_id,
+        "uia_invoke",
+        args,
+        lambda: _uia_invoke_impl(window, control_name, action),
+    )
 
 
 async def power_action(action: str, delay_seconds: int = 60, *, user_id: int = 0) -> str:

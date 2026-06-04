@@ -300,14 +300,16 @@ async def handle_update(
 
         if looks_like_computer_request(agent_text):
             mode = "computer"
-    payload = {
-        "user_id": user_id,
-        "chat_id": chat_id,
-        "text": agent_text,
-        "type": source,
-        "mode": mode,
-        "message_thread_id": thread_id,
-    }
+    from .agent_payload import build_agent_payload
+
+    payload = build_agent_payload(
+        user_id=int(user_id),
+        chat_id=int(chat_id),
+        text=agent_text,
+        source=source,
+        mode=mode,
+        message_thread_id=thread_id,
+    )
     reply = await run_agent_turn(
         tg,
         tools,
@@ -319,7 +321,14 @@ async def handle_update(
         message_thread_id=thread_id,
     )
 
-    if tts is not None and source in AUDIO_SOURCES and reply:
+    from .runtime_flags import voice_reply_enabled
+
+    if (
+        tts is not None
+        and source in AUDIO_SOURCES
+        and reply
+        and await voice_reply_enabled(redis)
+    ):
         audio = await tts.synthesize(reply)
         if audio:
             await tg.send_voice(chat_id, audio)
@@ -505,13 +514,15 @@ async def _handle_album(
     if not items:
         return
     await tg.send_message(chat_id, f"🖼 прийняв альбом: {len(items)} файлів")
-    payload = {
-        "user_id": user_id,
-        "chat_id": chat_id,
-        "text": album_prompt(items, cap),
-        "type": "album",
-        "mode": "auto",
-    }
+    from .agent_payload import build_agent_payload
+
+    payload = build_agent_payload(
+        user_id=int(user_id),
+        chat_id=int(chat_id),
+        text=album_prompt(items, cap),
+        source="album",
+        mode="auto",
+    )
     await run_agent_turn(
         tg, tools, chat_id, payload, message.get("message_id"), redis, user_id
     )

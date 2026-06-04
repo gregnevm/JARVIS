@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -66,6 +66,13 @@ class ModeRequest(BaseModel):
     mode: str
 
 
+class ToolDispatchRequest(BaseModel):
+    name: str
+    arguments: dict[str, Any] = {}
+    user_id: int = 0
+    allow_computer: bool = True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     memory = MemoryClient(settings.memory_url)
@@ -87,6 +94,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="JARVIS Tools", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def _log_request_id(request: Request, call_next):
+    rid = request.headers.get("X-Request-ID", "")
+    if rid:
+        logger.info("request_id=%s %s %s", rid, request.method, request.url.path)
+    return await call_next(request)
 
 
 @app.get("/health")
@@ -122,6 +137,18 @@ async def set_mode_ep(req: ModeRequest) -> dict[str, str]:
 @app.delete("/mode")
 async def reset_mode_ep() -> dict[str, str]:
     return {"mode": clear_agent_mode(), "status": "reset"}
+
+
+@app.post("/tool/dispatch")
+async def tool_dispatch_ep(req: ToolDispatchRequest) -> dict[str, str]:
+    """Прямий виклик toolkit (smoke / CI). Не для публічного інтернету."""
+    text = await toolkit.dispatch(
+        req.name.strip(),
+        req.arguments,
+        req.user_id,
+        allow_computer=req.allow_computer,
+    )
+    return {"text": text}
 
 
 @app.post("/calc")
@@ -353,10 +380,64 @@ async def computer_pending_ep(user_id: int) -> dict[str, Any]:
 
 
 @app.get("/computer/audit")
-async def computer_audit_ep(limit: int = 10) -> dict[str, Any]:
+async def computer_audit_ep(limit: int = 20) -> dict[str, Any]:
     from .computer_audit import tail_actions
 
     return {"entries": tail_actions(limit=limit)}
+
+
+@app.get("/computer/learned")
+async def computer_learned_ep() -> dict[str, Any]:
+    from .computer_learned import learned_summary
+
+    return learned_summary()
+
+
+@app.get("/reminders/ics")
+async def reminders_ics_ep(user_id: int) -> Any:
+    from fastapi.responses import Response
+
+    from .reminders import export_ics
+
+    body = await export_ics(user_id)
+    if not body.strip():
+        raise HTTPException(status_code=404, detail="no reminders")
+    return Response(
+        content=body,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="jarvis-reminders.ics"'},
+    )
+
+
+@app.get("/dataset/stats")
+async def dataset_stats_ep(user_id: int | None = None) -> dict[str, Any]:
+    from .train_scheduler import retrain_status
+
+    return retrain_status(user_id)
+
+
+@app.post("/dataset/export/mark")
+async def dataset_export_mark_ep(user_id: int | None = None) -> dict[str, Any]:
+    from .train_scheduler import mark_exported
+
+    return mark_exported(user_id)
+
+
+@app.post("/dataset/export/sharegpt")
+async def dataset_export_ep(
+    user_id: int | None = None,
+    limit: int = 0,
+) -> dict[str, Any]:
+    from pathlib import Path
+
+    from .dataset_export import write_sharegpt_jsonl
+
+    from .train_scheduler import mark_exported
+
+    dest = Path(settings.data_dir) / "twin" / "export" / "sharegpt.jsonl"
+    info = write_sharegpt_jsonl(dest, user_id=user_id, limit=limit)
+    info["scheduler"] = mark_exported(user_id)
+    return info
 
 
 @app.get("/tasks")

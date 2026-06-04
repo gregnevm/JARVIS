@@ -41,3 +41,27 @@ class MemoryClient:
             resp.raise_for_status()
         except httpx.HTTPError as exc:
             logger.warning("memory store failed: %s", exc)
+
+    async def history(self, user_id: int, limit: int = 12) -> list[dict[str, Any]]:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/history",
+                json={"user_id": user_id, "limit": limit},
+            )
+            resp.raise_for_status()
+            return list(resp.json().get("messages", []))
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("memory history failed: %s", exc)
+            return []
+
+    async def list_sessions(self, user_id: int, limit: int = 10) -> list[dict[str, Any]]:
+        try:
+            resp = await self._client.get(
+                f"{self._base}/sessions",
+                params={"user_id": user_id, "limit": limit},
+            )
+            resp.raise_for_status()
+            return list(resp.json().get("sessions", []))
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("memory sessions failed: %s", exc)
+            return []

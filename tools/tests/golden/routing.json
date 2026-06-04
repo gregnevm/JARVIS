@@ -1,0 +1,10 @@
+[
+  {"id": "chat_hi", "text": "привіт", "agent_mode": "hybrid", "enable_computer": true, "computer_allowed": true, "expected": "chat"},
+  {"id": "agent_math", "text": "скільки буде 2+2", "agent_mode": "hybrid", "enable_computer": false, "computer_allowed": true, "expected": "agent"},
+  {"id": "computer_shot", "text": "зроби скріншот", "agent_mode": "hybrid", "enable_computer": true, "computer_allowed": true, "expected": "computer"},
+  {"id": "computer_browser", "text": "відкрий https://example.com і прочитай", "agent_mode": "hybrid", "enable_computer": true, "computer_allowed": true, "expected": "computer"},
+  {"id": "shot_denied", "text": "зроби скріншот", "agent_mode": "hybrid", "enable_computer": true, "computer_allowed": false, "expected": "chat"},
+  {"id": "forced_chat", "text": "hello", "agent_mode": "chat", "enable_computer": true, "computer_allowed": true, "expected": "chat"},
+  {"id": "forced_agent", "text": "x", "agent_mode": "agent", "enable_computer": false, "computer_allowed": true, "expected": "agent"},
+  {"id": "hint_computer", "text": "", "agent_mode": "hybrid", "mode_hint": "computer", "enable_computer": true, "computer_allowed": true, "expected": "computer"}
+]

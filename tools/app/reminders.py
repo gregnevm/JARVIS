@@ -123,3 +123,60 @@ async def cancel_all_reminders(user_id: int) -> str:
         await _client().zrem(REMINDERS_KEY, member)
         removed += 1
     return f"Скасовано всі нагадування ({removed}) ✅" if removed else "Немає активних нагадувань."
+
+
+def _ics_escape(text: str) -> str:
+    return (
+        (text or "")
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\n", "\\n")
+    )[:800]
+
+
+async def export_ics(user_id: int) -> str:
+    """iCalendar VEVENT для активних нагадувань користувача."""
+    try:
+        raw = await _client().zrange(REMINDERS_KEY, 0, -1, withscores=True)
+    except Exception as exc:  # noqa: BLE001
+        return ""
+    rows = cast("list[tuple[str, float]]", raw)
+    now_ts = int(time.time())
+    events: list[list[str]] = []
+    for member, score in rows:
+        try:
+            rec = json.loads(member)
+        except (ValueError, TypeError):
+            continue
+        if int(rec.get("user_id", 0)) != int(user_id):
+            continue
+        due = int(score)
+        if due < now_ts:
+            continue
+        rid = str(rec.get("id", "r"))
+        text = _ics_escape(str(rec.get("text", "")))
+        dt = datetime.utcfromtimestamp(due).strftime("%Y%m%dT%H%M%SZ")
+        events.append(
+            "\r\n".join(
+                [
+                    "BEGIN:VEVENT",
+                    f"UID:jarvis-{user_id}-{rid}@local",
+                    f"DTSTAMP:{datetime.utcfromtimestamp(now_ts).strftime('%Y%m%dT%H%M%SZ')}",
+                    f"DTSTART:{dt}",
+                    f"SUMMARY:{text}",
+                    "END:VEVENT",
+                ]
+            )
+        )
+    if not events:
+        return ""
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//JARVIS//Reminders//UK",
+        "CALSCALE:GREGORIAN",
+        *events,
+        "END:VCALENDAR",
+    ]
+    return "\r\n".join(lines) + "\r\n"

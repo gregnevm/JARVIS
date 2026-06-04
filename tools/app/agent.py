@@ -10,12 +10,15 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
 from .config import settings
 from .memory_client import MemoryClient
+from .thread_context import build_thread_context
+from .user_profile import profile_prompt_block
 from jarvis_core.llm.chat import ChatBackend
 from .toolkit import agent_tool_schemas, coerce_args, dispatch, image_gen_enabled
 
@@ -95,29 +98,6 @@ def system_computer() -> str:
         + media_hint()
     )
 
-_URL_RE = re.compile(r"https?://", re.IGNORECASE)
-_MATH_RE = re.compile(r"\d\s*[-+*/^]\s*\d")
-_COMPUTER_RE = re.compile(
-    r"(скріншот|screenshot|скрін\s+екран|"
-    r"powershell|pwsh|"
-    r"файл\s+на\s+(диск|хост|комп|windows)|"
-    r"на\s+(хост|ПК|windows|комп.?ютер)|"
-    r"комп.?ютер|"
-    r"winget|choco\b|"
-    r"каталог\s+[A-Za-z]:\\|"
-    r"прочитай\s+файл\s+[A-Za-z]:\\|"
-    r"запиши\s+(у\s+)?файл|"
-    r"запусти\s+(на\s+)?(хост|комп|windows)|"
-    r"docker\s+(ps|compose|logs))",
-    re.IGNORECASE,
-)
-_KW_RE = re.compile(
-    r"(знайд|пошук|загугл|google|search|погод|\bкурс\b|новин|обчисл|пораху|"
-    r"скільки буде|calculate|відкрий\s+http|нотатк|запиши|занотуй|нагадай|"
-    r"згенер|намалю|малюн|картинк|зображен)",
-    re.IGNORECASE,
-)
-
 # Деякі моделі (qwen2.5 в Ollama) інколи емітять tool call як текст
 # <tool_call>{"name":..., "arguments":{...}}</tool_call> замість поля tool_calls.
 # Ловимо такий inline-JSON як фолбек, щоб не зливати «сирий» виклик користувачу.
@@ -147,6 +127,14 @@ _TOOL_STATUS = {
     "fs_read": "📄 читаю файл…",
     "fs_write": "✍️ записую файл…",
     "capture_screenshot": "📸 знімаю екран…",
+    "browser_open": "🌐 браузер…",
+    "browser_read": "🌐 читаю сторінку…",
+    "browser_click": "🌐 клік…",
+    "browser_fill": "🌐 форма…",
+    "browser_eval": "🌐 JS…",
+    "window_list": "🪟 вікна…",
+    "window_focus": "🪟 фокус…",
+    "uia_invoke": "🪟 UIA…",
 }
 
 
@@ -188,24 +176,20 @@ def decide_mode(
     mode_hint: str | None = None,
     user_id: int = 0,
 ) -> str:
+    from jarvis_core.routing import RouteContext, classify_mode
+
     from .computer_access import can_use_computer
 
-    forced = _resolve_mode_hint(mode_hint)
-    if forced:
-        if forced == "computer" and not can_use_computer(user_id):
-            forced = "agent"
-        return forced
-    mode = (agent_mode or "hybrid").lower()
-    if mode in ("chat", "agent", "computer"):
-        if mode == "computer" and not can_use_computer(user_id):
-            return "agent"
-        return mode
-    t = text or ""
-    if settings.enable_computer_use and _COMPUTER_RE.search(t) and can_use_computer(user_id):
-        return "computer"
-    if _URL_RE.search(t) or _MATH_RE.search(t) or _KW_RE.search(t):
-        return "agent"
-    return "chat"
+    return classify_mode(
+        text,
+        RouteContext(
+            agent_mode=agent_mode,
+            mode_hint=_resolve_mode_hint(mode_hint),
+            user_id=user_id,
+            enable_computer=settings.enable_computer_use,
+            computer_allowed=can_use_computer(user_id),
+        ),
+    )
 
 
 def _max_iters(*, computer: bool = False) -> int:
@@ -225,11 +209,11 @@ def _sys_with_ctx(base: str, ctx: str) -> str:
     return base + (f" Релевантний контекст з памʼяті: {ctx}" if ctx else "")
 
 
-def _agent_system(ctx: str, *, computer: bool = False) -> str:
+def _agent_system(ctx: str, *, computer: bool = False, profile: str = "") -> str:
     """Системний промпт agent/computer-режиму з поточним часом і контекстом."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
     base = system_computer() if computer else system_agent()
-    return _sys_with_ctx(f"{base} Зараз: {now}.", ctx)
+    return _sys_with_ctx(f"{base} Зараз: {now}.{profile}", ctx)
 
 
 class AgentRunner:
@@ -237,36 +221,69 @@ class AgentRunner:
         self._llm = llm
         self._mem = memory
 
+    async def _persist_turn(
+        self, user_id: int, text: str, answer: str, mode: str, iters: int
+    ) -> None:
+        await self._mem.store(user_id, text, role="user")
+        if answer:
+            await self._mem.store(user_id, answer, role="assistant")
+        from .session_ingest import append_turn
+
+        append_turn(
+            user_id,
+            user_text=text,
+            assistant_text=answer,
+            mode=mode,
+            iters=iters,
+        )
+
+    async def _memory_context(self, user_id: int, text: str) -> tuple[str, str]:
+        from .metrics import record_rag
+
+        results = await self._mem.search(user_id, text, top_k=5)
+        await record_rag(len(results))
+        rag = " | ".join(str(r.get("content", "")) for r in results)
+        thread = await build_thread_context(self._mem, user_id)
+        prof = profile_prompt_block(user_id)
+        parts = [p for p in (rag, thread) if p]
+        return (" | ".join(parts) if parts else ""), prof
+
     async def run(
         self, user_id: int, text: str, mode: str | None = None, *, mode_hint: str | None = None
     ) -> dict[str, Any]:
         """Повертає {'text': ..., 'mode': 'chat'|'agent'|'computer', 'iters': N}."""
         from .runtime import get_agent_mode
 
-        results = await self._mem.search(user_id, text, top_k=5)
-        ctx = " | ".join(str(r.get("content", "")) for r in results)
+        from .metrics import record_turn
+
+        t0 = time.perf_counter()
+        iters = 0
+        resolved = "chat"
+        ctx, prof = await self._memory_context(user_id, text)
         hint = mode_hint or mode
         resolved = _resolve_mode_hint(hint) or decide_mode(
             text, get_agent_mode(), mode_hint=hint, user_id=user_id
         )
 
-        if resolved == "chat":
-            answer, iters = await self._chat(text, ctx), 0
-        else:
-            from .computer_access import can_use_computer
+        try:
+            if resolved == "chat":
+                answer, iters = await self._chat(text, ctx, prof), 0
+            else:
+                from .computer_access import can_use_computer
 
-            answer, iters = await self._agent(
-                text,
-                ctx,
-                user_id,
-                computer=(resolved == "computer"),
-                allow_computer=can_use_computer(user_id),
-            )
+                answer, iters = await self._agent(
+                    text,
+                    ctx,
+                    user_id,
+                    computer=(resolved == "computer"),
+                    allow_computer=can_use_computer(user_id),
+                    profile=prof,
+                )
 
-        await self._mem.store(user_id, text, role="user")
-        if answer:
-            await self._mem.store(user_id, answer, role="assistant")
-        return {"text": answer or FALLBACK, "mode": resolved, "iters": iters}
+            await self._persist_turn(user_id, text, answer or "", resolved, iters)
+            return {"text": answer or FALLBACK, "mode": resolved, "iters": iters}
+        finally:
+            await record_turn((time.perf_counter() - t0) * 1000, resolved, iters)
 
     async def run_stream(
         self, user_id: int, text: str, mode: str | None = None, *, mode_hint: str | None = None
@@ -281,52 +298,57 @@ class AgentRunner:
         """
         from .runtime import get_agent_mode
 
-        results = await self._mem.search(user_id, text, top_k=5)
-        ctx = " | ".join(str(r.get("content", "")) for r in results)
+        from .metrics import record_turn
+
+        t0 = time.perf_counter()
+        iters = 0
+        resolved = "chat"
+        ctx, prof = await self._memory_context(user_id, text)
         hint = mode_hint or mode
         resolved = _resolve_mode_hint(hint) or decide_mode(
             text, get_agent_mode(), mode_hint=hint, user_id=user_id
         )
 
         parts: list[str] = []
-        iters = 0
-        if resolved == "chat":
-            async for delta in self._chat_stream(text, ctx):
-                parts.append(delta)
-                yield {"delta": delta}
-        else:
-            from .computer_access import can_use_computer
+        try:
+            if resolved == "chat":
+                async for delta in self._chat_stream(text, ctx, prof):
+                    parts.append(delta)
+                    yield {"delta": delta}
+            else:
+                from .computer_access import can_use_computer
 
-            async for ev in self._agent_events(
-                text,
-                ctx,
-                user_id,
-                computer=(resolved == "computer"),
-                allow_computer=can_use_computer(user_id),
-            ):
-                if "iters" in ev:
-                    iters = int(ev["iters"])
-                    continue
-                if "delta" in ev:
-                    parts.append(str(ev["delta"]))
-                yield ev
+                async for ev in self._agent_events(
+                    text,
+                    ctx,
+                    user_id,
+                    computer=(resolved == "computer"),
+                    allow_computer=can_use_computer(user_id),
+                    profile=prof,
+                ):
+                    if "iters" in ev:
+                        iters = int(ev["iters"])
+                        continue
+                    if "delta" in ev:
+                        parts.append(str(ev["delta"]))
+                    yield ev
 
-        answer = "".join(parts).strip()
-        await self._mem.store(user_id, text, role="user")
-        if answer:
-            await self._mem.store(user_id, answer, role="assistant")
-        yield {
-            "done": True,
-            "mode": resolved,
-            "iters": iters,
-            "text": answer or FALLBACK,
-        }
+            answer = "".join(parts).strip()
+            await self._persist_turn(user_id, text, answer or "", resolved, iters)
+            yield {
+                "done": True,
+                "mode": resolved,
+                "iters": iters,
+                "text": answer or FALLBACK,
+            }
+        finally:
+            await record_turn((time.perf_counter() - t0) * 1000, resolved, iters)
 
-    async def _chat_stream(self, text: str, ctx: str) -> AsyncIterator[str]:
+    async def _chat_stream(self, text: str, ctx: str, profile: str = "") -> AsyncIterator[str]:
         async for delta in self._llm.chat_stream(
             settings.ollama_model_chat,
             [
-                {"role": "system", "content": _sys_with_ctx(system_chat(), ctx)},
+                {"role": "system", "content": _sys_with_ctx(system_chat() + profile, ctx)},
                 {"role": "user", "content": text},
             ],
         ):
@@ -340,6 +362,7 @@ class AgentRunner:
         *,
         computer: bool = False,
         allow_computer: bool = True,
+        profile: str = "",
     ) -> AsyncIterator[dict[str, Any]]:
         """Тул-луп зі стрімом: статус на кожен виклик інструмента + фінальний текст.
 
@@ -349,7 +372,7 @@ class AgentRunner:
         примусова відповідь без тулів стрімиться токенами.
         """
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _agent_system(ctx, computer=computer)},
+            {"role": "system", "content": _agent_system(ctx, computer=computer, profile=profile)},
             {"role": "user", "content": text},
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
@@ -392,11 +415,11 @@ class AgentRunner:
             yield {"delta": delta}
         yield {"iters": limit}
 
-    async def _chat(self, text: str, ctx: str) -> str:
+    async def _chat(self, text: str, ctx: str, profile: str = "") -> str:
         msg = await self._llm.chat(
             settings.ollama_model_chat,
             [
-                {"role": "system", "content": _sys_with_ctx(system_chat(), ctx)},
+                {"role": "system", "content": _sys_with_ctx(system_chat() + profile, ctx)},
                 {"role": "user", "content": text},
             ],
         )
@@ -410,9 +433,10 @@ class AgentRunner:
         *,
         computer: bool = False,
         allow_computer: bool = True,
+        profile: str = "",
     ) -> tuple[str, int]:
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _agent_system(ctx, computer=computer)},
+            {"role": "system", "content": _agent_system(ctx, computer=computer, profile=profile)},
             {"role": "user", "content": text},
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)

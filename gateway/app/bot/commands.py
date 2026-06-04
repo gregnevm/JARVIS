@@ -5,7 +5,13 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from ..auth import can_use_computer, computer_mode_denied_message
+from ..auth import (
+    agent_mode_denied_message,
+    can_use_computer,
+    computer_mode_denied_message,
+    get_access_store,
+    is_admin,
+)
 from ..config import settings
 from ..services import ServicesClient
 from ..telegram import TelegramClient
@@ -13,7 +19,6 @@ from ..tools_client import ToolsClient
 from .dashboard import esc, format_dashboard, format_help
 from .access import handle_access_command, is_access_command
 from .admin import handle_admin_command, is_admin_command
-from ..auth import agent_mode_denied_message, get_access_store
 from .keyboards import (
     main_menu_keyboard,
     mode_keyboard,
@@ -37,6 +42,7 @@ COMMANDS = frozenset(
         "/sync",
         "/brief",
         "/reminders",
+        "/dataset",
         "/keyboard",
     }
 )
@@ -88,23 +94,30 @@ async def _send_dashboard(
         body,
         message_id=message_id,
         reply_markup=main_menu_keyboard(
-            settings.public_app_url, show_computer=can_use_computer(user_id)
+            settings.mini_app_https_url, show_computer=can_use_computer(user_id)
         ),
         edit=edit,
     )
 
 
 def _mini_app_url(*, canvas: bool = False) -> str:
-    url = (settings.public_app_url or "").strip()
-    if not url.startswith("https://"):
-        return url
+    url = settings.mini_app_https_url
+    if not url:
+        return ""
     if canvas:
         sep = "&" if "?" in url else "?"
         return f"{url}{sep}canvas=1"
     return url
 
 
-async def _send_mini_app(chat_id: int, tg: TelegramClient, *, canvas: bool = False) -> None:
+async def _send_mini_app(
+    chat_id: int,
+    tg: TelegramClient,
+    svc: ServicesClient,
+    *,
+    user_id: int | None = None,
+    canvas: bool = False,
+) -> None:
     """Відкриває Telegram Mini App — не передаємо /app агенту як шлях FS."""
     url = _mini_app_url(canvas=canvas)
     if url.startswith("https://"):
@@ -118,25 +131,17 @@ async def _send_mini_app(chat_id: int, tg: TelegramClient, *, canvas: bool = Fal
             },
         )
         return
-    dev = "http://localhost:8000/app" if settings.webapp_dev_open else ""
+    await _send_dashboard(chat_id, tg, svc, user_id=user_id, edit=False)
     lines = [
-        "📊 <b>Mini App</b> у Telegram потребує публічний <b>HTTPS</b> URL.",
         "",
-        "Зараз <code>PUBLIC_APP_URL</code> порожній — команда <code>/app</code> "
-        "не відкриває веб-панель у чаті.",
+        "📱 <b>Mini App у Telegram</b> потребує <code>PUBLIC_APP_URL=https://…/app</code> "
+        "(named Cloudflare tunnel — див. README).",
     ]
-    if dev:
-        lines.extend(["", f"На ПК у браузері: <code>{esc(dev)}</code>"])
-    lines.extend(
-        [
-            "",
-            "Налаштування: named Cloudflare tunnel → "
-            "<code>PUBLIC_APP_URL=https://&lt;домен&gt;/app</code> "
-            "(див. README).",
-            "",
-            "Поки що — <b>/dashboard</b> або <b>/status</b> у цьому чаті.",
-        ]
-    )
+    if settings.webapp_dev_open:
+        from ..webapp_urls import local_app_url
+
+        local = local_app_url(settings.gateway_browser_url, canvas=canvas)
+        lines.append(f"🖥 Браузер на цій машині: <code>{esc(local)}</code>")
     await tg.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
 
 
@@ -170,7 +175,7 @@ async def handle_command(
         start_args = raw.split(maxsplit=1)
         payload = (start_args[1] if len(start_args) > 1 else "").strip().lower()
         if payload == "app":
-            await _send_mini_app(chat_id, tg)
+            await _send_mini_app(chat_id, tg, svc, user_id=user_id)
             return True
         if payload.startswith("mode_"):
             mode = payload[5:]
@@ -198,7 +203,7 @@ async def handle_command(
             )
             return True
         if payload == "canvas":
-            await _send_mini_app(chat_id, tg, canvas=True)
+            await _send_mini_app(chat_id, tg, svc, user_id=user_id, canvas=True)
             return True
         await _send_dashboard(chat_id, tg, svc, user_id=user_id, edit=False)
         return True
@@ -208,7 +213,7 @@ async def handle_command(
         return True
 
     if cmd == "/app":
-        await _send_mini_app(chat_id, tg)
+        await _send_mini_app(chat_id, tg, svc, user_id=user_id)
         return True
 
     if cmd == "/help":
@@ -217,7 +222,7 @@ async def handle_command(
             format_help(),
             parse_mode="HTML",
             reply_markup=main_menu_keyboard(
-                settings.public_app_url, show_computer=can_use_computer(user_id)
+                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
             ),
         )
         return True
@@ -236,7 +241,7 @@ async def handle_command(
             format_dashboard({}, twin),
             parse_mode="HTML",
             reply_markup=main_menu_keyboard(
-                settings.public_app_url, show_computer=can_use_computer(user_id)
+                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
             ),
         )
         return True
@@ -248,14 +253,55 @@ async def handle_command(
         await _run_brief(chat_id, user_id, tg, svc, tools, redis)
         return True
 
+    if cmd == "/dataset":
+        if not is_admin(user_id):
+            await tg.send_message(chat_id, "⛔ Лише для адмінів (ADMIN_USER_IDS).")
+            return True
+        if tools is None:
+            await tg.send_message(chat_id, "Tools недоступний.")
+            return True
+        stats = await tools.dataset_stats(int(user_id))
+        info = await tools.export_dataset(int(user_id))
+        if info.get("error"):
+            await tg.send_message(chat_id, f"Експорт не вдався: {info['error']}")
+            return True
+        sched = info.get("scheduler") or stats
+        ready = "✅" if sched.get("retrain_ready") else "—"
+        await tg.send_message(
+            chat_id,
+            "📦 Dataset export\n"
+            f"curated: {stats.get('curated_turns', '?')} · files: {stats.get('files', '?')}\n"
+            f"train: {info.get('train', 0)} · holdout: {info.get('holdout', 0)}\n"
+            f"retrain +{sched.get('curated_since_export', '?')}/{sched.get('retrain_threshold', '?')} {ready}\n"
+            f"<code>{info.get('train_path', '')}</code>",
+            parse_mode="HTML",
+        )
+        return True
+
     if cmd == "/reminders":
         if redis is None:
             await tg.send_message(chat_id, "Redis недоступний.")
             return True
+        sub = (parts[1] if len(parts) >= 2 else "").lower()
+        if sub == "ics":
+            if tools is None:
+                await tg.send_message(chat_id, "Tools недоступний.")
+                return True
+            ics = await tools.reminders_ics(user_id)
+            if not ics:
+                await tg.send_message(
+                    chat_id,
+                    "Немає активних нагадувань для експорту. /reminders ics — після set_reminder.",
+                )
+                return True
+            await tg.send_document(
+                chat_id, ics, filename="jarvis-reminders.ics", caption="📅 Експорт нагадувань"
+            )
+            return True
         body = await list_user_reminders(redis, user_id)
         await tg.send_message(
             chat_id,
-            format_reminders_message(body),
+            format_reminders_message(body) + "\n\n📅 Експорт: <code>/reminders ics</code>",
             parse_mode="HTML",
             reply_markup=reminders_hint_keyboard(),
         )
@@ -421,7 +467,7 @@ async def handle_callback(
             format_dashboard(dash, twin),
             message_id=int(message_id) if message_id is not None else None,
             reply_markup=main_menu_keyboard(
-                settings.public_app_url, show_computer=can_use_computer(user_id)
+                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
             ),
         )
         if cq_id:
@@ -435,7 +481,7 @@ async def handle_callback(
             format_help(),
             message_id=int(message_id) if message_id is not None else None,
             reply_markup=main_menu_keyboard(
-                settings.public_app_url, show_computer=can_use_computer(user_id)
+                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
             ),
         )
         if cq_id:
@@ -474,12 +520,12 @@ async def handle_callback(
         elif data == "dash:sync":
             text = format_dashboard({}, twin) if twin else "🔴 Twin недоступний."
             markup = main_menu_keyboard(
-                settings.public_app_url, show_computer=can_use_computer(user_id)
+                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
             )
         else:
             text = format_dashboard(dash, twin)
             markup = main_menu_keyboard(
-                settings.public_app_url, show_computer=can_use_computer(user_id)
+                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
             )
         await _present(
             tg,

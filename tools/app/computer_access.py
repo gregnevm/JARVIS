@@ -44,6 +44,22 @@ def can_use_computer(user_id: int) -> bool:
     return int(user_id) in owners
 
 
+def admin_user_ids() -> set[int]:
+    return _parse_ids(settings.admin_user_ids)
+
+
+def admin_powershell_denied_message(user_id: int) -> str | None:
+    """Admin PowerShell (UAC) — лише ADMIN_USER_IDS і COMPUTER_ALLOW_ADMIN=true."""
+    if not settings.computer_allow_admin:
+        return "Admin PowerShell вимкнено (COMPUTER_ALLOW_ADMIN=false)."
+    admins = admin_user_ids()
+    if not admins:
+        return "ADMIN_USER_IDS не задано — admin PowerShell заблоковано."
+    if int(user_id) not in admins:
+        return "Admin PowerShell лише для ADMIN_USER_IDS."
+    return None
+
+
 def computer_denied_message(user_id: int) -> str | None:
     if can_use_computer(user_id):
         return None

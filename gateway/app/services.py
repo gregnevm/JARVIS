@@ -55,6 +55,33 @@ class ServicesClient:
         except httpx.HTTPError:
             return {}
 
+    async def twin_lora_versions(self) -> dict[str, Any]:
+        try:
+            r = await self._client.get(f"{self._twin}/registry/versions")
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as exc:
+            logger.error("twin versions failed: %s", exc)
+            return {"versions": [], "error": str(exc)}
+
+    async def twin_promote_lora(self, version: str) -> dict[str, Any]:
+        try:
+            r = await self._client.post(f"{self._twin}/registry/lora/{version}/promote")
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as exc:
+            logger.error("twin promote failed: %s", exc)
+            return {"error": str(exc)}
+
+    async def twin_rollback_lora(self, n: int = 1) -> dict[str, Any]:
+        try:
+            r = await self._client.post(f"{self._twin}/registry/lora/rollback", params={"n": n})
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as exc:
+            logger.error("twin rollback failed: %s", exc)
+            return {"error": str(exc)}
+
     async def reset_mode(self) -> dict[str, Any]:
         try:
             r = await self._client.delete(f"{self._tools}/mode")

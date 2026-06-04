@@ -52,9 +52,16 @@ def _html_to_text(raw: str) -> str:
         from bs4 import BeautifulSoup
 
         soup = BeautifulSoup(raw, "html.parser")
-        for tag in soup(["script", "style", "noscript", "template"]):
+        for tag in soup(["script", "style", "noscript", "template", "nav", "footer", "header"]):
             tag.decompose()
-        text = soup.get_text(separator=" ")
+        main = (
+            soup.find("article")
+            or soup.find("main")
+            or soup.find(attrs={"role": "main"})
+            or soup.find(id="content")
+        )
+        root = main if main is not None else soup.body or soup
+        text = root.get_text(separator=" ")
     except Exception:  # noqa: BLE001 — фолбек без bs4
         text = re.sub(r"<[^>]+>", " ", raw)
         text = html.unescape(text)
@@ -65,12 +72,26 @@ async def web_fetch(url: str) -> str:
     url = (url or "").strip()
     if not url.startswith(("http://", "https://")):
         return "Некоректний URL (потрібен http/https)."
+    timeout = httpx.Timeout(
+        connect=min(8.0, settings.http_timeout),
+        read=settings.http_timeout,
+        write=10.0,
+        pool=5.0,
+    )
+    headers = {
+        "User-Agent": _UA,
+        "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "uk,en;q=0.9",
+    }
     try:
-        async with httpx.AsyncClient(timeout=settings.http_timeout, follow_redirects=True) as cli:
-            resp = await cli.get(url, headers={"User-Agent": _UA})
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, max_redirects=5) as cli:
+            resp = await cli.get(url, headers=headers)
             resp.raise_for_status()
     except httpx.HTTPError as exc:
         return f"Не вдалося завантажити сторінку: {exc}"
+    ctype = (resp.headers.get("content-type") or "").lower()
+    if "text/html" not in ctype and "application/xhtml" not in ctype:
+        return f"Непідтримуваний тип контенту: {ctype or 'unknown'} (очікується HTML)."
     text = _html_to_text(resp.text)
     if len(text) > settings.fetch_max_chars:
         text = text[: settings.fetch_max_chars] + " …[обрізано]"
@@ -210,17 +231,18 @@ async def describe_image(path: str, question: str = "") -> str:
         b64 = base64.b64encode(p.read_bytes()).decode("ascii")
     except OSError as exc:
         return f"Не вдалося прочитати зображення: {exc}"
+    from .ollama_vram import vision_chat_payload, vision_vram_scope
+
     prompt = question.strip() or "Опиши детально, що зображено. Якщо є текст — наведи його."
-    payload = {
-        "model": settings.ollama_model_vision,
-        "messages": [{"role": "user", "content": prompt, "images": [b64]}],
-        "stream": False,
-    }
+    payload = vision_chat_payload(prompt, b64)
     try:
-        async with httpx.AsyncClient(timeout=settings.ollama_timeout) as cli:
-            resp = await cli.post(f"{settings.ollama_host.rstrip('/')}/api/chat", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        async with vision_vram_scope():
+            async with httpx.AsyncClient(timeout=settings.ollama_timeout) as cli:
+                resp = await cli.post(
+                    f"{settings.ollama_host.rstrip('/')}/api/chat", json=payload
+                )
+                resp.raise_for_status()
+                data = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
         return f"Vision-модель недоступна: {exc}"
     msg = data.get("message") or {}
@@ -385,82 +407,92 @@ async def generate_image(prompt: str) -> str:
         )
     if not prompt:
         return "Порожній опис для генерації."
+    from .image_gen_lock import release, try_acquire
+
+    if not await try_acquire():
+        return (
+            "Генерація зображень зараз зайнята (інший запит). "
+            "Спробуй через хвилину — так Ollama не втрачає VRAM."
+        )
     import base64
 
     backend = _image_gen_backend()
-    img_bytes: bytes | None = None
     try:
-        async with httpx.AsyncClient(timeout=settings.image_gen_timeout) as cli:
-            if backend == "ollama":
-                img_bytes = await _generate_image_ollama(prompt)
-            elif backend == "pollinations":
-                img_bytes = await _generate_image_pollinations(prompt)
-            elif backend == "horde":
-                img_bytes = await _generate_image_horde(prompt)
-            elif backend == "openai":
-                base = settings.image_gen_url.rstrip("/")
-                body: dict[str, Any] = {"prompt": prompt, "n": 1, "response_format": "b64_json"}
-                if settings.image_gen_model:
-                    body["model"] = settings.image_gen_model
-                resp = await cli.post(f"{base}/images/generations", json=body)
-                resp.raise_for_status()
-                item = (resp.json().get("data") or [{}])[0]
-                raw = item.get("b64_json")
-                img_bytes = base64.b64decode(raw) if raw else None
-            else:
-                base = settings.image_gen_url.rstrip("/")
-                body: dict[str, Any] = {
-                    "prompt": prompt,
-                    "negative_prompt": "blurry, low quality, watermark, text",
-                    "steps": 22,
-                    "width": 512,
-                    "height": 512,
-                    "cfg_scale": 7.0,
-                    "sampler_name": "Euler a",
-                }
-                ckpt = (settings.image_gen_model or "").strip()
-                if ckpt:
-                    body["override_settings"] = {"sd_model_checkpoint": ckpt}
-                resp = await cli.post(f"{base}/sdapi/v1/txt2img", json=body)
-                resp.raise_for_status()
-                images = resp.json().get("images") or []
-                img_bytes = base64.b64decode(images[0]) if images else None
-    except httpx.HTTPStatusError as exc:
-        detail = ""
+        img_bytes: bytes | None = None
         try:
-            detail = exc.response.text[:300]
-        except Exception:  # noqa: BLE001
-            pass
-        if backend == "ollama" and exc.response.status_code == 404:
-            return (
-                f"Модель Ollama для зображень не знайдена ({settings.image_gen_model}). "
-                f"На хості: ollama pull {settings.image_gen_model or 'x/flux2-klein:4b'}"
-            )
-        if backend == "ollama":
-            err = detail or str(exc)
-            if "only work on macOS" in err or "mlx" in err.lower() or "GiB" in err:
+            async with httpx.AsyncClient(timeout=settings.image_gen_timeout) as cli:
+                if backend == "ollama":
+                    img_bytes = await _generate_image_ollama(prompt)
+                elif backend == "pollinations":
+                    img_bytes = await _generate_image_pollinations(prompt)
+                elif backend == "horde":
+                    img_bytes = await _generate_image_horde(prompt)
+                elif backend == "openai":
+                    base = settings.image_gen_url.rstrip("/")
+                    body: dict[str, Any] = {"prompt": prompt, "n": 1, "response_format": "b64_json"}
+                    if settings.image_gen_model:
+                        body["model"] = settings.image_gen_model
+                    resp = await cli.post(f"{base}/images/generations", json=body)
+                    resp.raise_for_status()
+                    item = (resp.json().get("data") or [{}])[0]
+                    raw = item.get("b64_json")
+                    img_bytes = base64.b64decode(raw) if raw else None
+                else:
+                    base = settings.image_gen_url.rstrip("/")
+                    body = {
+                        "prompt": prompt,
+                        "negative_prompt": "blurry, low quality, watermark, text",
+                        "steps": 22,
+                        "width": 512,
+                        "height": 512,
+                        "cfg_scale": 7.0,
+                        "sampler_name": "Euler a",
+                    }
+                    ckpt = (settings.image_gen_model or "").strip()
+                    if ckpt:
+                        body["override_settings"] = {"sd_model_checkpoint": ckpt}
+                    resp = await cli.post(f"{base}/sdapi/v1/txt2img", json=body)
+                    resp.raise_for_status()
+                    images = resp.json().get("images") or []
+                    img_bytes = base64.b64decode(images[0]) if images else None
+        except httpx.HTTPStatusError as exc:
+            detail = ""
+            try:
+                detail = exc.response.text[:300]
+            except Exception:  # noqa: BLE001
+                pass
+            if backend == "ollama" and exc.response.status_code == 404:
                 return (
-                    "Ollama image gen на Windows ще нестабільна. У .env постав "
-                    "IMAGE_GEN_URL=pollinations (хмара) або IMAGE_GEN_URL=http://host.docker.internal:7860 "
-                    "(Forge/A1111 локально)."
+                    f"Модель Ollama для зображень не знайдена ({settings.image_gen_model}). "
+                    f"На хості: ollama pull {settings.image_gen_model or 'x/flux2-klein:4b'}"
                 )
-        return f"Не вдалося згенерувати зображення: {exc} {detail}".strip()
-    except httpx.ConnectError:
-        if backend == "a1111":
-            return (
-                "Локальний Forge/SD не запущений. На хості: .\\scripts\\start_sd_forge.ps1 "
-                "(перший раз: .\\scripts\\setup_sd_forge.ps1). IMAGE_GEN_URL=http://host.docker.internal:7860"
-            )
-        return f"Не вдалося згенерувати зображення: сервіс недоступний ({settings.image_gen_url})"
-    except (httpx.HTTPError, ValueError) as exc:
-        return f"Не вдалося згенерувати зображення: {exc}"
-    if not img_bytes:
-        return "Бекенд генерації не повернув зображення."
-    try:
-        out = _save_generated_png(img_bytes)
-    except OSError as exc:
-        return f"Не вдалося зберегти зображення: {exc}"
-    return f"Зображення згенеровано. Поверни його користувачу: [[photo:{out}]]"
+            if backend == "ollama":
+                err = detail or str(exc)
+                if "only work on macOS" in err or "mlx" in err.lower() or "GiB" in err:
+                    return (
+                        "Ollama image gen на Windows ще нестабільна. У .env постав "
+                        "IMAGE_GEN_URL=pollinations (хмара) або IMAGE_GEN_URL=http://host.docker.internal:7860 "
+                        "(Forge/A1111 локально)."
+                    )
+            return f"Не вдалося згенерувати зображення: {exc} {detail}".strip()
+        except httpx.ConnectError:
+            if backend == "a1111":
+                return (
+                    "Локальний Forge/SD не запущений. На хості: .\\scripts\\start_sd_forge.ps1 "
+                    "(перший раз: .\\scripts\\setup_sd_forge.ps1). IMAGE_GEN_URL=http://host.docker.internal:7860"
+                )
+            return f"Не вдалося згенерувати зображення: сервіс недоступний ({settings.image_gen_url})"
+        except (httpx.HTTPError, ValueError) as exc:
+            return f"Не вдалося згенерувати зображення: {exc}"
+        if not img_bytes:
+            return "Бекенд генерації не повернув зображення."
+        try:
+            out = _save_generated_png(img_bytes)
+        except OSError as exc:
+            return f"Не вдалося зберегти зображення: {exc}"
+        return f"Зображення згенеровано. Поверни його користувачу: [[photo:{out}]]"
+    finally:
+        await release()
 
 
 # --------------------------------------------------------------------------- #
@@ -668,6 +700,33 @@ _CLIPBOARD_WRITE_SCHEMA = _schema(
     ["text"],
 )
 
+_SCREEN_CLICK_SCHEMA = _schema(
+    "screen_click",
+    "T4 — клік по координатах екрана (останній резерв, потребує confirm).",
+    {"x": {"type": "integer", "description": "X"}, "y": {"type": "integer", "description": "Y"}},
+    ["x", "y"],
+)
+
+_UIA_SCHEMAS: list[dict[str, Any]] = [
+    _schema("window_list", "T3 — список вікон з заголовками на хості (read-only).", {}, []),
+    _schema(
+        "window_focus",
+        "T3 — сфокусувати вікно за частиною заголовка.",
+        {"title": {**_STR, "description": "частина заголовка вікна"}},
+        ["title"],
+    ),
+    _schema(
+        "uia_invoke",
+        "T3 — UI Automation (фокус + Enter). control_name обов'язковий.",
+        {
+            "window": {**_STR, "description": "заголовок вікна (необов'язково)"},
+            "control_name": {**_STR, "description": "ім'я контролу"},
+            "action": {**_STR, "description": "click"},
+        },
+        ["control_name"],
+    ),
+]
+
 _BROWSER_SCHEMAS: list[dict[str, Any]] = [
     _schema("browser_open", "T2 — відкрити URL у Playwright.", {"url": {**_STR, "description": "URL"}}, ["url"]),
     _schema("browser_read", "T2 — прочитати DOM/елементи поточної сторінки.", {}, []),
@@ -682,6 +741,12 @@ _BROWSER_SCHEMAS: list[dict[str, Any]] = [
         "T2 — заповнити input.",
         {"selector": {**_STR, "description": "CSS selector"}, "value": {**_STR, "description": "значення"}},
         ["selector", "value"],
+    ),
+    _schema(
+        "browser_eval",
+        "T2 — виконати JS на сторінці (read-only з точки зору confirm).",
+        {"js": {**_STR, "description": "JavaScript вираз"}},
+        ["js"],
     ),
 ]
 
@@ -716,6 +781,8 @@ def agent_tool_schemas(*, computer: bool = False, allow_computer: bool = True) -
             schemas.extend(_COMPUTER_SCHEMAS)
             schemas.append(_CLIPBOARD_READ_SCHEMA)
             schemas.append(_CLIPBOARD_WRITE_SCHEMA)
+            schemas.extend(_UIA_SCHEMAS)
+            schemas.append(_SCREEN_CLICK_SCHEMA)
     if settings.enable_browser and computer:
         schemas.extend(_BROWSER_SCHEMAS)
     return schemas
@@ -735,6 +802,11 @@ _COMPUTER_TOOL_NAMES = frozenset(
         "browser_read",
         "browser_click",
         "browser_fill",
+        "browser_eval",
+        "window_list",
+        "window_focus",
+        "uia_invoke",
+        "screen_click",
     }
 )
 
@@ -759,6 +831,7 @@ async def dispatch(
                 "Керування цим комп'ютером доступне лише власнику "
                 "(COMPUTER_OWNER_USER_IDS у .env)."
             )
+    t0 = time.perf_counter()
     try:
         if name == "calc":
             return calc(str(arguments.get("expression", "")))
@@ -869,17 +942,62 @@ async def dispatch(
             return await browser.browser_read()
         if name == "browser_click":
             from . import browser
+            from .computer_confirm import wrap_execute
 
-            return await browser.browser_click(str(arguments.get("selector", "")))
+            sel = str(arguments.get("selector", ""))
+            return await wrap_execute(
+                user_id,
+                "browser_click",
+                {"selector": sel},
+                lambda: browser.browser_click(sel),
+            )
         if name == "browser_fill":
             from . import browser
+            from .computer_confirm import wrap_execute
 
-            return await browser.browser_fill(
-                str(arguments.get("selector", "")), str(arguments.get("value", ""))
+            sel = str(arguments.get("selector", ""))
+            val = str(arguments.get("value", ""))
+            return await wrap_execute(
+                user_id,
+                "browser_fill",
+                {"selector": sel, "value": val},
+                lambda: browser.browser_fill(sel, val),
             )
+        if name == "browser_eval":
+            from . import browser
+
+            js = str(arguments.get("js", ""))
+            return await browser.browser_eval(js)
+        if name == "window_list":
+            from . import computer
+
+            return await computer.window_list(user_id=user_id)
+        if name == "window_focus":
+            from . import computer
+
+            return await computer.window_focus(
+                str(arguments.get("title", "")), user_id=user_id
+            )
+        if name == "uia_invoke":
+            from . import computer
+
+            return await computer.uia_invoke(
+                str(arguments.get("window", "")),
+                str(arguments.get("control_name", "")),
+                str(arguments.get("action", "click")),
+                user_id=user_id,
+            )
+        if name == "screen_click":
+            from . import computer
+
+            try:
+                x = int(arguments.get("x", 0))
+                y = int(arguments.get("y", 0))
+            except (TypeError, ValueError):
+                return "invalid coordinates"
+            return await computer.screen_click(x, y, user_id=user_id)
         if name == "schedule_job":
             from .jobs import schedule_job
-            import time
 
             try:
                 delay = int(arguments.get("delay_minutes", 0))
@@ -893,10 +1011,14 @@ async def dispatch(
                 str(arguments.get("note", "")),
             )
             return f"Job заплановано ({jid}) через {delay} хв."
+        return f"Невідомий інструмент: {name}"
     except Exception as exc:  # noqa: BLE001
         logger.exception("tool %s failed", name)
         return f"Інструмент {name} впав: {exc}"
-    return f"Невідомий інструмент: {name}"
+    finally:
+        from .metrics import record_tool
+
+        await record_tool(name, (time.perf_counter() - t0) * 1000)
 
 
 def coerce_args(raw: Any) -> dict[str, Any]:

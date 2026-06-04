@@ -136,6 +136,20 @@ def computer_confirm_keyboard(code: str) -> dict[str, Any]:
     }
 
 
+def admin_confirm_keyboard(code: str) -> dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "🔴 Підтвердити Admin PS",
+                    "callback_data": f"cmpA:Y:{code}",
+                },
+            ],
+            [{"text": "❌ Скасувати", "callback_data": "cmp:N:0"}],
+        ]
+    }
+
+
 def mode_keyboard(*, show_computer: bool = True) -> dict[str, Any]:
     mode_row: list[dict[str, str]] = [
         {"text": "⚖️ Гібрид", "callback_data": "mode:hybrid"},

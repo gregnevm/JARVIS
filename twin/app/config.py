@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     kobold_host: str = "http://127.0.0.1:5001"
     llm_timeout: float = 180.0
     llm_log_path: str | None = None
+    # Мінімальний eval_score для promote (0 = не перевіряти).
+    min_eval_promote: float = 0.0
 
 
 def create_llm(cfg: Settings, client: httpx.Client | None = None) -> LLMInterface:

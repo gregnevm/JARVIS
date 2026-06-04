@@ -81,6 +81,11 @@ class WolRequest(BaseModel):
     broadcast: str = "255.255.255.255"
 
 
+class ScreenClickRequest(BaseModel):
+    x: int
+    y: int
+
+
 def _timeout(req_timeout: float | None) -> float:
     return req_timeout if req_timeout is not None else settings.exec_timeout
 
@@ -321,6 +326,44 @@ async def fs_write(
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"path": str(p), "status": "ok"}
+
+
+def _screen_click_ps(x: int, y: int) -> str:
+    return f"""
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class WinMouse {{
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, uint e);
+}}
+"@
+[WinMouse]::SetCursorPos({x}, {y}) | Out-Null
+Start-Sleep -Milliseconds 80
+[WinMouse]::mouse_event(0x0002, 0, 0, 0, 0)
+[WinMouse]::mouse_event(0x0004, 0, 0, 0, 0)
+""".strip()
+
+
+@app.post("/screen/click")
+async def screen_click(
+    req: ScreenClickRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    """T4 — клік по координатах екрана (останній резерв)."""
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="windows only")
+    x, y = int(req.x), int(req.y)
+    if x < 0 or y < 0 or x > 10000 or y > 10000:
+        raise HTTPException(status_code=400, detail="bad coordinates")
+    ps = _screen_click_ps(x, y)
+    result = _run_powershell(ps, False, 10.0)
+    if int(result.get("code", -1)) != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=(result.get("stderr") or "click failed")[:200],
+        )
+    return {"status": "ok", "x": str(x), "y": str(y)}
 
 
 @app.post("/screen/capture")

@@ -104,3 +104,9 @@ class ModelRegistry:
             "SELECT * FROM lora_versions ORDER BY id DESC"
         ).fetchall()
         return [_row_to_dict(r) for r in rows]
+
+    def get_version(self, version: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM lora_versions WHERE version = ?", (version,)
+        ).fetchone()
+        return _row_to_dict(row) if row is not None else None

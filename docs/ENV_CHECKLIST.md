@@ -12,6 +12,16 @@
 
 Hostagent читає `HOSTAGENT_FS_ROOTS` як `fs_roots` у `hostagent/.env` або через compose.
 
+## C3 Browser (Playwright)
+
+| Змінна | Приклад | Навіщо |
+|--------|---------|--------|
+| `ENABLE_BROWSER` | `true` | `browser_*` у computer mode (потрібен rebuild `tools` з Chromium) |
+
+Профіль браузера: [`docs/adr/C3-browser-profile.md`](adr/C3-browser-profile.md).
+
+| `COMPUTER_RATE_LIMIT_PER_HOUR` | `120` | Мутуючі computer-дії на годину; `0` = вимкнено |
+
 ## Telegram Mini App / deep link
 
 | Змінна | Приклад | Навіщо |
@@ -32,7 +42,24 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 |--------|--------|
 | `TELEGRAM_WEBHOOK_SECRET` | Перевірка `X-Telegram-Bot-Api-Secret-Token` у webhook-режимі |
 | `COMPUTER_MODE_ADMINS_ONLY` | Обмежити `/mode computer` |
+| `WEBAPP_DEV_OPEN` | `false` у проді — `/app` лише з Telegram initData |
 | **M4** | Ротація `TELEGRAM_BOT_TOKEN` у @BotFather після витоку в логах/чаті |
+
+## Autostart і моніторинг
+
+| Змінна / скрипт | Навіщо |
+|-----------------|--------|
+| `HEALTH_WATCH_INTERVAL` | Секунди між перевірками стеку; `0` = вимкнено; дефолт `300` |
+| `HOSTAGENT_DROP_DIR` | Куди класти файли з caption «на диск» без явного шляху |
+| `scripts/install_autostart.ps1` | Один раз: logon + watchdog кожні 5 хв |
+| `scripts/autostart.ps1` | Ollama → Docker → compose → SD Forge → host-agent |
+| `scripts/verify_stack.ps1` | Після autostart або вручну — exit 1 при fail |
+| `scripts/verify_stack.ps1 -StrictProd` | Прод: `WEBAPP_DEV_OPEN=true` → fail |
+| `scripts/Install-JARVIS.ps1` | Перший setup (compose + verify) |
+
+## Бекапи
+
+Див. [`docs/BACKUP.md`](BACKUP.md).
 
 ## Після змін
 

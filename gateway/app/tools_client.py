@@ -36,6 +36,13 @@ class ToolsClient:
         self._stream_url = f"{base}/agent/stream"
         self._client = httpx.AsyncClient(timeout=timeout)
 
+    @staticmethod
+    def _extra_headers(payload: dict[str, Any]) -> dict[str, str]:
+        rid = payload.get("request_id")
+        if isinstance(rid, str) and rid.strip():
+            return {"X-Request-ID": rid.strip()}
+        return {}
+
     async def aclose(self) -> None:
         await self._client.aclose()
 
@@ -50,7 +57,9 @@ class ToolsClient:
         mode = payload.get("mode")
         if isinstance(mode, str) and mode.strip() and mode.strip().lower() != "auto":
             body["mode"] = mode.strip().lower()
-        async with self._client.stream("POST", self._stream_url, json=body) as resp:
+        async with self._client.stream(
+            "POST", self._stream_url, json=body, headers=self._extra_headers(payload)
+        ) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 line = line.strip()
@@ -73,7 +82,9 @@ class ToolsClient:
         if isinstance(mode, str) and mode.strip() and mode.strip().lower() != "auto":
             body["mode"] = mode.strip().lower()
         try:
-            resp = await self._client.post(self._url, json=body)
+            resp = await self._client.post(
+                self._url, json=body, headers=self._extra_headers(payload)
+            )
             resp.raise_for_status()
         except httpx.HTTPError as exc:
             logger.error("tools /agent failed: %s", exc)
@@ -202,7 +213,9 @@ class ToolsClient:
                 f"{self._base}/computer/pending", params={"user_id": user_id}
             )
             out["pending"] = r.json() if r.status_code == 200 else {}
-            r2 = await self._client.get(f"{self._base}/computer/audit", params={"limit": 10})
+            r2 = await self._client.get(f"{self._base}/computer/audit", params={"limit": 20})
+            r3 = await self._client.get(f"{self._base}/computer/learned")
+            out["learned"] = r3.json() if r3.status_code == 200 else {}
             out["audit"] = r2.json() if r2.status_code == 200 else {}
         except httpx.HTTPError:
             pass
@@ -221,6 +234,45 @@ class ToolsClient:
             await self._client.delete(f"{self._base}/tasks", params={"user_id": user_id})
         except httpx.HTTPError:
             pass
+
+    async def reminders_ics(self, user_id: int) -> bytes:
+        try:
+            resp = await self._client.get(
+                f"{self._base}/reminders/ics", params={"user_id": user_id}
+            )
+            if resp.status_code == 404:
+                return b""
+            resp.raise_for_status()
+            return resp.content
+        except httpx.HTTPError as exc:
+            logger.error("reminders ics failed: %s", exc)
+            return b""
+
+    async def export_dataset(self, user_id: int | None = None) -> dict[str, Any]:
+        try:
+            params: dict[str, Any] = {}
+            if user_id is not None:
+                params["user_id"] = int(user_id)
+            resp = await self._client.post(
+                f"{self._base}/dataset/export/sharegpt", params=params
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, dict) else {"error": "bad response"}
+        except httpx.HTTPError as exc:
+            logger.error("dataset export failed: %s", exc)
+            return {"error": str(exc)}
+
+    async def dataset_stats(self, user_id: int | None = None) -> dict[str, Any]:
+        try:
+            params: dict[str, Any] = {}
+            if user_id is not None:
+                params["user_id"] = int(user_id)
+            resp = await self._client.get(f"{self._base}/dataset/stats", params=params)
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as exc:
+            return {"error": str(exc)}
 
     async def due_jobs(self) -> list[dict[str, Any]]:
         try:

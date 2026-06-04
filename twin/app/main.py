@@ -121,6 +121,14 @@ async def register_lora(req: RegisterLoraRequest, request: Request) -> dict[str,
 @app.post("/registry/lora/{version}/promote")
 async def promote_lora(version: str, request: Request) -> dict[str, Any]:
     reg: ModelRegistry = request.app.state.registry
+    from .promote_gate import eval_promote_denied
+
+    row = reg.get_version(version)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"unknown version: {version}")
+    denied = eval_promote_denied(row, settings.min_eval_promote)
+    if denied:
+        raise HTTPException(status_code=400, detail=denied)
     try:
         reg.promote(version)
     except KeyError as exc:

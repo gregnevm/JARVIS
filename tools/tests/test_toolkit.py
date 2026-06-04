@@ -133,10 +133,18 @@ async def test_generate_image_ollama(monkeypatch, tmp_path):
         assert prompt == "banana"
         return b"\x89PNG\r\n\x1a\n"
 
+    async def _lock_acquire():
+        return True
+
+    async def _lock_release():
+        return None
+
     monkeypatch.setattr(settings, "image_gen_url", "ollama")
     monkeypatch.setattr(settings, "image_gen_model", "x/z-image-turbo")
     monkeypatch.setattr(settings, "data_dir", str(tmp_path))
     monkeypatch.setattr(toolkit, "_generate_image_ollama", _fake)
+    monkeypatch.setattr("app.image_gen_lock.try_acquire", _lock_acquire)
+    monkeypatch.setattr("app.image_gen_lock.release", _lock_release)
     out = await toolkit.generate_image("banana")
     assert "[[photo:" in out
     assert (tmp_path / "uploads").exists()
@@ -161,6 +169,10 @@ async def test_dispatch_calc():
 
 async def test_dispatch_unknown_tool():
     assert (await toolkit.dispatch("nope", {})).startswith("Невідомий інструмент")
+
+
+async def test_dispatch_calc_via_name():
+    assert await toolkit.dispatch("calc", {"expression": "3*3"}) == "9"
 
 
 # --- code_exec ---

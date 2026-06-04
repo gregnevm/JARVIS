@@ -102,3 +102,8 @@ def learn_from_action(tool: str, args: dict[str, Any]) -> None:
     if changed:
         _save(data)
         logger.info("computer_learned updated: ps=%d cli=%d", len(data["ps"]), len(data["cli"]))
+
+
+def learned_summary() -> dict[str, list[str]]:
+    raw = _load_raw()
+    return {"ps": sorted(raw["ps"]), "cli": sorted(raw["cli"])}

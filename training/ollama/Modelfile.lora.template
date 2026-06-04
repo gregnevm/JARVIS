@@ -1,0 +1,5 @@
+# D.3 — Ollama Modelfile after LoRA merge (edit paths)
+FROM qwen2.5:7b-instruct
+ADAPTER ./lora-adapter
+PARAMETER temperature 0.7
+PARAMETER num_ctx 8192

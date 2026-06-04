@@ -45,6 +45,11 @@ class HistoryRequest(BaseModel):
     limit: int | None = None
 
 
+class SessionsRequest(BaseModel):
+    user_id: int
+    limit: int = 10
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.db = DB(settings.dsn)
@@ -115,3 +120,10 @@ async def history(req: HistoryRequest) -> dict[str, Any]:
     limit = req.limit or settings.short_term_limit
     msgs = await app.state.db.recent_messages(req.user_id, limit)
     return {"messages": msgs}
+
+
+@app.get("/sessions")
+async def sessions(user_id: int, limit: int = 10) -> dict[str, Any]:
+    lim = max(1, min(limit, 30))
+    items = await app.state.db.list_sessions(user_id, lim)
+    return {"sessions": items}

@@ -5,6 +5,7 @@ Self-hosted Telegram-бот на мікросервісах. Усе працює
 синхронізація Edge↔Twin через **twin** (SyncServer + ModelRegistry). Жодних зовнішніх AI API.
 Запуск — один `docker compose up`. Цільова архітектура PortableAI — `docs/DESIGN.md`.
 Продуктовий roadmap (фази 0–7) — `docs/PRODUCT_ROADMAP.md`; ops-backlog — `ROADMAP.md`.
+Бекапи — `docs/BACKUP.md`; перевірка стеку — `scripts/verify_stack.ps1`.
 
 > Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
 > Tools + агент-луп на двох моделях, polish (rate limit, circuit breaker, healthchecks).
@@ -337,6 +338,8 @@ NDJSON-стрім (`/agent/stream`), gateway шле плейсхолдер «✍
 редагує його через `editMessageText` — текст «друкується», як у ChatGPT. У режимі
 agent між цим показуються мітки інструментів («🧮 рахую…», «🔍 шукаю…»). Будь-який
 збій стріму → тихий фолбек на класичний `/agent` тим самим повідомленням.
+
+**Ops:** [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) · [`docs/IMAGE_GEN.md`](docs/IMAGE_GEN.md) · [`docs/COMPUTER_ROLLBACK.md`](docs/COMPUTER_ROLLBACK.md)
 
 **Надійність:** rate-limit на `user_id` через Redis (`RATE_LIMIT_PER_MIN`, fail-open),
 circuit breaker на Ollama (N помилок підряд → пауза, fail-fast замість зависань),

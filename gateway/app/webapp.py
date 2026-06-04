@@ -16,13 +16,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 from . import artifacts as app_artifacts
-from .auth import agent_mode_denied_message
+from .auth import agent_mode_denied_message, can_change_agent_mode
 from .config import settings
+from .runtime_flags import get_flags, set_flag
 from .telegram_webapp_auth import authorize_allowed
 
 logger = logging.getLogger("jarvis.gateway.webapp")
@@ -41,6 +43,17 @@ def authorize(init_data: str | None) -> int:
 
 class ModeBody(BaseModel):
     mode: str
+    init_data: str | None = None
+
+
+class FlagBody(BaseModel):
+    name: str
+    enabled: bool
+    init_data: str | None = None
+
+
+class LoraPromoteBody(BaseModel):
+    version: str
     init_data: str | None = None
 
 
@@ -66,16 +79,56 @@ async def app_data(
     request: Request,
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    authorize(x_telegram_init_data)
+    user_id = authorize(x_telegram_init_data)
     svc = request.app.state.svc
     dash = await svc.dashboard()
     twin = await svc.twin_status()
+    flags = await get_flags(request.app.state.redis)
     return {
         "ok": not dash.get("error"),
         "core": dash,
         "twin": twin,
+        "flags": flags,
+        "can_change_mode": can_change_agent_mode(user_id) if user_id else False,
         "ts": int(time.time()),
     }
+
+
+@router.get("/app/sessions")
+async def app_sessions(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+    limit: int = 8,
+) -> dict[str, Any]:
+    user_id = authorize(x_telegram_init_data)
+    lim = max(1, min(limit, 20))
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as cli:
+            r = await cli.get(
+                f"{settings.memory_url.rstrip('/')}/sessions",
+                params={"user_id": user_id, "limit": lim},
+            )
+            r.raise_for_status()
+            return r.json()
+    except httpx.HTTPError as exc:
+        logger.warning("sessions fetch failed: %s", exc)
+        return {"sessions": [], "error": str(exc)}
+
+
+@router.post("/app/flags")
+async def app_set_flag(
+    request: Request,
+    body: FlagBody,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, Any]:
+    user_id = authorize(x_telegram_init_data or body.init_data)
+    if not can_change_agent_mode(user_id):
+        raise HTTPException(status_code=403, detail="admin only")
+    if body.name not in ("streaming", "voice_reply"):
+        raise HTTPException(status_code=400, detail="bad flag")
+    await set_flag(request.app.state.redis, body.name, body.enabled)
+    flags = await get_flags(request.app.state.redis)
+    return {"ok": True, "flags": flags}
 
 
 @router.post("/app/mode")
@@ -172,6 +225,7 @@ async def app_remote(
         "core": dash,
         "pending": remote.get("pending"),
         "audit": remote.get("audit"),
+        "learned": remote.get("learned") or {},
         "macros": macros.get("macros") or [],
     }
 
@@ -184,6 +238,44 @@ async def app_trust(
     user_id = authorize(x_telegram_init_data)
     await request.app.state.tools.grant_trust(user_id)
     return {"status": "trusted"}
+
+
+@router.get("/app/twin/versions")
+async def app_twin_versions(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, Any]:
+    user_id = authorize(x_telegram_init_data)
+    if not can_change_agent_mode(user_id):
+        raise HTTPException(status_code=403, detail="admin only")
+    return await request.app.state.svc.twin_lora_versions()
+
+
+@router.post("/app/twin/promote")
+async def app_twin_promote(
+    request: Request,
+    body: LoraPromoteBody,
+    x_telegram_init_data: str | None = Header(default=None),
+) -> dict[str, Any]:
+    user_id = authorize(x_telegram_init_data or body.init_data)
+    if not can_change_agent_mode(user_id):
+        raise HTTPException(status_code=403, detail="admin only")
+    version = (body.version or "").strip()
+    if not version:
+        raise HTTPException(status_code=400, detail="version required")
+    return await request.app.state.svc.twin_promote_lora(version)
+
+
+@router.post("/app/twin/rollback")
+async def app_twin_rollback(
+    request: Request,
+    x_telegram_init_data: str | None = Header(default=None),
+    n: int = 1,
+) -> dict[str, Any]:
+    user_id = authorize(x_telegram_init_data)
+    if not can_change_agent_mode(user_id):
+        raise HTTPException(status_code=403, detail="admin only")
+    return await request.app.state.svc.twin_rollback_lora(max(1, min(n, 5)))
 
 
 @router.post("/app/macro/{name}")

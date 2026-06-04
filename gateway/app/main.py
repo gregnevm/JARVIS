@@ -59,7 +59,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.stt = WhisperClient(settings.whisper_url, settings.whisper_language)
     app.state.redis = aioredis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
     app.state.limiter = RateLimiter(app.state.redis, settings.rate_limit_per_min)
-    app.state.tts = TtsClient(settings.tts_url) if settings.enable_voice_reply else None
+    # TTS-клієнт завжди (увімкнення — runtime flag або ENABLE_VOICE_REPLY).
+    app.state.tts = TtsClient(settings.tts_url)
 
     access_store = AccessStore(Path(settings.access_store_path))
     await access_store.load()
@@ -167,6 +168,18 @@ async def _poll_loop(app: FastAPI) -> None:
 app = FastAPI(title="JARVIS Gateway", lifespan=lifespan)
 app.include_router(webapp_router)
 app.include_router(admin_panel_router)
+
+
+@app.middleware("http")
+async def _request_id_middleware(request: Request, call_next):
+    from .request_id import new_request_id, set_request_id
+
+    rid = request.headers.get("X-Request-ID") or new_request_id()
+    set_request_id(rid)
+    request.state.request_id = rid
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    return response
 
 
 @app.get("/health")

@@ -42,6 +42,10 @@ def test_hybrid_plain_to_chat():
     assert decide_mode("розкажи жарт", "hybrid") == "chat"
 
 
+def test_hybrid_file_attachment_to_agent():
+    assert decide_mode("Користувач надіслав файл. parse_file зі шляхом /data/x.pdf", "hybrid") == "agent"
+
+
 def test_hybrid_image_gen_to_agent():
     assert decide_mode("намалюй щеня", "hybrid") == "agent"
 
@@ -121,6 +125,9 @@ class FakeMemory:
 
     async def store(self, user_id, content, role="user"):
         self.stored.append((role, content))
+
+    async def history(self, user_id, limit=12):
+        return []
 
 
 async def test_run_chat_mode(monkeypatch):

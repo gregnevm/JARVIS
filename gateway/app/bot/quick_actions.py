@@ -105,7 +105,7 @@ async def handle_quick_action(
             format_dashboard(dash, twin),
             parse_mode="HTML",
             reply_markup=main_menu_keyboard(
-                settings.public_app_url, show_computer=can_use_computer(user_id)
+                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
             ),
         )
         return True
@@ -181,7 +181,7 @@ async def handle_quick_action(
             format_dashboard(dash, twin),
             parse_mode="HTML",
             reply_markup=main_menu_keyboard(
-                settings.public_app_url, show_computer=can_use_computer(user_id)
+                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
             ),
         )
         return True
@@ -240,7 +240,7 @@ async def ensure_reply_keyboard_auto(
         chat_id,
         "⌨️ Швидкий доступ — кнопки внизу.",
         reply_markup=reply_keyboard(
-            settings.public_app_url, show_computer=can_use_computer(user_id or 0)
+            settings.mini_app_https_url, show_computer=can_use_computer(user_id or 0)
         ),
     )
 
@@ -260,6 +260,6 @@ async def show_reply_keyboard(
         chat_id,
         "⌨️ Швидкі кнопки активні.",
         reply_markup=reply_keyboard(
-            settings.public_app_url, show_computer=can_use_computer(user_id or 0)
+            settings.mini_app_https_url, show_computer=can_use_computer(user_id or 0)
         ),
     )
