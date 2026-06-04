@@ -9,9 +9,11 @@ import redis.asyncio as aioredis
 
 from .auth import is_allowed
 from .bot import handle_callback, handle_command, is_command
+from .config import settings
 from .media import AUDIO_SOURCES, AudioMedia, audio_echo_label, extract_audio_media
 from .ratelimit import RateLimiter
 from .services import ServicesClient
+from .streaming import stream_reply
 from .telegram import TelegramClient
 from .tools_client import ToolsClient
 from .tts_client import TtsClient
@@ -104,16 +106,22 @@ async def handle_update(
     # Показуємо "typing…" поки агент думає (інференс на CPU може тривати секунди).
     await tg.send_chat_action(int(chat_id), "typing")
 
-    reply = await tools.process(
-        {
-            "user_id": user_id,
-            "chat_id": chat_id,
-            "text": text,
-            "type": source,
-            "mode": "auto",
-        }
-    )
-    await tg.send_message(chat_id, reply)
+    payload = {
+        "user_id": user_id,
+        "chat_id": chat_id,
+        "text": text,
+        "type": source,
+        "mode": "auto",
+    }
+    if settings.enable_streaming:
+        # Стрім сам редагує повідомлення; '' → плейсхолдер не пішов, шлемо класично.
+        reply = await stream_reply(tg, tools, int(chat_id), payload)
+        if not reply:
+            reply = await tools.process(payload)
+            await tg.send_message(chat_id, reply)
+    else:
+        reply = await tools.process(payload)
+        await tg.send_message(chat_id, reply)
 
     if tts is not None and source in AUDIO_SOURCES and reply:
         audio = await tts.synthesize(reply)

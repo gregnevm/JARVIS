@@ -1,19 +1,37 @@
 """handle_update: whitelist, rate-limit, текст, голос, невідомий контент."""
 from typing import Any
 
+import pytest
+
 import app.router as router
 from app.config import settings
+from app.streaming import _PLACEHOLDER
+
+
+@pytest.fixture(autouse=True)
+def _streaming_off(monkeypatch):
+    """Наявні тести перевіряють роутинг, не доставку → класичний (нестрімовий) шлях.
+    Стрімовий шлях має власний тест нижче + test_streaming.py."""
+    monkeypatch.setattr(settings, "enable_streaming", False)
 
 
 class FakeTG:
     def __init__(self, file_path: str = "", content: bytes = b"") -> None:
         self.sent: list[tuple[int, str]] = []
+        self.edits: list[tuple[int, str]] = []
         self.voices: list[tuple[int, bytes]] = []
         self._file_path = file_path
         self._content = content
 
     async def send_message(self, chat_id, text, parse_mode=None):
         self.sent.append((chat_id, text))
+
+    async def send_message_id(self, chat_id, text, parse_mode=None):
+        self.sent.append((chat_id, text))
+        return 99
+
+    async def edit_message_text(self, chat_id, message_id, text, parse_mode=None):
+        self.edits.append((chat_id, text))
 
     async def send_chat_action(self, chat_id, action="typing"):
         pass
@@ -44,6 +62,11 @@ class FakeTools:
     async def process(self, payload):
         self.calls.append(payload)
         return self.reply
+
+    async def stream(self, payload):
+        self.calls.append(payload)
+        yield {"delta": self.reply}
+        yield {"done": True, "text": self.reply, "mode": "chat", "iters": 0}
 
 
 class FakeSvc:
@@ -139,6 +162,16 @@ async def test_text_flow(monkeypatch):
     assert tools.calls[0]["text"] == "привіт"
     assert tools.calls[0]["type"] == "text"
     assert tg.sent[-1] == (5, "ВІДПОВІДЬ")
+
+
+async def test_text_flow_streaming(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_user_ids", "42")
+    monkeypatch.setattr(settings, "enable_streaming", True)
+    tg, tools = FakeTG(), FakeTools("ПОТІК")
+    await _route(tg, tools, FakeSTT(), FakeLimiter(True), _msg(text="привіт"))
+    assert tools.calls[0]["text"] == "привіт"          # стрім отримав payload
+    assert (5, _PLACEHOLDER) in tg.sent                 # надіслано плейсхолдер
+    assert tg.edits[-1] == (5, "ПОТІК")                 # фінальний едит = відповідь
 
 
 async def test_audio_file_flow(monkeypatch):

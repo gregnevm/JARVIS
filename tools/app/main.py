@@ -1,12 +1,16 @@
 """JARVIS Tools service — інструменти агента + Facade JARVIS + pipeline."""
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from jarvis_core.pipeline.handlers import screen_text
 
 from . import toolkit
 from .bootstrap import build_jarvis
@@ -140,3 +144,34 @@ async def agent_ep(req: AgentRequest) -> dict[str, Any]:
             "mode": "error",
             "iters": 0,
         }
+
+
+def _ndjson(obj: dict[str, Any]) -> bytes:
+    return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+@app.post("/agent/stream")
+async def agent_stream_ep(req: AgentRequest) -> StreamingResponse:
+    """Стрім інференсу як NDJSON. Використовує runner напряму (повз pipeline),
+    тож safety-скрин застосовуємо тут; помилки завершуємо done-подією."""
+    safe, block = screen_text(req.text)
+
+    async def gen() -> AsyncIterator[bytes]:
+        if block is not None:
+            yield _ndjson({"done": True, "mode": block.mode, "iters": 0, "text": block.text})
+            return
+        try:
+            async for ev in app.state.agent.run_stream(req.user_id, safe or req.text):
+                yield _ndjson(ev)
+        except Exception:  # noqa: BLE001
+            logger.exception("agent stream failed")
+            yield _ndjson(
+                {
+                    "done": True,
+                    "mode": "error",
+                    "iters": 0,
+                    "text": "Локальна модель зараз недоступна. Перевір, чи піднятий Ollama на хості.",
+                }
+            )
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")

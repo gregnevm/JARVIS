@@ -266,6 +266,12 @@ whitelist, роутинг text/voice. У CI (`.github/workflows/ci.yml`) усе 
 `web_fetch` (текст сторінки), `code_exec` (лише якщо `ENABLE_CODE_EXEC=true`).
 Кожен доступний і окремим ендпойнтом Tools-сервісу (`/calc`, `/search`, `/web_fetch`, …).
 
+**Стрім відповіді** (`ENABLE_STREAMING=true`, дефолт): Tools віддає інференс як
+NDJSON-стрім (`/agent/stream`), gateway шле плейсхолдер «✍️ думаю…» і поступово
+редагує його через `editMessageText` — текст «друкується», як у ChatGPT. У режимі
+agent між цим показуються мітки інструментів («🧮 рахую…», «🔍 шукаю…»). Будь-який
+збій стріму → тихий фолбек на класичний `/agent` тим самим повідомленням.
+
 **Надійність:** rate-limit на `user_id` через Redis (`RATE_LIMIT_PER_MIN`, fail-open),
 circuit breaker на Ollama (N помилок підряд → пауза, fail-fast замість зависань),
 fallback-повідомлення на кожному зовнішньому виклику, healthchecks на всіх сервісах.
