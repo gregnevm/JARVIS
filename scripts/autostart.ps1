@@ -111,12 +111,12 @@ function Start-JarvisHostagent {
     $screenOk = (-not $needScreen) -or (Test-HostagentScreenEndpoint -BindHost $bind -Port $port)
 
     if ($healthy -and $screenOk) {
-        Log "hostagent: already healthy ($bind`:$port)"
+        Log "hostagent: already healthy $($bind):$port"
         return
     }
 
     if ($healthy -and -not $screenOk) {
-        Log "hostagent: stale build (missing /screen/capture) — restarting"
+        Log "hostagent: stale build (missing /screen/capture) - restarting"
         Stop-HostagentListener -Port $port
     }
 
@@ -135,7 +135,7 @@ function Start-JarvisHostagent {
 
     $args = @('-m', 'uvicorn', 'app.main:app', '--host', $bind, '--port', "$port")
     Start-Process -FilePath 'python' -ArgumentList $args -WorkingDirectory $workDir -WindowStyle Hidden
-    Log "hostagent: started (${bind}:$port)"
+    Log "hostagent: started $($bind):$port"
 
     for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Seconds 1
