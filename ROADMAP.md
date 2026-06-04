@@ -196,6 +196,23 @@ Toolkit має `calc, web_search, web_fetch, parse_file, code_exec`. Очеви�
 Архітектура агент-лупа (фаза 6) робить це питанням 50 рядків Python + JSON-схема
 кожен. Додати в `tools/app/toolkit.py` + `TOOL_SCHEMAS`.
 
+### E5. Computer Use (Agent Mode) — керування реальним комп'ютером
+**Ідея:** дати агентові керувати Windows-хостом (PowerShell, файли, браузер, GUI)
+з вшитим принципом «найшвидший шлях»: T0 PowerShell/CLI → T2 браузер по DOM →
+T3 UI Automation → T4 піксельний клік (лише як резерв, потребує vision-моделі).
+
+**Архітектура:** новий **host-agent** (FastAPI на хості, поза Compose — контейнер не
+бачить десктоп/мишу/вікна), `tools/` кличе його через `host.docker.internal`; браузер
+(Playwright/CDP) можна тримати в контейнері. Надбудова над наявним тул-лупом —
+нові інструменти в `toolkit.py` + `AGENT_MODE=computer`.
+
+**Безпека:** усе за прапорами (`ENABLE_COMPUTER_USE=false`, `COMPUTER_ALLOW_ADMIN=false`
+дефолт), підтвердження дій inline-кнопками в Telegram, whitelist команд, аудит у
+`data/logs/computer.jsonl`. Дати LLM admin-shell = root на машині — обережно.
+
+**Фази:** C0 каркас host-agent → C1 T0/T1 toolkit → C2 підтвердження+аудит →
+C3 браузер → C4 UIA → C5 admin → C6 vision (опц.). Повний план: `docs/COMPUTER_USE.md`.
+
 ---
 
 ## Звідки знаю, що це правильні наступні кроки
