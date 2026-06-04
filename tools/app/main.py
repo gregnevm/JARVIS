@@ -57,6 +57,10 @@ class ComputerConfirmRequest(BaseModel):
     code: str = ""
 
 
+class ComputerUserRequest(BaseModel):
+    user_id: int
+
+
 class ModeRequest(BaseModel):
     mode: str
 
@@ -204,3 +208,11 @@ async def computer_cancel_ep(req: ComputerConfirmRequest) -> dict[str, str]:
 
     await clear_pending(req.user_id)
     return {"status": "cancelled"}
+
+
+@app.post("/computer/screenshot")
+async def computer_screenshot_ep(req: ComputerUserRequest) -> dict[str, str]:
+    from . import computer
+
+    text = await computer.capture_screenshot(user_id=req.user_id)
+    return {"text": text}

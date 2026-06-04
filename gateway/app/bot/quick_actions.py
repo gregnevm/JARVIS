@@ -19,6 +19,7 @@ from .keyboards import (
     BTN_HIDE,
     BTN_MENU,
     BTN_REMINDERS,
+    BTN_SCREEN,
     BTN_STATUS,
     main_menu_keyboard,
     mode_keyboard,
@@ -34,7 +35,7 @@ _KEYBOARD_OFF = "jarvis:tg:keyboard_off:{user_id}"
 _KEYBOARD_SHOWN = "jarvis:tg:keyboard_shown:{user_id}"
 
 QUICK_ACTIONS = frozenset(
-    {BTN_STATUS, BTN_BRIEF, BTN_REMINDERS, BTN_COMPUTER, BTN_MENU, BTN_HIDE}
+    {BTN_STATUS, BTN_BRIEF, BTN_REMINDERS, BTN_COMPUTER, BTN_SCREEN, BTN_MENU, BTN_HIDE}
 )
 
 _BRIEF_PROMPT = """Сформуй короткий бриф для користувача (до 12 рядків, українською):
@@ -135,6 +136,12 @@ async def handle_quick_action(
                 parse_mode="HTML",
                 reply_markup=mode_keyboard(),
             )
+        return True
+
+    if action == BTN_SCREEN:
+        await tg.send_chat_action(chat_id, "upload_photo")
+        reply = await tools.capture_screenshot(user_id)
+        await deliver(tg, chat_id, reply, redis=redis, user_id=user_id)
         return True
 
     if action == BTN_MENU:

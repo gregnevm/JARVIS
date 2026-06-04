@@ -51,6 +51,14 @@ _INLINE_TEXT_EXT = frozenset(
     {".txt", ".md", ".csv", ".json", ".log", ".py", ".ini", ".yaml", ".yml", ".xml", ".html"}
 )
 _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_SCREENSHOT_RE = re.compile(
+    r"скріншот|screenshot|скрін\s*екран|зроби\s+скрін",
+    re.IGNORECASE,
+)
+
+
+def _is_screenshot_request(text: str) -> bool:
+    return bool(_SCREENSHOT_RE.search(text or ""))
 
 
 def _extract_message(update: dict[str, Any]) -> dict[str, Any] | None:
@@ -250,6 +258,20 @@ async def handle_update(
             text, int(chat_id), int(user_id), tg, svc, tools, redis
         ):
             return
+
+    if _is_screenshot_request(text):
+        await tg.send_chat_action(int(chat_id), "upload_photo")
+        reply = await tools.capture_screenshot(int(user_id))
+        await deliver(
+            tg,
+            int(chat_id),
+            reply,
+            message.get("message_id"),
+            redis=redis,
+            user_id=int(user_id),
+            message_thread_id=message.get("message_thread_id"),
+        )
+        return
 
     # Контекст (reply/forward) підкладаємо агенту, не показуючи користувачу.
     ctx = message_context(message)

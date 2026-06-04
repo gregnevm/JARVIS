@@ -50,6 +50,30 @@ function Test-HostagentHealth {
     }
 }
 
+function Test-HostagentScreenEndpoint {
+    param([string]$BindHost = '127.0.0.1', [int]$Port = 8400)
+    try {
+        $uri = "http://${BindHost}:${Port}/screen/capture"
+        Invoke-WebRequest -Uri $uri -Method POST -UseBasicParsing -TimeoutSec 3 | Out-Null
+        return $true
+    } catch {
+        $resp = $_.Exception.Response
+        if ($resp -and $resp.StatusCode.value__ -eq 403) { return $true }
+        return $false
+    }
+}
+
+function Stop-HostagentListener {
+    param([int]$Port = 8400)
+    try {
+        Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
+            }
+    } catch { }
+    Start-Sleep -Seconds 1
+}
+
 function Ensure-HostagentPython {
     $py = Get-Command python -ErrorAction SilentlyContinue
     if (-not $py) {
@@ -79,9 +103,18 @@ function Start-JarvisHostagent {
         [void][int]::TryParse($env:HOSTAGENT_PORT, [ref]$port)
     }
 
-    if (Test-HostagentHealth -BindHost $bind -Port $port) {
+    $needScreen = ($env:ENABLE_COMPUTER_USE -eq 'true')
+    $healthy = Test-HostagentHealth -BindHost $bind -Port $port
+    $screenOk = (-not $needScreen) -or (Test-HostagentScreenEndpoint -BindHost $bind -Port $port)
+
+    if ($healthy -and $screenOk) {
         Log "hostagent: already healthy ($bind`:$port)"
         return
+    }
+
+    if ($healthy -and -not $screenOk) {
+        Log "hostagent: stale build (missing /screen/capture) — restarting"
+        Stop-HostagentListener -Port $port
     }
 
     if (-not $env:HOSTAGENT_TOKEN) {
@@ -104,11 +137,13 @@ function Start-JarvisHostagent {
     for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Seconds 1
         if (Test-HostagentHealth -BindHost $bind -Port $port) {
-            Log "hostagent: healthy"
-            return
+            if ((-not $needScreen) -or (Test-HostagentScreenEndpoint -BindHost $bind -Port $port)) {
+                Log "hostagent: healthy"
+                return
+            }
         }
     }
-    Log "hostagent: started but health check failed after 20s"
+    Log "hostagent: started but health/capability check failed after 20s"
 }
 
 $accessDir = Join-Path $root 'data\access'

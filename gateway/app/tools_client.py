@@ -102,3 +102,15 @@ class ToolsClient:
             )
         except httpx.HTTPError as exc:
             logger.error("tools /computer/cancel failed: %s", exc)
+
+    async def capture_screenshot(self, user_id: int) -> str:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/computer/screenshot",
+                json={"user_id": int(user_id)},
+            )
+            resp.raise_for_status()
+            return extract_text(resp.json())
+        except httpx.HTTPError as exc:
+            logger.error("tools /computer/screenshot failed: %s", exc)
+            return "Не вдалося зняти скріншот — перевір host-agent на хості (порт 8400)."

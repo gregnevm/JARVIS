@@ -7,6 +7,7 @@ BTN_STATUS = "📊 Статус"
 BTN_BRIEF = "📋 Бриф"
 BTN_REMINDERS = "⏰ Нагадування"
 BTN_COMPUTER = "💻 Computer"
+BTN_SCREEN = "📸 Скрін"
 BTN_MENU = "🎛 Меню"
 BTN_HIDE = "⌨️ Сховати"
 
@@ -15,8 +16,9 @@ def reply_keyboard(app_url: str | None = None) -> dict[str, Any]:
     """Reply Keyboard — постійні кнопки під полем вводу."""
     rows: list[list[dict[str, str]]] = [
         [{"text": BTN_STATUS}, {"text": BTN_BRIEF}],
-        [{"text": BTN_REMINDERS}, {"text": BTN_COMPUTER}],
-        [{"text": BTN_MENU}, {"text": BTN_HIDE}],
+        [{"text": BTN_REMINDERS}, {"text": BTN_SCREEN}],
+        [{"text": BTN_COMPUTER}, {"text": BTN_MENU}],
+        [{"text": BTN_HIDE}],
     ]
     if app_url and app_url.startswith("https://"):
         rows.insert(0, [{"text": "📊 Dashboard", "web_app": {"url": app_url}}])
