@@ -53,7 +53,7 @@ RAG-контекст із Memory і тул-луп на AGENT-моделі.
 ### Які моделі завантажити
 
 ```bash
-ollama pull qwen3:4b                 # OLLAMA_MODEL_CHAT — швидкий чат
+ollama pull gemma3:4b                # OLLAMA_MODEL_CHAT — швидкий non-thinking чат
 ollama pull qwen2.5:7b-instruct      # OLLAMA_MODEL_AGENT — надійний tool calling
 ollama pull nomic-embed-text         # EMBED_MODEL — ембединги (768 вимірів)
 ```
