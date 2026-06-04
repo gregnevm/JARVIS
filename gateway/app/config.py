@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     tts_url: str = "http://tts:8300"
     # Голосова відповідь (TTS) на голосові повідомлення. Вимкнено за замовчуванням.
     enable_voice_reply: bool = False
+    # Стрім відповіді в Telegram (editMessageText «друкує» текст наживо). Вимкнеш —
+    # бот шле одне фінальне повідомлення (старий шлях). Фолбек на класику авто.
+    enable_streaming: bool = True
     redis_url: str = "redis://redis:6379/0"
     # Агент-луп на CPU повільний (кілька викликів Ollama) — тримаємо запас.
     agent_timeout: float = 300.0

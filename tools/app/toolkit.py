@@ -261,6 +261,14 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             {"text": {**_STR, "description": "текст нотатки"}}, ["text"]),
     _schema("recall_notes", "Показати останні збережені нотатки користувача.",
             {}, []),
+    _schema("set_reminder",
+            "Поставити нагадування. delay_minutes — через скільки хвилин від «Зараз» "
+            "спрацювати (для конкретного часу порахуй від «Зараз» у системному промпті).",
+            {"text": {**_STR, "description": "про що нагадати"},
+             "delay_minutes": {"type": "integer", "description": "через скільки хвилин від зараз"}},
+            ["text", "delay_minutes"]),
+    _schema("list_reminders", "Показати активні (ще не спрацьовані) нагадування користувача.",
+            {}, []),
 ]
 
 _CODE_SCHEMA = _schema(
@@ -302,6 +310,18 @@ async def dispatch(name: str, arguments: dict[str, Any], user_id: int = 0) -> st
             except (TypeError, ValueError):
                 limit = 10
             return recall_notes(user_id, limit)
+        if name == "set_reminder":
+            from .reminders import add_reminder
+
+            try:
+                delay = int(arguments.get("delay_minutes", 0))
+            except (TypeError, ValueError):
+                delay = 0
+            return await add_reminder(user_id, delay, str(arguments.get("text", "")))
+        if name == "list_reminders":
+            from .reminders import list_reminders
+
+            return await list_reminders(user_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("tool %s failed", name)
         return f"Інструмент {name} впав: {exc}"

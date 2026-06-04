@@ -1,5 +1,9 @@
-"""split_message — розбивка довгих повідомлень Telegram (ліміт 4096)."""
-from app.telegram import TELEGRAM_MAX_LEN, split_message
+"""split_message — розбивка довгих повідомлень Telegram (ліміт 4096) + API-методи."""
+import asyncio
+
+import httpx
+
+from app.telegram import TELEGRAM_MAX_LEN, TelegramClient, split_message
 
 
 def test_short_text_single_chunk():
@@ -28,3 +32,42 @@ def test_hard_split_of_overlong_line():
 
 def test_default_limit_constant():
     assert TELEGRAM_MAX_LEN == 4096
+
+
+def _tg_with(handler):
+    tg = TelegramClient("TOKEN")
+    tg._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return tg
+
+
+def test_send_message_id_returns_message_id():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.path.endswith("/sendMessage")
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": 77}})
+
+    async def _run() -> int | None:
+        tg = _tg_with(handler)
+        try:
+            return await tg.send_message_id(5, "hi")
+        finally:
+            await tg.aclose()
+
+    assert asyncio.run(_run()) == 77
+
+
+def test_edit_message_text_hits_endpoint():
+    seen: dict[str, str] = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["path"] = req.url.path
+        return httpx.Response(200, json={"ok": True, "result": {}})
+
+    async def _run() -> None:
+        tg = _tg_with(handler)
+        try:
+            await tg.edit_message_text(5, 77, "новий текст")
+        finally:
+            await tg.aclose()
+
+    asyncio.run(_run())
+    assert seen["path"].endswith("/editMessageText")

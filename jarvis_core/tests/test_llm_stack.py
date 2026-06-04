@@ -1,13 +1,55 @@
+import json
+
 import httpx
+import pytest
 
 from jarvis_core.llm.adapters import KoboldAdapter
+from jarvis_core.llm.chat import OllamaChatBackend
 from jarvis_core.llm.decorators import CacheLLM, StyleLLM, build_llm_stack
-from jarvis_core.llm.parsers import kobold_token, ollama_chunk
+from jarvis_core.llm.parsers import kobold_token, ollama_chat_chunk, ollama_chunk
 
 
 def test_parsers():
     assert kobold_token('data: {"token": "а"}') == "а"
     assert ollama_chunk('{"response": "x", "done": true}') == ("x", True)
+
+
+def test_chat_chunk_parser():
+    assert ollama_chat_chunk('{"message":{"content":"hi"},"done":false}') == ("hi", False)
+    assert ollama_chat_chunk('{"message":{"content":""},"done":true}') == ("", True)
+    assert ollama_chat_chunk("not json") == ("", False)
+    assert ollama_chat_chunk("") == ("", False)
+
+
+async def test_ollama_chat_stream_yields_deltas():
+    lines = [
+        json.dumps({"message": {"content": "При"}, "done": False}),
+        json.dumps({"message": {"content": "віт"}, "done": False}),
+        json.dumps({"message": {"content": ""}, "done": True}),
+    ]
+    body = "\n".join(lines).encode()
+
+    def handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    backend = OllamaChatBackend("http://o", client=client)
+    out = [d async for d in backend.chat_stream("m", [{"role": "user", "content": "hi"}])]
+    assert "".join(out) == "Привіт"
+    await client.aclose()
+
+
+async def test_ollama_chat_stream_trips_breaker_on_error():
+    def handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    backend = OllamaChatBackend("http://o", client=client, fail_threshold=1)
+    with pytest.raises(httpx.HTTPError):
+        async for _ in backend.chat_stream("m", [{"role": "user", "content": "x"}]):
+            pass
+    assert backend._open_until > 0  # брейкер розімкнувся після помилки
+    await client.aclose()
 
 
 def test_cache_hits():

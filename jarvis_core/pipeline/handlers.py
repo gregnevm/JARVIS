@@ -14,20 +14,33 @@ _INJECTION_RE = re.compile(
 )
 
 
+def screen_text(text: str) -> tuple[str | None, AgentResponse | None]:
+    """Чистий safety-скрин (переюз SafetyHandler + стрім-ендпойнт).
+
+    Повертає (safe_text, block): block заданий → відхилити; інакше safe_text —
+    нормалізований (обрізаний до ліміту) текст для інференсу.
+    """
+    t = (text or "").strip()
+    if not t:
+        return None, AgentResponse(
+            text="Надішли текст або голосове повідомлення.", mode="blocked"
+        )
+    if len(t) > _MAX_TEXT:
+        t = t[:_MAX_TEXT]
+    if _INJECTION_RE.search(t):
+        return None, AgentResponse(
+            text="Запит виглядає небезпечно — переформулюй, будь ласка.", mode="blocked"
+        )
+    return t, None
+
+
 class SafetyHandler(Handler):
     async def _process(self, req: AgentRequest) -> AgentResponse | None:
-        text = (req.text or "").strip()
-        if not text:
+        safe, block = screen_text(req.text)
+        if block is not None:
             req.blocked = True
-            return AgentResponse(text="Надішли текст або голосове повідомлення.", mode="blocked")
-        if len(text) > _MAX_TEXT:
-            req.text = text[:_MAX_TEXT]
-        if _INJECTION_RE.search(text):
-            req.blocked = True
-            return AgentResponse(
-                text="Запит виглядає небезпечно — переформулюй, будь ласка.",
-                mode="blocked",
-            )
+            return block
+        req.text = safe or req.text
         return None
 
 

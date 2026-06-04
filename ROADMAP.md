@@ -8,7 +8,7 @@
 
 ---
 
-## Прогрес (оновлено 2026-06-03)
+## Прогрес (оновлено 2026-06-04)
 
 - ✅ **M1** Persistent Ollama (Vulkan+keep_alive 24h, автозапуск) — зроблено, verified.
 - ✅ **M2** Long polling (getUpdates) як дефолт — **без публічного URL/тунелю**, переживає
@@ -22,11 +22,16 @@
 - ✅ **N5** Log rotation — зроблено (≤50 МБ/контейнер).
 - ✅ **E3** Multi-user — підтверджено (ізоляція по user_id у БД + per-user rate limit).
 - ✅ **E4 (нотатки)** take_note/recall_notes + inline tool-call фолбек — зроблено, verified.
-  - ⏳ **E4 (reminder)** активне спрацювання — окремий follow-up (Redis ZSET + gateway-поллер).
+- ✅ **E4 (reminder)** активні нагадування — `set_reminder`/`list_reminders` (Redis ZSET) +
+  gateway-поллер (`deliver_due`), час інжектиться в agent-промпт. Покрито тестами (на live чека ребілд).
 - ✅ **N1** voice reply (TTS) — новий сервіс `tts/` (piper→OGG/Opus, uk голос), gateway
   шле голосом на голосові (текст-first фолбек, прапор `ENABLE_VOICE_REPLY`). Verified: OggS/Opus.
-- ⏳ **N2** admin UI, **N3** streaming — великі білди, попереду.
-- ⏳ **E1** llama.cpp benchmark, **E2** Ollama-in-Docker GPU — експерименти, попереду.
+- ✅ **N2** web-діагностика → **Telegram Mini App** (`/app` + JSON-API, initData-HMAC,
+  cloudflared-tunnel). Merged (PR #2), live на :8000/app.
+- ✅ **N3** streaming-відповіді — Ollama `/api/chat` stream → Tools NDJSON (`/agent/stream`) →
+  gateway `editMessageText`. Покрито тестами (на live чека ребілд `gateway`+`tools`).
+- ⏳ **E1** llama.cpp benchmark, **E2** Ollama-in-Docker GPU (вердикт: НІ на цій машині) — експерименти.
+- ⏳ **Twin Етап B/C/D** (Edge MVP · курація даних+eval · RunPod-training) — `docs/GAP_ANALYSIS.md`.
 
 ---
 
@@ -190,6 +195,23 @@ Toolkit має `calc, web_search, web_fetch, parse_file, code_exec`. Очеви�
 
 Архітектура агент-лупа (фаза 6) робить це питанням 50 рядків Python + JSON-схема
 кожен. Додати в `tools/app/toolkit.py` + `TOOL_SCHEMAS`.
+
+### E5. Computer Use (Agent Mode) — керування реальним комп'ютером
+**Ідея:** дати агентові керувати Windows-хостом (PowerShell, файли, браузер, GUI)
+з вшитим принципом «найшвидший шлях»: T0 PowerShell/CLI → T2 браузер по DOM →
+T3 UI Automation → T4 піксельний клік (лише як резерв, потребує vision-моделі).
+
+**Архітектура:** новий **host-agent** (FastAPI на хості, поза Compose — контейнер не
+бачить десктоп/мишу/вікна), `tools/` кличе його через `host.docker.internal`; браузер
+(Playwright/CDP) можна тримати в контейнері. Надбудова над наявним тул-лупом —
+нові інструменти в `toolkit.py` + `AGENT_MODE=computer`.
+
+**Безпека:** усе за прапорами (`ENABLE_COMPUTER_USE=false`, `COMPUTER_ALLOW_ADMIN=false`
+дефолт), підтвердження дій inline-кнопками в Telegram, whitelist команд, аудит у
+`data/logs/computer.jsonl`. Дати LLM admin-shell = root на машині — обережно.
+
+**Фази:** C0 каркас host-agent → C1 T0/T1 toolkit → C2 підтвердження+аудит →
+C3 браузер → C4 UIA → C5 admin → C6 vision (опц.). Повний план: `docs/COMPUTER_USE.md`.
 
 ---
 

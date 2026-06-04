@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
 import httpx
 
 from jarvis_core.llm.exceptions import CircuitOpen
 from jarvis_core.llm.interface import LLMInterface
+from jarvis_core.llm.parsers import ollama_chat_chunk
 
 logger = logging.getLogger("jarvis_core.llm.chat")
 
@@ -21,6 +23,13 @@ class ChatBackend(Protocol):
         tools: list[dict[str, Any]] | None = None,
         num_predict: int = 1024,
     ) -> dict[str, Any]: ...
+
+    def chat_stream(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        num_predict: int = 1024,
+    ) -> AsyncIterator[str]: ...
 
 
 def messages_to_prompt(messages: list[dict[str, Any]]) -> str:
@@ -119,6 +128,37 @@ class OllamaChatBackend:
         self._fails = 0
         return msg
 
+    async def chat_stream(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        num_predict: int = 1024,
+    ) -> AsyncIterator[str]:
+        """Стрімить дельти /api/chat (stream=True). Той самий брейкер, що й chat()."""
+        remaining = self._open_until - time.monotonic()
+        if remaining > 0:
+            raise CircuitOpen(f"Ollama circuit open ~{int(remaining)}s")
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "options": {"num_predict": num_predict},
+        }
+        try:
+            async with self._client.stream("POST", self._url, json=payload) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    text, done = ollama_chat_chunk(line)
+                    if text:
+                        yield text
+                    if done:
+                        break
+        except httpx.HTTPError:
+            self._trip()
+            raise
+        self._fails = 0
+
 
 class CompositeChatBackend:
     """Tool-луп через Ollama chat; простий чат — через LLMInterface (DESIGN bridge)."""
@@ -140,3 +180,13 @@ class CompositeChatBackend:
         if tools:
             return await self._ollama.chat(model, messages, tools=tools, num_predict=num_predict)
         return await self._llm_chat.chat(model, messages, tools=None, num_predict=num_predict)
+
+    async def chat_stream(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        num_predict: int = 1024,
+    ) -> AsyncIterator[str]:
+        # Стрім токенів — лише через Ollama /api/chat (LLMInterface.stream синхронний).
+        async for delta in self._ollama.chat_stream(model, messages, num_predict=num_predict):
+            yield delta

@@ -13,6 +13,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 from . import router
 from .config import settings
+from .reminders import reminder_loop
 from .services import ServicesClient
 from .webapp import router as webapp_router
 from .tools_client import ToolsClient
@@ -49,6 +50,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if mode == "polling":
         poll_task = asyncio.create_task(_poll_loop(app))
 
+    # Поллер нагадувань — незалежний від ingest-режиму (шле прострочене з Redis ZSET).
+    reminder_task = asyncio.create_task(reminder_loop(app.state.redis, app.state.tg))
+
     # Mini App: якщо є публічний https-URL — реєструємо кнопку-меню (вхід у дашборд).
     if settings.public_app_url.startswith("https://"):
         await app.state.tg.set_chat_menu_button(settings.public_app_url, "📊 Dashboard")
@@ -63,10 +67,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
 
-    if poll_task is not None:
-        poll_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await poll_task
+    for task in (poll_task, reminder_task):
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
     await app.state.tg.aclose()
     await app.state.tools.aclose()
     await app.state.svc.aclose()

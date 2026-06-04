@@ -38,13 +38,22 @@ def test_hybrid_note_to_agent():
 
 # --- фейки ---
 class FakeOllama:
-    def __init__(self, responses: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        responses: list[dict[str, Any]],
+        stream_tokens: list[str] | None = None,
+    ) -> None:
         self._responses = list(responses)
+        self._stream_tokens = list(stream_tokens or [])
         self.calls: list[dict[str, Any]] = []
 
     async def chat(self, model, messages, tools=None, num_predict=1024):
         self.calls.append({"model": model, "tools": tools})
         return self._responses.pop(0)
+
+    async def chat_stream(self, model, messages, num_predict=1024):
+        for tok in self._stream_tokens:
+            yield tok
 
 
 class FakeMemory:
@@ -87,6 +96,37 @@ async def test_run_agent_mode_tool_loop(monkeypatch):
     assert out["mode"] == "agent"
     assert out["iters"] == 2  # 1 ітерація з тулом + 1 з фінальним текстом
     assert ollama.calls[0]["tools"] is not None  # інструменти передані моделі
+
+
+async def test_run_stream_chat_mode(monkeypatch):
+    monkeypatch.setattr(settings, "agent_mode", "chat")
+    ollama = FakeOllama([], stream_tokens=["При", "віт", "!"])
+    mem = FakeMemory()
+    events = [ev async for ev in AgentRunner(ollama, mem).run_stream(1, "привіт")]
+    deltas = "".join(e["delta"] for e in events if "delta" in e)
+    assert deltas == "Привіт!"
+    done = events[-1]
+    assert done["done"] is True and done["mode"] == "chat" and done["text"] == "Привіт!"
+    assert mem.stored == [("user", "привіт"), ("assistant", "Привіт!")]
+
+
+async def test_run_stream_agent_mode_status_and_answer(monkeypatch):
+    monkeypatch.setattr(settings, "agent_mode", "agent")
+    ollama = FakeOllama(
+        [
+            {"role": "assistant", "content": "",
+             "tool_calls": [{"function": {"name": "calc", "arguments": {"expression": "2+2"}}}]},
+            {"role": "assistant", "content": "Відповідь: 4"},
+        ]
+    )
+    mem = FakeMemory()
+    events = [ev async for ev in AgentRunner(ollama, mem).run_stream(1, "скільки буде 2+2")]
+    statuses = [e["status"] for e in events if "status" in e]
+    assert any("рахую" in s for s in statuses)  # статус-мітка інструмента calc
+    done = events[-1]
+    assert done["done"] is True and done["mode"] == "agent"
+    assert done["text"] == "Відповідь: 4" and done["iters"] == 2
+    assert ("assistant", "Відповідь: 4") in mem.stored
 
 
 async def test_run_fallback_on_empty_answer(monkeypatch):

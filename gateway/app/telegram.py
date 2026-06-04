@@ -100,6 +100,37 @@ class TelegramClient:
                         plain["reply_markup"] = reply_markup
                     await self._call("sendMessage", plain)
 
+    async def send_message_id(
+        self, chat_id: int, text: str, parse_mode: str | None = None
+    ) -> int | None:
+        """Шле одне (нерозбите) повідомлення і повертає message_id — для стрім-плейсхолдера."""
+        payload: dict[str, Any] = {"chat_id": chat_id, "text": text[:TELEGRAM_MAX_LEN]}
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        try:
+            data = await self._call("sendMessage", payload)
+        except httpx.HTTPError as exc:
+            logger.error("sendMessage(id) failed: %s", exc)
+            return None
+        mid = (data.get("result") or {}).get("message_id")
+        return int(mid) if isinstance(mid, int) else None
+
+    async def edit_message_text(
+        self, chat_id: int, message_id: int, text: str, parse_mode: str | None = None
+    ) -> None:
+        """editMessageText. 'message is not modified' та інші помилки лише логуються."""
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text[:TELEGRAM_MAX_LEN],
+        }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        try:
+            await self._call("editMessageText", payload)
+        except httpx.HTTPError as exc:
+            logger.debug("editMessageText failed: %s", exc)
+
     async def set_chat_menu_button(self, url: str, text: str = "Dashboard") -> None:
         """Реєструє кнопку-меню (зліва від поля вводу) як вхід у Mini App.
 
