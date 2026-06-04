@@ -19,7 +19,10 @@ from .auth import allowed_ids_snapshot, bind_access_store
 from .config import settings
 from .bot.setup import register_bot_ui
 from .reminders import reminder_loop
+from .health_watch import health_watch_loop
+from .job_runner import job_runner_loop
 from .services import ServicesClient
+from .admin_panel import router as admin_panel_router
 from .webapp import router as webapp_router
 from .tools_client import ToolsClient
 from .ratelimit import RateLimiter
@@ -85,6 +88,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             interval=settings.reminder_poll_seconds,
         )
     )
+    health_task: asyncio.Task[None] | None = None
+    if settings.health_watch_interval > 0:
+        alert_ids = settings.health_alert_ids
+        health_task = asyncio.create_task(
+            health_watch_loop(
+                app.state.redis,
+                app.state.tg,
+                app.state.svc,
+                settings.health_watch_interval,
+                alert_ids=alert_ids or None,
+            )
+        )
+    job_task = asyncio.create_task(
+        job_runner_loop(app.state.tools, app.state.tg, interval=30.0)
+    )
 
     # BotFather UI: команди, опис, Mini App menu button.
     await register_bot_ui(app.state.tg)
@@ -102,7 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
 
-    for task in (poll_task, reminder_task):
+    for task in (poll_task, reminder_task, health_task, job_task):
         if task is not None:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -148,6 +166,7 @@ async def _poll_loop(app: FastAPI) -> None:
 
 app = FastAPI(title="JARVIS Gateway", lifespan=lifespan)
 app.include_router(webapp_router)
+app.include_router(admin_panel_router)
 
 
 @app.get("/health")

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JARVIS Admin</title>
+<style>
+  :root {
+    --bg: #080c12; --bg2: #101820; --card: rgba(255,255,255,.045); --brd: rgba(255,255,255,.09);
+    --txt: #e8ecf4; --muted: #8b95a8; --accent: #ff8c42; --accent2: #e85d75;
+    --ok: #2dd4a7; --bad: #ff5d6c; --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", sans-serif; color: var(--txt);
+    background: radial-gradient(1000px 500px at 100% 0%, rgba(232,93,117,.14), transparent 50%),
+      radial-gradient(800px 400px at 0% 0%, rgba(255,140,66,.12), transparent 45%), var(--bg);
+    min-height: 100vh; padding: 20px 16px 40px;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .logo { width: 46px; height: 46px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center; font-size: 22px; }
+  h1 { margin: 0; font-size: 21px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .hdr-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tab { border: 1px solid var(--brd); background: var(--card); color: var(--muted);
+    padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .tab.active { color: #fff; border-color: transparent;
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  button { border: 1px solid var(--brd); background: var(--card); color: var(--txt);
+    padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  button.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border: 0; color: #fff; }
+  button.danger { color: #ffb4bc; border-color: rgba(255,93,108,.4); }
+  button:disabled { opacity: .5; }
+  .section { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--muted); margin: 18px 2px 8px; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .card { background: var(--card); border: 1px solid var(--brd); border-radius: var(--radius); padding: 14px; }
+  .card.wide { grid-column: 1 / -1; }
+  .k { font-size: 11.5px; color: var(--muted); }
+  .v { font-size: 16px; font-weight: 650; margin-top: 5px; word-break: break-word; }
+  .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .dot.bad { background: var(--bad); }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; display: inline-block; }
+  .badge.on { background: rgba(45,212,167,.15); color: var(--ok); }
+  .badge.off { background: rgba(139,149,168,.15); color: var(--muted); }
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+    background: rgba(0,0,0,.28); padding: 6px; border-radius: 12px; }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 10px 4px; border-radius: 8px; }
+  .seg button.active { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--brd); }
+  th { color: var(--muted); font-size: 10.5px; text-transform: uppercase; }
+  .settings-group { margin-bottom: 14px; }
+  .settings-group h4 { margin: 0 0 8px; font-size: 13px; color: var(--accent); }
+  .settings-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0;
+    border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; }
+  .settings-row .lbl { color: var(--muted); }
+  .err { display: none; background: rgba(255,93,108,.12); border: 1px solid rgba(255,93,108,.35);
+    color: #ffd2d6; padding: 12px; border-radius: 12px; margin-bottom: 12px; font-size: 13px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  input[type=number] { width: 150px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--brd);
+    background: rgba(0,0,0,.25); color: var(--txt); }
+  label.chk { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 50;
+    align-items: center; justify-content: center; padding: 16px; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--brd); border-radius: 16px; padding: 20px; max-width: 420px; width: 100%; }
+  .modal h3 { margin: 0 0 8px; }
+  .modal p { color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #1a2233;
+    border: 1px solid var(--brd); padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; z-index: 99; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+  a.link { color: var(--accent); text-decoration: none; }
+  @media (max-width: 600px) { .seg { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🛠</div>
+    <div>
+      <h1>JARVIS Admin</h1>
+      <div class="sub" id="statusLine">завантаження…</div>
+    </div>
+    <div class="hdr-actions">
+      <label class="chk"><input type="checkbox" id="autoRefresh" /> Авто 30с</label>
+      <button type="button" id="btnRefresh">⟳ Оновити</button>
+      <a class="link" href="/app" target="_blank" rel="noopener">Mini App ↗</a>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button type="button" class="tab active" data-tab="overview">Огляд</button>
+    <button type="button" class="tab" data-tab="settings">Налаштування</button>
+    <button type="button" class="tab" data-tab="access">Доступ</button>
+    <button type="button" class="tab" data-tab="ops">Операції</button>
+  </nav>
+
+  <div class="err" id="err"></div>
+
+  <div class="panel active" id="panel-overview">
+    <div class="section">Стек (runtime)</div>
+    <div class="grid" id="stackGrid"></div>
+    <div class="section">Сервіси (HTTP)</div>
+    <div class="grid" id="svcGrid"></div>
+    <div class="section">Core</div>
+    <div class="grid" id="coreGrid"></div>
+    <div class="section">Режим агента</div>
+    <div class="card wide">
+      <div class="seg" id="seg">
+        <button type="button" data-mode="chat">Chat</button>
+        <button type="button" data-mode="agent">Agent</button>
+        <button type="button" data-mode="hybrid">Hybrid</button>
+        <button type="button" data-mode="computer">Computer</button>
+      </div>
+      <div class="toolbar" style="margin-top:12px">
+        <button type="button" class="danger" id="btnResetMode">↩ Скинути до .env</button>
+        <span class="hint">env: <span id="envMode" class="mono">—</span> · runtime: <span id="rtMode" class="mono">—</span></span>
+      </div>
+    </div>
+    <div class="section">Twin</div>
+    <div class="card wide mono" id="twinBox">—</div>
+  </div>
+
+  <div class="panel" id="panel-settings">
+    <p class="hint">Ці параметри з <code>.env</code>. Щоб змінити — відредагуй .env і виконай <code>docker compose up -d gateway tools</code>.</p>
+    <div id="settingsBox"></div>
+  </div>
+
+  <div class="panel" id="panel-access">
+    <div class="toolbar">
+      <input type="number" id="approveId" min="1" placeholder="Telegram ID" />
+      <button type="button" class="primary" id="btnApproveId">✅ Дозволити ID</button>
+    </div>
+    <div class="section">Запити <span id="pendingCount"></span></div>
+    <div class="card wide"><table><thead><tr><th>Користувач</th><th>ID</th><th></th></tr></thead>
+      <tbody id="pendingBody"></tbody></table></div>
+    <div class="section">Погоджені</div>
+    <div class="card wide"><table><thead><tr><th>Користувач</th><th>ID</th><th></th></tr></thead>
+      <tbody id="approvedBody"></tbody></table></div>
+    <div class="section">Whitelist .env · адміни</div>
+    <div class="card wide mono" id="accessMeta">—</div>
+    <div class="section">Rate-limit</div>
+    <div class="card wide toolbar">
+      <input type="number" id="rlUser" min="1" placeholder="user ID" />
+      <button type="button" id="btnRlReset">Скинути лічильник</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-ops">
+    <div class="section">Computer — очікує підтвердження</div>
+    <div class="card wide mono" id="cmpPending">—</div>
+    <div class="section">Computer — audit (останні)</div>
+    <div class="card wide mono" id="cmpAudit">—</div>
+    <div class="section">Заплановані jobs</div>
+    <div class="card wide mono" id="jobsBox">—</div>
+    <div class="toolbar" style="margin-top:12px">
+      <input type="number" id="trustId" min="1" placeholder="user ID для trust 30х" />
+      <button type="button" id="btnTrust">🔓 Trust</button>
+    </div>
+  </div>
+
+  <footer id="footer">—</footer>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle">Підтвердження</h3>
+    <p id="modalText"></p>
+    <div class="modal-btns">
+      <button type="button" id="modalCancel">Скасувати</button>
+      <button type="button" class="primary" id="modalOk">Підтвердити</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  let busy = false, pendingAction = null, refreshTimer = null, lastData = null;
+
+  function toast(msg, bad) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.style.display = "block";
+    t.style.borderColor = bad ? "rgba(255,93,108,.5)" : "var(--brd)";
+    setTimeout(() => { t.style.display = "none"; }, 3000);
+  }
+  function fail(msg) { $("err").textContent = "⚠️ " + msg; $("err").style.display = "block"; }
+  function clearErr() { $("err").style.display = "none"; }
+
+  async function api(path, opts) {
+    const r = await fetch(path, Object.assign({ cache: "no-store" }, opts || {}));
+    if (r.status === 401) { fail("Потрібна авторизація — оновіть сторінку."); throw new Error("401"); }
+    if (!r.ok) {
+      let d = "HTTP " + r.status;
+      try { const j = await r.json(); if (j.detail) d = String(j.detail); } catch (e) {}
+      throw new Error(d);
+    }
+    const ct = r.headers.get("content-type") || "";
+    return ct.includes("json") ? r.json() : {};
+  }
+
+  function esc(s) { const d = document.createElement("div"); d.textContent = String(s); return d.innerHTML; }
+  function badgeFlag(f) {
+    if (!f || typeof f !== "object") return esc(f);
+    const on = !!f.on;
+    return '<span class="badge ' + (on ? "on" : "off") + '">' + esc(f.label || (on ? "on" : "off")) + '</span>';
+  }
+  function fmtVal(v) {
+    if (v && typeof v === "object" && "on" in v) return badgeFlag(v);
+    if (Array.isArray(v)) return esc(v.join(", ") || "—");
+    return esc(v == null || v === "" ? "—" : v);
+  }
+
+  const GROUP_TITLES = {
+    telegram: "Telegram", agent: "Агент", limits: "Ліміти", computer: "Computer Use",
+    models: "Моделі", health: "Health / нагадування", access: "Доступ",
+  };
+
+  function renderSettings(s) {
+    if (!s) { $("settingsBox").innerHTML = "<p class='hint'>немає даних</p>"; return; }
+    let html = "";
+    for (const [gk, group] of Object.entries(s)) {
+      html += '<div class="settings-group card wide"><h4>' + esc(GROUP_TITLES[gk] || gk) + '</h4>';
+      for (const [k, v] of Object.entries(group)) {
+        html += '<div class="settings-row"><span class="lbl">' + esc(k.replace(/_/g, " ")) + '</span><span>' + fmtVal(v) + '</span></div>';
+      }
+      html += "</div>";
+    }
+    $("settingsBox").innerHTML = html;
+  }
+
+  function renderStack(stack) {
+    const g = $("stackGrid");
+    g.innerHTML = "";
+    for (const [k, v] of Object.entries(stack || {})) {
+      const ok = !!(v && v.ok);
+      g.innerHTML += '<div class="card"><div class="k">' + esc((v && v.label) || k) + '</div><div class="v">'
+        + '<span class="dot ' + (ok ? "ok" : "bad") + '"></span>' + (ok ? "online" : "offline") + '</div></div>';
+    }
+  }
+
+  function renderServices(svcs) {
+    const g = $("svcGrid");
+    g.innerHTML = "";
+    (svcs || []).forEach((s) => {
+      g.innerHTML += '<div class="card"><div class="k">' + esc(s.name) + '</div><div class="v">'
+        + '<span class="dot ' + (s.ok ? "ok" : "bad") + '"></span>'
+        + (s.ok ? ("OK " + s.ms + "ms") : ("fail " + (s.error || s.status))) + '</div></div>';
+    });
+  }
+
+  function renderCore(c) {
+    const up = !!c.ollama_up && !c.error;
+    $("statusLine").textContent = c.error ? "Tools недоступні" : (up ? "стек online" : "Ollama offline");
+    const items = [
+      ["Ollama", (up ? "🟢 " : "🔴 ") + (c.ollama_host || "—")],
+      ["Chat", c.chat_model], ["Agent", c.agent_model], ["Vision", c.vision_model || "—"],
+      ["Code exec", c.code_exec ? "on" : "off"], ["Browser", c.enable_browser ? "on" : "off"],
+    ];
+    $("coreGrid").innerHTML = items.map(([k, v]) =>
+      '<div class="card"><div class="k">' + esc(k) + '</div><div class="v mono">' + esc(v) + '</div></div>'
+    ).join("");
+    const mode = c.agent_mode || "?";
+    $("envMode").textContent = c.agent_mode_env || "—";
+    $("rtMode").textContent = mode;
+    document.querySelectorAll("#seg button").forEach((b) =>
+      b.classList.toggle("active", b.dataset.mode === mode));
+  }
+
+  function renderTwin(tw) {
+    if (!tw || !Object.keys(tw).length) { $("twinBox").textContent = "немає даних"; return; }
+    const edges = tw.edges || {};
+    const total = Object.values(edges).reduce((a, b) => a + b, 0);
+    const lora = tw.active_lora;
+    $("twinBox").textContent = "Edge logs: " + total + " (" + Object.keys(edges).length + " edge)"
+      + (lora ? " · LoRA v" + lora.version + " eval " + lora.eval_score : " · LoRA —");
+  }
+
+  function renderUsers(tbodyId, users, pending) {
+    const tb = $(tbodyId);
+    if (!users.length) { tb.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">немає</td></tr>'; return; }
+    tb.innerHTML = users.map((u) => {
+      const acts = pending
+        ? '<button data-act="approve" data-id="' + u.user_id + '">✅</button><button class="danger" data-act="deny" data-id="' + u.user_id + '">❌</button>'
+        : '<button class="danger" data-act="revoke" data-id="' + u.user_id + '">🚫</button>';
+      return "<tr><td>" + esc(u.label) + "</td><td class='mono'>" + u.user_id
+        + "</td><td style='white-space:nowrap'>" + acts + "</td></tr>";
+    }).join("");
+  }
+
+  function renderOps(op) {
+    const p = op.computer_pending || {};
+    $("cmpPending").textContent = p.pending ? ("так · " + (p.tool || "?")) : "немає";
+    const entries = op.computer_audit || [];
+    $("cmpAudit").textContent = entries.length
+      ? entries.slice(0, 12).map((e) => "• " + (e.tool || "?") + " " + new Date((e.ts || 0) * 1000).toLocaleString("uk-UA")).join("\n")
+      : "порожньо";
+    const jobs = op.due_jobs || [];
+    $("jobsBox").textContent = jobs.length
+      ? jobs.map((j) => "• " + (j.name || j.id || "?") + " @ " + (j.run_at || j.due || "?")).join("\n")
+      : "немає запланованих";
+  }
+
+  function renderAll(d) {
+    lastData = d;
+    renderStack(d.stack);
+    renderServices(d.services);
+    renderCore(d.core || {});
+    renderTwin(d.twin);
+    renderSettings(d.settings);
+    const acc = d.access || {};
+    renderUsers("pendingBody", acc.pending || [], true);
+    renderUsers("approvedBody", acc.approved || [], false);
+    $("pendingCount").textContent = (acc.pending || []).length ? "(" + acc.pending.length + ")" : "";
+    $("accessMeta").textContent = "Whitelist .env: " + (acc.env_whitelist || []).join(", ")
+      + "\nАдміни: " + (acc.admin_ids || []).join(", ")
+      + "\nДинамічний whitelist: " + (acc.dynamic_whitelist || []).join(", ");
+    renderOps(d.operations || {});
+    $("footer").textContent = "оновлено " + new Date((d.ts || 0) * 1000).toLocaleString("uk-UA");
+    clearErr();
+  }
+
+  function confirmModal(title, text, fn) {
+    $("modalTitle").textContent = title;
+    $("modalText").textContent = text;
+    pendingAction = fn;
+    $("modalBg").classList.add("open");
+  }
+  $("modalCancel").onclick = () => { pendingAction = null; $("modalBg").classList.remove("open"); };
+  $("modalOk").onclick = async () => {
+    const fn = pendingAction; pendingAction = null; $("modalBg").classList.remove("open");
+    if (fn) await fn();
+  };
+
+  async function load() {
+    if (busy) return;
+    busy = true;
+    $("btnRefresh").disabled = true;
+    try { renderAll(await api("admin/api/overview")); }
+    catch (e) { if (e.message !== "401") fail(e.message); }
+    finally { busy = false; $("btnRefresh").disabled = false; }
+  }
+
+  document.querySelectorAll("#tabs .tab").forEach((tab) => {
+    tab.onclick = () => {
+      document.querySelectorAll("#tabs .tab").forEach((t) => t.classList.toggle("active", t === tab));
+      document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+      $("panel-" + tab.dataset.tab).classList.add("active");
+    };
+  });
+
+  $("btnRefresh").onclick = () => load();
+  $("autoRefresh").onchange = () => {
+    clearInterval(refreshTimer);
+    if ($("autoRefresh").checked) refreshTimer = setInterval(load, 30000);
+  };
+
+  document.querySelectorAll("#seg button").forEach((btn) => {
+    btn.onclick = () => confirmModal("Режим", "Встановити «" + btn.dataset.mode + "»?", async () => {
+      try {
+        const res = await api("admin/api/mode", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: btn.dataset.mode }) });
+        toast("Режим: " + (res.mode || btn.dataset.mode));
+        await load();
+      } catch (e) { toast(e.message, true); }
+    });
+  });
+
+  $("btnResetMode").onclick = () => confirmModal("Скинути", "Повернути AGENT_MODE з .env?", async () => {
+    try {
+      const res = await api("admin/api/mode", { method: "DELETE" });
+      toast("→ " + (res.mode || "?")); await load();
+    } catch (e) { toast(e.message, true); }
+  });
+
+  $("btnRlReset").onclick = () => {
+    const uid = parseInt($("rlUser").value, 10);
+    if (!uid) return toast("Вкажи ID", true);
+    confirmModal("Rate-limit", "Скинути для " + uid + "?", async () => {
+      try {
+        const res = await api("admin/api/ratelimit/reset", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: uid }) });
+        toast(res.message || "ok", !res.ok); await load();
+      } catch (e) { toast(e.message, true); }
+    });
+  };
+
+  $("btnApproveId").onclick = () => {
+    const uid = parseInt($("approveId").value, 10);
+    if (!uid) return toast("Вкажи ID", true);
+    confirmModal("Доступ", "Дозволити " + uid + "?", async () => {
+      try {
+        const res = await api("admin/api/access/approve", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: uid }) });
+        toast(res.ok ? "дозволено" : (res.message || "помилка"), !res.ok); await load();
+      } catch (e) { toast(e.message, true); }
+    });
+  };
+
+  $("btnTrust").onclick = () => {
+    const uid = parseInt($("trustId").value, 10);
+    if (!uid) return toast("Вкажи ID", true);
+    confirmModal("Trust", "Trust 30 хв для " + uid + "?", async () => {
+      try {
+        await api("admin/api/computer/trust", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: uid }) });
+        toast("trusted"); await load();
+      } catch (e) { toast(e.message, true); }
+    });
+  };
+
+  document.body.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!t || !t.dataset || !t.dataset.act) return;
+    const act = t.dataset.act, id = parseInt(t.dataset.id, 10);
+    const map = { approve: "admin/api/access/approve", deny: "admin/api/access/deny", revoke: "admin/api/access/revoke" };
+    confirmModal(act, act + " для " + id + "?", async () => {
+      try {
+        const res = await api(map[act], { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: id }) });
+        toast(res.message || (res.ok ? "ok" : "fail"), !res.ok); await load();
+      } catch (e) { toast(e.message, true); }
+    });
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

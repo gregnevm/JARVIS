@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # Tools — агент-луп (DESIGN: без n8n-проксі)
     tools_url: str = "http://tools:8200"
+    memory_url: str = "http://memory:8100"
     twin_url: str = "http://twin:8765"
     whisper_url: str = "http://whisper:9000"
     whisper_language: str = ""  # порожньо = автовизначення мови
@@ -60,20 +61,50 @@ class Settings(BaseSettings):
     # Дозволити відкривати /app та /app/* без Telegram initData (для локального
     # перегляду в браузері). У проді (named tunnel) лиши False — пускає лише з Telegram.
     webapp_dev_open: bool = True
+
+    # Веб-панель адміна на /admin (HTTP Basic Auth). Порожній пароль = панель вимкнена.
+    admin_panel_user: str = "admin"
+    admin_panel_password: str = ""
     # Публічний URL для webhook (лише TELEGRAM_INGEST_MODE=webhook).
     telegram_webhook_url: str = ""
-    # Режим computer лише для ADMIN_USER_IDS.
+    # Telegram ID з доступом до Computer Use. Порожньо → ADMIN_USER_IDS → ALLOWED_USER_IDS (.env).
+    # Друзі з /allow сюди НЕ потрапляють — лише явний whitelist.
+    computer_owner_user_ids: str = ""
+    # Режим computer лише для ADMIN_USER_IDS (застарілий прапор; краще COMPUTER_OWNER_USER_IDS).
     computer_mode_admins_only: bool = False
     # Інтервал поллера нагадувань (секунди).
     reminder_poll_seconds: float = 20.0
     # Ігнорувати edited_message (не перезапускати агента).
     ignore_edited_messages: bool = True
+    # Proactive health alerts (host-agent, Ollama, Docker). 0 = вимкнено.
+    health_watch_interval: float = 300.0
+    health_alert_user_ids: str = ""
+    # Drop Zone: дефолтний каталог на хості для файлів з Telegram (caption «на диск»).
+    hostagent_drop_dir: str = ""
+    # Макс. розмір файлу для /file pull (байти, Telegram cap ~50MB).
+    remote_file_max_bytes: int = 48 * 1024 * 1024
 
     @property
     def allowed_ids(self) -> set[int]:
         """ALLOWED_USER_IDS ('1,2,3') → set[int]. Порожньо = нікого не пускаємо."""
         ids: set[int] = set()
         for part in self.allowed_user_ids.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                ids.add(int(part))
+            except ValueError:
+                continue
+        return ids
+
+    @property
+    def health_alert_ids(self) -> set[int]:
+        raw = self.health_alert_user_ids.strip()
+        if not raw:
+            return set()
+        ids: set[int] = set()
+        for part in raw.split(","):
             part = part.strip()
             if not part:
                 continue
