@@ -19,6 +19,8 @@ BOT_COMMANDS: list[dict[str, str]] = [
     {"command": "sync", "description": "Twin ingest + LoRA"},
     {"command": "help", "description": "Довідка"},
     {"command": "keyboard", "description": "Показати або сховати кнопки"},
+    {"command": "pending", "description": "Черга доступу (адмін)"},
+    {"command": "allow", "description": "Погодити доступ (адмін)"},
 ]
 
 BOT_DESCRIPTION = (

@@ -75,8 +75,20 @@ def admin_menu_keyboard() -> dict[str, Any]:
                 {"text": "Mode → Computer", "callback_data": "adm:Y:m:computer"},
             ],
             [{"text": "↩️ Reset mode (.env)", "callback_data": "adm:Y:r"}],
+            [{"text": "📋 Запити доступу", "callback_data": "acc:list"}],
             [{"text": "🔓 Мій rate-limit", "callback_data": "adm:Y:rl:self"}],
             [{"text": "« Звичайне меню", "callback_data": "dash:menu"}],
+        ]
+    }
+
+
+def access_decision_keyboard(user_id: int) -> dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Дозволити", "callback_data": f"acc:y:{user_id}"},
+                {"text": "❌ Відхилити", "callback_data": f"acc:n:{user_id}"},
+            ]
         ]
     }
 

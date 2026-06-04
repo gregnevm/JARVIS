@@ -11,7 +11,11 @@ from typing import Any, AsyncIterator
 import redis.asyncio as aioredis
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
+from pathlib import Path
+
 from . import router
+from .access_store import AccessStore
+from .auth import allowed_ids_snapshot, bind_access_store
 from .config import settings
 from .bot.setup import register_bot_ui
 from .reminders import reminder_loop
@@ -54,6 +58,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.limiter = RateLimiter(app.state.redis, settings.rate_limit_per_min)
     app.state.tts = TtsClient(settings.tts_url) if settings.enable_voice_reply else None
 
+    access_store = AccessStore(Path(settings.access_store_path))
+    await access_store.load()
+    bind_access_store(access_store)
+    app.state.access_store = access_store
+
     mode = settings.telegram_ingest_mode.strip().lower()
     poll_task: asyncio.Task[None] | None = None
     if mode == "polling":
@@ -80,11 +89,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # BotFather UI: команди, опис, Mini App menu button.
     await register_bot_ui(app.state.tg)
 
+    wl = sorted(allowed_ids_snapshot())
+    pending_n = len(access_store.pending_ids)
     logger.info(
-        "Gateway up. ingest=%s | Whitelist: %s | rate_limit=%s/min | voice_reply=%s",
+        "Gateway up. ingest=%s | Whitelist: %s | pending=%s | rate=%s/min guest=%s | voice=%s",
         mode,
-        sorted(settings.allowed_ids) or "ПОРОЖНІЙ (нікого не пускає!)",
+        wl or "ПОРОЖНІЙ (нікого не пускає!)",
+        pending_n,
         settings.rate_limit_per_min,
+        settings.guest_rate_limit_per_min or "same",
         settings.enable_voice_reply,
     )
     yield

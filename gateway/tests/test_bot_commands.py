@@ -85,7 +85,7 @@ def test_start_skips_agent(monkeypatch):
             return {}
 
     class Lim:
-        async def allow(self, user_id: int) -> bool:
+        async def allow(self, user_id: int, *, limit: int | None = None) -> bool:
             return True
 
     class STT:
@@ -166,7 +166,7 @@ def test_quick_status_skips_agent(monkeypatch):
             return {}
 
     class Lim:
-        async def allow(self, user_id: int) -> bool:
+        async def allow(self, user_id: int, *, limit: int | None = None) -> bool:
             return True
 
     monkeypatch.setattr(settings, "allowed_user_ids", "42")

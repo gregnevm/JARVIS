@@ -11,7 +11,9 @@ from ..services import ServicesClient
 from ..telegram import TelegramClient
 from ..tools_client import ToolsClient
 from .dashboard import esc, format_dashboard, format_help
+from .access import handle_access_command, is_access_command
 from .admin import handle_admin_command, is_admin_command
+from ..auth import agent_mode_denied_message, get_access_store
 from .keyboards import (
     main_menu_keyboard,
     mode_keyboard,
@@ -41,7 +43,7 @@ COMMANDS = frozenset(
 
 
 def is_command(text: str) -> bool:
-    if is_admin_command(text):
+    if is_admin_command(text) or is_access_command(text):
         return True
     t = (text or "").strip().lower()
     if not t.startswith("/"):
@@ -143,8 +145,16 @@ async def handle_command(
     svc: ServicesClient,
     redis: aioredis.Redis | None = None,
     tools: ToolsClient | None = None,
+    *,
+    message: dict[str, Any] | None = None,
 ) -> bool:
     """Обробляє команду. True — далі не викликати агента."""
+    store = get_access_store()
+    if is_access_command(text) and store is not None:
+        return await handle_access_command(
+            text, chat_id, user_id, tg, store, message=message
+        )
+
     if is_admin_command(text) and redis is not None:
         return await handle_admin_command(text, chat_id, user_id, tg, svc, redis)
 
@@ -161,7 +171,9 @@ async def handle_command(
             return True
         if payload.startswith("mode_"):
             mode = payload[5:]
-            denied = computer_mode_denied_message(user_id, mode)
+            denied = agent_mode_denied_message(user_id) or computer_mode_denied_message(
+                user_id, mode
+            )
             if denied:
                 await tg.send_message(chat_id, denied)
                 return True
@@ -262,6 +274,10 @@ async def handle_command(
         return True
 
     if cmd == "/mode":
+        denied = agent_mode_denied_message(user_id)
+        if denied and len(parts) >= 2:
+            await tg.send_message(chat_id, denied)
+            return True
         if len(parts) >= 2:
             mode = parts[1]
             denied = computer_mode_denied_message(user_id, mode)
@@ -311,6 +327,16 @@ async def handle_callback(
 
     toast: str | None = None
 
+    if data.startswith("acc:") and user_id is not None:
+        store = get_access_store()
+        if store is not None:
+            from .access import handle_access_callback
+
+            if cq_id:
+                await tg.answer_callback_query(str(cq_id))
+            if await handle_access_callback(data, int(chat_id), int(user_id), tg, store):
+                return
+
     if data.startswith("adm:") and redis is not None and user_id is not None:
         from .admin import handle_admin_callback
 
@@ -352,7 +378,9 @@ async def handle_callback(
 
     if data.startswith("mode:"):
         mode = data.split(":", 1)[1]
-        denied = computer_mode_denied_message(user_id, mode)
+        denied = agent_mode_denied_message(user_id) or computer_mode_denied_message(
+            user_id, mode
+        )
         if denied:
             if cq_id:
                 await tg.answer_callback_query(str(cq_id), text=denied[:200])

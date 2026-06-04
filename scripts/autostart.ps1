@@ -111,6 +111,9 @@ function Start-JarvisHostagent {
     Log "hostagent: started but health check failed after 20s"
 }
 
+$accessDir = Join-Path $root 'data\access'
+New-Item -ItemType Directory -Force -Path $accessDir | Out-Null
+
 Log "=== autostart start ==="
 
 # --- 1) Ollama ---

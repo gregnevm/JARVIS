@@ -94,7 +94,7 @@ class FakeLimiter:
     def __init__(self, ok: bool = True) -> None:
         self._ok = ok
 
-    async def allow(self, user_id):
+    async def allow(self, user_id, *, limit=None):
         return self._ok
 
 

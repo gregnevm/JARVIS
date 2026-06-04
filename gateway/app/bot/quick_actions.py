@@ -115,7 +115,11 @@ async def handle_quick_action(
         return True
 
     if action == BTN_COMPUTER:
-        denied = computer_mode_denied_message(user_id, "computer")
+        from ..auth import agent_mode_denied_message
+
+        denied = agent_mode_denied_message(user_id) or computer_mode_denied_message(
+            user_id, "computer"
+        )
         if denied:
             await tg.send_message(chat_id, denied)
             return True

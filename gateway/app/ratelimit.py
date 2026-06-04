@@ -22,8 +22,9 @@ class RateLimiter:
         self._redis = redis
         self._limit = limit_per_min
 
-    async def allow(self, user_id: int) -> bool:
-        if self._limit <= 0 or self._redis is None:
+    async def allow(self, user_id: int, *, limit: int | None = None) -> bool:
+        cap = self._limit if limit is None else limit
+        if cap <= 0 or self._redis is None:
             return True
         window = int(time.time() // 60)
         key = f"rl:{user_id}:{window}"
@@ -34,4 +35,4 @@ class RateLimiter:
         except Exception as exc:  # noqa: BLE001 — Redis впав → пропускаємо
             logger.warning("rate limit check failed (fail-open): %s", exc)
             return True
-        return count <= self._limit
+        return count <= cap

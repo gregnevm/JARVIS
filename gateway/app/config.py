@@ -10,7 +10,9 @@ class Settings(BaseSettings):
     # Telegram
     telegram_bot_token: str = ""
     allowed_user_ids: str = ""
-    # Адміни: /admin та небезпечні дії лише з підтвердженням. Порожньо = усі з whitelist.
+    # Файл погоджених через бота (/allow). Монтується з ./data у Docker.
+    access_store_path: str = "/data/access/users.json"
+    # Адміни: /admin, /allow та небезпечні дії. Порожньо = усі з whitelist (.env + бот).
     admin_user_ids: str = ""
     telegram_api_base: str = "https://api.telegram.org"
     # Спосіб отримання апдейтів:
@@ -46,6 +48,8 @@ class Settings(BaseSettings):
 
     # Ліміти / шляхи
     rate_limit_per_min: int = 20
+    # Жорсткіший ліміт для не-адмінів (погоджені друзі). 0 = той самий, що RATE_LIMIT_PER_MIN.
+    guest_rate_limit_per_min: int = 12
     upload_dir: str = "/data/uploads"
 
     # --- Telegram Mini App (веб-дашборд) ---

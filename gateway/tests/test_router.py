@@ -148,7 +148,7 @@ class FakeLimiter:
     def __init__(self, ok: bool = True) -> None:
         self._ok = ok
 
-    async def allow(self, user_id):
+    async def allow(self, user_id, *, limit=None):
         return self._ok
 
 
@@ -172,12 +172,19 @@ def test_extract_audio_via_media():
 
 
 # --- handle_update ---
-async def test_ignores_non_whitelisted(monkeypatch):
-    monkeypatch.setattr(settings, "allowed_user_ids", "")  # нікого не пускаємо
+async def test_guest_access_request(tmp_path, monkeypatch):
+    from app.access_store import AccessStore
+    from app.auth import bind_access_store
+
+    monkeypatch.setattr(settings, "allowed_user_ids", "")
+    monkeypatch.setattr(settings, "admin_user_ids", "99")
+    store = AccessStore(tmp_path / "users.json")
+    bind_access_store(store)
     tg, tools = FakeTG(), FakeTools()
-    await _route(tg, tools, FakeSTT(), FakeLimiter(True), _msg(text="hi"))
-    assert tg.sent == []
+    await _route(tg, tools, FakeSTT(), FakeLimiter(True), _msg(text="hi", user_id=42))
+    assert any("Запит" in t for _, t in tg.sent)
     assert tools.calls == []
+    bind_access_store(None)
 
 
 async def test_rate_limited(monkeypatch):

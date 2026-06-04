@@ -169,7 +169,10 @@ powershell -File scripts/install_autostart.ps1
 
 1. **Токен:** напиши [@BotFather](https://t.me/BotFather) → `/newbot` → отримаєш `TELEGRAM_BOT_TOKEN`.
 2. **Свій user_id:** напиши [@userinfobot](https://t.me/userinfobot) — він поверне твій числовий ID.
-   Впиши його в `ALLOWED_USER_IDS` (кілька — через кому). Бот ігнорує всіх, кого нема у списку.
+   Впиши його в `ALLOWED_USER_IDS`. Друзів можна додавати вручну в `.env` або **погоджувати через бота**:
+   друг пише боту будь-що → тобі приходить запит з кнопками ✅/❌ → `/allow ID` або `/pending`.
+   Погоджені зберігаються в `data/access/users.json` (переживає рестарт). У `.env` лиши лише
+   `ADMIN_USER_IDS` = свій ID, якщо не хочеш давати друзям `/admin`.
 
 ### Як заходять апдейти (long polling — за замовчуванням)
 

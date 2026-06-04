@@ -24,6 +24,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from . import artifacts as app_artifacts
+from .auth import is_allowed
 from .config import settings
 
 logger = logging.getLogger("jarvis.gateway.webapp")
@@ -75,8 +76,7 @@ def authorize(init_data: str | None) -> int:
     except (ValueError, TypeError):
         raise HTTPException(status_code=401, detail="no user") from None
 
-    allowed = settings.allowed_ids
-    if allowed and user_id not in allowed:
+    if not is_allowed(user_id):
         raise HTTPException(status_code=403, detail="not allowed")
     return user_id
 

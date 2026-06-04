@@ -17,7 +17,8 @@ from typing import Any
 import httpx
 import redis.asyncio as aioredis
 
-from .auth import is_allowed
+from .auth import get_access_store, is_admin, is_allowed
+from .bot.access import handle_guest_access
 from .bot import handle_callback, handle_command, handle_quick_action, is_command, is_quick_action
 from .bot.quick_actions import ensure_reply_keyboard_auto
 from .config import settings
@@ -199,10 +200,20 @@ async def handle_update(
         return
 
     if not is_allowed(user_id):
-        logger.warning("Ignored update from non-whitelisted user_id=%s", user_id)
+        store = get_access_store()
+        if store is not None and user_id is not None:
+            await handle_guest_access(message, int(chat_id), int(user_id), tg, store)
+        else:
+            logger.warning("Ignored update from non-whitelisted user_id=%s", user_id)
         return
 
-    if not await limiter.allow(int(user_id)):
+    rl_cap = settings.rate_limit_per_min
+    if (
+        not is_admin(user_id)
+        and settings.guest_rate_limit_per_min > 0
+    ):
+        rl_cap = settings.guest_rate_limit_per_min
+    if not await limiter.allow(int(user_id), limit=rl_cap):
         await tg.send_message(chat_id, "Забагато запитів 🙂 Почекай хвилинку і спробуй знову.")
         return
 
@@ -223,7 +234,14 @@ async def handle_update(
 
     if is_command(text):
         await handle_command(
-            text, int(chat_id), int(user_id), tg, svc, redis, tools=tools
+            text,
+            int(chat_id),
+            int(user_id),
+            tg,
+            svc,
+            redis,
+            tools=tools,
+            message=message,
         )
         return
 
