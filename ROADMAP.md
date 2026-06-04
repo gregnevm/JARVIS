@@ -8,7 +8,7 @@
 
 ---
 
-## Прогрес (оновлено 2026-06-03)
+## Прогрес (оновлено 2026-06-04)
 
 - ✅ **M1** Persistent Ollama (Vulkan+keep_alive 24h, автозапуск) — зроблено, verified.
 - ✅ **M2** Long polling (getUpdates) як дефолт — **без публічного URL/тунелю**, переживає
@@ -22,11 +22,16 @@
 - ✅ **N5** Log rotation — зроблено (≤50 МБ/контейнер).
 - ✅ **E3** Multi-user — підтверджено (ізоляція по user_id у БД + per-user rate limit).
 - ✅ **E4 (нотатки)** take_note/recall_notes + inline tool-call фолбек — зроблено, verified.
-  - ⏳ **E4 (reminder)** активне спрацювання — окремий follow-up (Redis ZSET + gateway-поллер).
+- ✅ **E4 (reminder)** активні нагадування — `set_reminder`/`list_reminders` (Redis ZSET) +
+  gateway-поллер (`deliver_due`), час інжектиться в agent-промпт. Покрито тестами (на live чека ребілд).
 - ✅ **N1** voice reply (TTS) — новий сервіс `tts/` (piper→OGG/Opus, uk голос), gateway
   шле голосом на голосові (текст-first фолбек, прапор `ENABLE_VOICE_REPLY`). Verified: OggS/Opus.
-- ⏳ **N2** admin UI, **N3** streaming — великі білди, попереду.
-- ⏳ **E1** llama.cpp benchmark, **E2** Ollama-in-Docker GPU — експерименти, попереду.
+- ✅ **N2** web-діагностика → **Telegram Mini App** (`/app` + JSON-API, initData-HMAC,
+  cloudflared-tunnel). Merged (PR #2), live на :8000/app.
+- ✅ **N3** streaming-відповіді — Ollama `/api/chat` stream → Tools NDJSON (`/agent/stream`) →
+  gateway `editMessageText`. Покрито тестами (на live чека ребілд `gateway`+`tools`).
+- ⏳ **E1** llama.cpp benchmark, **E2** Ollama-in-Docker GPU (вердикт: НІ на цій машині) — експерименти.
+- ⏳ **Twin Етап B/C/D** (Edge MVP · курація даних+eval · RunPod-training) — `docs/GAP_ANALYSIS.md`.
 
 ---
 
