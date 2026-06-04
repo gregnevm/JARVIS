@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..telegram_webapp_auth import admin_app_url
+
 # Тексти кнопок reply-клавіатури (мапінг у quick_actions.py).
 BTN_STATUS = "📊 Статус"
 BTN_BRIEF = "📋 Бриф"
@@ -77,8 +79,12 @@ def main_menu_keyboard(
 
 
 def admin_menu_keyboard() -> dict[str, Any]:
-    return {
-        "inline_keyboard": [
+    rows: list[list[dict[str, Any]]] = []
+    url = admin_app_url()
+    if url.startswith("https://"):
+        rows.append([{"text": "🛠 Admin Control Panel", "web_app": {"url": url}}])
+    rows.extend(
+        [
             [
                 {"text": "Mode → Chat", "callback_data": "adm:Y:m:chat"},
                 {"text": "Mode → Agent", "callback_data": "adm:Y:m:agent"},
@@ -92,7 +98,8 @@ def admin_menu_keyboard() -> dict[str, Any]:
             [{"text": "🔓 Мій rate-limit", "callback_data": "adm:Y:rl:self"}],
             [{"text": "« Звичайне меню", "callback_data": "dash:menu"}],
         ]
-    }
+    )
+    return {"inline_keyboard": rows}
 
 
 def access_decision_keyboard(user_id: int) -> dict[str, Any]:

@@ -10,6 +10,7 @@ import redis.asyncio as aioredis
 from ..auth import is_admin
 from ..services import ServicesClient
 from ..telegram import TelegramClient
+from ..telegram_webapp_auth import admin_app_url
 from .dashboard import esc
 from .keyboards import admin_confirm_keyboard, admin_menu_keyboard
 
@@ -135,12 +136,25 @@ async def handle_admin_command(
         return True
 
     if parts[0].split("@")[0] == "/admin" and len(parts) == 1:
+        url = admin_app_url()
+        lines = [
+            "🛠 <b>Admin Control Panel</b>\n",
+        ]
+        if url.startswith("https://"):
+            lines.append("Відкрий <b>Mini App</b> кнопкою нижче — повна панель у Telegram.\n")
+        else:
+            lines.append(
+                "Для Mini App у Telegram задай <code>PUBLIC_APP_URL=https://…/app</code> "
+                "(адмін: …/admin) або <code>PUBLIC_ADMIN_APP_URL</code>.\n"
+            )
+        lines.append(
+            "Inline-дії нижче — з підтвердженням.\n"
+            "CLI: <code>/admin mode agent</code>, <code>/admin reset</code>, "
+            "<code>/admin rl USER_ID</code>"
+        )
         await tg.send_message(
             chat_id,
-            "🛠 <b>Admin panel</b>\n\n"
-            "Обери дію — завжди буде запит підтвердження.\n"
-            "Або: <code>/admin mode agent</code>, <code>/admin reset</code>, "
-            "<code>/admin rl USER_ID</code>",
+            "\n".join(lines),
             parse_mode="HTML",
             reply_markup=admin_menu_keyboard(),
         )

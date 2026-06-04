@@ -19,6 +19,7 @@ BOT_COMMANDS: list[dict[str, str]] = [
     {"command": "sync", "description": "Twin ingest + LoRA"},
     {"command": "help", "description": "Довідка"},
     {"command": "keyboard", "description": "Показати або сховати кнопки"},
+    {"command": "admin", "description": "Admin panel (Mini App + керування)"},
     {"command": "pending", "description": "Черга доступу (адмін)"},
     {"command": "allow", "description": "Погодити доступ (адмін)"},
 ]
@@ -35,6 +36,7 @@ async def register_bot_ui(tg: TelegramClient) -> None:
     await tg.set_my_commands(BOT_COMMANDS)
     await tg.set_my_description(BOT_DESCRIPTION)
     await tg.set_my_short_description(BOT_SHORT_DESCRIPTION)
-    if settings.public_app_url.startswith("https://"):
-        await tg.set_chat_menu_button(settings.public_app_url, "📊 Dashboard")
-        logger.info("Mini App menu button → %s", settings.public_app_url)
+    url = settings.mini_app_https_url
+    if url:
+        await tg.set_chat_menu_button(url, "📊 Dashboard")
+        logger.info("Mini App menu button → %s", url)

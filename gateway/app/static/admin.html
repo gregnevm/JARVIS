@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>JARVIS Admin</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
     --bg: #080c12; --bg2: #101820; --card: rgba(255,255,255,.045); --brd: rgba(255,255,255,.09);
@@ -95,7 +96,7 @@
     <div class="hdr-actions">
       <label class="chk"><input type="checkbox" id="autoRefresh" /> Авто 30с</label>
       <button type="button" id="btnRefresh">⟳ Оновити</button>
-      <a class="link" href="/app" target="_blank" rel="noopener">Mini App ↗</a>
+      <span class="hint" id="authVia" style="font-size:12px"></span>
     </div>
   </header>
 
@@ -187,8 +188,16 @@
 
 <script>
 (function () {
+  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  const initData = tg ? tg.initData : "";
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    try { tg.setHeaderColor && tg.setHeaderColor("#080c12"); } catch (e) {}
+  }
   const $ = (id) => document.getElementById(id);
   let busy = false, pendingAction = null, refreshTimer = null, lastData = null;
+  const headers = () => initData ? { "X-Telegram-Init-Data": initData } : {};
 
   function toast(msg, bad) {
     const t = $("toast");
@@ -202,8 +211,14 @@
 
   async function api(path, opts) {
     const p = path.startsWith("/") ? path : ("/admin/" + path.replace(/^\/?admin\/?/, ""));
-    const r = await fetch(p, Object.assign({ cache: "no-store" }, opts || {}));
-    if (r.status === 401) { fail("Потрібна авторизація — оновіть сторінку."); throw new Error("401"); }
+    const base = Object.assign({ cache: "no-store" }, opts || {});
+    base.headers = Object.assign({}, headers(), base.headers || {});
+    const r = await fetch(p, base);
+    if (r.status === 401) {
+      fail(initData ? "Немає прав адміна." : "Увійди через Telegram (/admin) або Basic Auth.");
+      throw new Error("401");
+    }
+    if (r.status === 403) { fail("Доступ лише для ADMIN_USER_IDS."); throw new Error("403"); }
     if (!r.ok) {
       let d = "HTTP " + r.status;
       try { const j = await r.json(); if (j.detail) d = String(j.detail); } catch (e) {}
@@ -331,6 +346,7 @@
       + "\nДинамічний whitelist: " + (acc.dynamic_whitelist || []).join(", ");
     renderOps(d.operations || {});
     $("footer").textContent = "оновлено " + new Date((d.ts || 0) * 1000).toLocaleString("uk-UA");
+    $("authVia").textContent = d.auth_via === "telegram" ? "Telegram ✓" : (d.auth_via || "");
     clearErr();
   }
 
@@ -431,7 +447,8 @@
     confirmModal(act, act + " для " + id + "?", async () => {
       try {
         const res = await api(map[act], { method: "POST",
-          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: id }) });
+          headers: Object.assign({ "Content-Type": "application/json" }, headers()),
+          body: JSON.stringify({ user_id: id }) });
         toast(res.message || (res.ok ? "ok" : "fail"), !res.ok); await load();
       } catch (e) { toast(e.message, true); }
     });

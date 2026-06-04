@@ -74,7 +74,7 @@ def format_help() -> str:
         "<b>/mode</b> <code>chat|agent|hybrid|computer</code> · змінити роутинг\n"
         "<b>/sync</b> · Twin ingest + LoRA\n"
         "<b>/keyboard</b> <code>on|off</code> · reply-клавіатура\n"
-        "<b>/admin</b> · адмін у Telegram (підтвердження) + веб <code>/admin</code> (ADMIN_PANEL_PASSWORD)\n"
+        "<b>/admin</b> · Admin Mini App у Telegram (HTTPS) + inline-дії з підтвердженням\n"
         "<b>/confirm</b> <code>КОД</code> · підтвердити admin-дію\n"
         "<b>/pending</b> · черга запитів на доступ (адмін)\n"
         "<b>/allow</b> <code>ID</code> · погодити друга (адмін)\n"

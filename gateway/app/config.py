@@ -58,9 +58,26 @@ class Settings(BaseSettings):
     # лише https). Напр. named cloudflare tunnel: https://jarvis.example.com/app
     # Порожньо = кнопку-меню не реєструємо (апп лишається доступним у браузері на :8000/app).
     public_app_url: str = ""
+    # HTTPS Mini App адмін-панелі (/admin). Порожньо → з PUBLIC_APP_URL (/app → /admin).
+    public_admin_app_url: str = ""
+    # Локальний URL gateway для підказок /app у браузері (без тунелю).
+    gateway_browser_url: str = "http://127.0.0.1:8000"
     # Дозволити відкривати /app та /app/* без Telegram initData (для локального
     # перегляду в браузері). У проді (named tunnel) лиши False — пускає лише з Telegram.
     webapp_dev_open: bool = True
+
+    @property
+    def mini_app_https_url(self) -> str:
+        """PUBLIC_APP_URL → завжди https://…/app (суфікс /app додається автоматично)."""
+        from .webapp_urls import normalize_mini_app_url
+
+        return normalize_mini_app_url(self.public_app_url)
+
+    @property
+    def local_app_url(self) -> str:
+        from .webapp_urls import local_app_url
+
+        return local_app_url(self.gateway_browser_url)
 
     # Веб-панель адміна на /admin (HTTP Basic Auth). Порожній пароль = панель вимкнена.
     admin_panel_user: str = "admin"

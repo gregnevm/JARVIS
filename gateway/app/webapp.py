@@ -10,75 +10,33 @@
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
-import json
+import asyncio
 import logging
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 from . import artifacts as app_artifacts
-from .auth import is_allowed
+from .auth import agent_mode_denied_message
 from .config import settings
+from .telegram_webapp_auth import authorize_allowed
 
 logger = logging.getLogger("jarvis.gateway.webapp")
 
 router = APIRouter()
 
 _INDEX = Path(__file__).parent / "static" / "app.html"
-# initData старіше за це — відхиляємо (захист від replay).
-_MAX_AUTH_AGE = 24 * 3600
-
-
-def _parse_init_data(init_data: str) -> dict[str, str] | None:
-    if not init_data:
-        return None
-    try:
-        return dict(parse_qsl(init_data, strict_parsing=True))
-    except ValueError:
-        return None
-
-
-def _valid_signature(pairs: dict[str, str], bot_token: str) -> bool:
-    received = pairs.get("hash", "")
-    if not received:
-        return False
-    check = "\n".join(f"{k}={pairs[k]}" for k in sorted(pairs) if k != "hash")
-    secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-    calc = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
-    return hmac.compare_digest(calc, received)
 
 
 def authorize(init_data: str | None) -> int:
     """Повертає Telegram user_id або кидає 401/403. Поважає whitelist."""
-    pairs = _parse_init_data(init_data or "")
-    if pairs is None:
-        if settings.webapp_dev_open:
-            return 0  # dev-режим: анонімний перегляд у браузері
-        raise HTTPException(status_code=401, detail="no init data")
-
-    if not settings.telegram_bot_token or not _valid_signature(pairs, settings.telegram_bot_token):
-        raise HTTPException(status_code=401, detail="bad signature")
-
-    auth_date = pairs.get("auth_date")
-    if auth_date and auth_date.isdigit() and time.time() - int(auth_date) > _MAX_AUTH_AGE:
-        raise HTTPException(status_code=401, detail="init data expired")
-
-    try:
-        user = json.loads(pairs.get("user", "{}"))
-        user_id = int(user.get("id"))
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=401, detail="no user") from None
-
-    if not is_allowed(user_id):
-        raise HTTPException(status_code=403, detail="not allowed")
-    return user_id
+    if not init_data and settings.webapp_dev_open:
+        return 0
+    return authorize_allowed(init_data)
 
 
 class ModeBody(BaseModel):
@@ -86,12 +44,21 @@ class ModeBody(BaseModel):
     init_data: str | None = None
 
 
+_NO_CACHE = {"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"}
+
+
 @router.get("/app", response_class=HTMLResponse)
-async def app_index() -> HTMLResponse:
+async def app_index() -> Response:
     try:
-        return HTMLResponse(_INDEX.read_text(encoding="utf-8"))
+        body = _INDEX.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="app not built") from None
+    return HTMLResponse(body, headers=_NO_CACHE)
+
+
+@router.get("/app/ping")
+async def app_ping() -> dict[str, bool]:
+    return {"ok": True}
 
 
 @router.get("/app/data")
@@ -117,7 +84,11 @@ async def app_set_mode(
     body: ModeBody,
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    authorize(x_telegram_init_data or body.init_data)
+    user_id = authorize(x_telegram_init_data or body.init_data)
+    if user_id:
+        denied = agent_mode_denied_message(user_id)
+        if denied:
+            raise HTTPException(status_code=403, detail=denied)
     if body.mode not in {"chat", "agent", "hybrid", "computer"}:
         raise HTTPException(status_code=400, detail="bad mode")
     res: dict[str, Any] = await request.app.state.svc.set_mode(body.mode)
@@ -171,16 +142,32 @@ async def app_artifact_clear(
     return {"ok": True}
 
 
+async def _remote_bundle(
+    request: Request, user_id: int
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    tools: Any = request.app.state.tools
+    dash, remote, macros = await asyncio.gather(
+        request.app.state.svc.dashboard(),
+        tools.remote_status(user_id),
+        tools.list_macros(),
+    )
+    return dash, remote, macros
+
+
 @router.get("/app/remote")
 async def app_remote(
     request: Request,
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, Any]:
     user_id = authorize(x_telegram_init_data)
-    tools: Any = request.app.state.tools
-    dash = await request.app.state.svc.dashboard()
-    remote = await tools.remote_status(user_id)
-    macros = await tools.list_macros()
+    try:
+        dash, remote, macros = await asyncio.wait_for(
+            _remote_bundle(request, user_id), timeout=8.0
+        )
+    except asyncio.TimeoutError:
+        logger.warning("app/remote timeout user=%s", user_id)
+        dash = await request.app.state.svc.dashboard()
+        remote, macros = {}, {"macros": []}
     return {
         "core": dash,
         "pending": remote.get("pending"),

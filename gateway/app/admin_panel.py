@@ -1,15 +1,20 @@
-"""Веб-панель адміна JARVIS — /admin з HTTP Basic Auth."""
+"""Веб-панель адміна JARVIS — /admin.
+
+У Telegram: Mini App з авторизацією initData (лише ADMIN_USER_IDS).
+У браузері: HTTP Basic Auth, якщо задано ADMIN_PANEL_PASSWORD.
+"""
 from __future__ import annotations
 
 import logging
 import secrets
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
@@ -20,6 +25,7 @@ from .bot.admin import execute_action
 from .config import settings
 from .health_watch import _fetch_stack, _labels, _load_state
 from .services import ServicesClient
+from .telegram_webapp_auth import admin_app_url, authorize_admin
 
 logger = logging.getLogger("jarvis.gateway.admin_panel")
 
@@ -27,6 +33,14 @@ router = APIRouter()
 _security = HTTPBasic(auto_error=False)
 
 _INDEX = Path(__file__).parent / "static" / "admin.html"
+
+
+@dataclass(frozen=True)
+class PanelAuth:
+    via: str
+    user_id: int | None = None
+
+
 def panel_enabled() -> bool:
     return bool(settings.admin_panel_password.strip())
 
@@ -43,24 +57,29 @@ def _check_credentials(username: str, password: str) -> bool:
 
 def require_panel_auth(
     credentials: HTTPBasicCredentials | None = Depends(_security),
-) -> None:
-    if not panel_enabled():
-        raise HTTPException(
-            status_code=503,
-            detail="Admin panel disabled — set ADMIN_PANEL_PASSWORD in .env",
-        )
-    if credentials is None:
-        raise HTTPException(
-            status_code=401,
-            detail="authentication required",
-            headers={"WWW-Authenticate": 'Basic realm="JARVIS Admin"'},
-        )
-    if not _check_credentials(credentials.username, credentials.password):
-        raise HTTPException(
-            status_code=401,
-            detail="invalid credentials",
-            headers={"WWW-Authenticate": 'Basic realm="JARVIS Admin"'},
-        )
+    x_telegram_init_data: str | None = Header(default=None, alias="X-Telegram-Init-Data"),
+) -> PanelAuth:
+    if x_telegram_init_data:
+        uid = authorize_admin(x_telegram_init_data)
+        return PanelAuth(via="telegram", user_id=uid)
+    if panel_enabled():
+        if credentials is None:
+            raise HTTPException(
+                status_code=401,
+                detail="authentication required",
+                headers={"WWW-Authenticate": 'Basic realm="JARVIS Admin"'},
+            )
+        if not _check_credentials(credentials.username, credentials.password):
+            raise HTTPException(
+                status_code=401,
+                detail="invalid credentials",
+                headers={"WWW-Authenticate": 'Basic realm="JARVIS Admin"'},
+            )
+        return PanelAuth(via="basic", user_id=_primary_admin_id())
+    raise HTTPException(
+        status_code=503,
+        detail="Admin API: увійди через Telegram (/admin) або задай ADMIN_PANEL_PASSWORD",
+    )
 
 
 def _primary_admin_id() -> int:
@@ -100,6 +119,7 @@ def _settings_snapshot(dash: dict[str, Any]) -> dict[str, Any]:
             "ingest_mode": settings.telegram_ingest_mode,
             "reply_keyboard": _flag(settings.telegram_reply_keyboard),
             "public_app_url": settings.public_app_url or "—",
+            "public_admin_app_url": admin_app_url() or "—",
             "webapp_dev_open": _flag(settings.webapp_dev_open),
             "webhook_configured": bool(settings.telegram_webhook_url.strip()),
         },
@@ -206,7 +226,7 @@ class UserIdBody(BaseModel):
 
 
 @router.get("/admin", response_class=HTMLResponse)
-async def admin_index(_: None = Depends(require_panel_auth)) -> HTMLResponse:
+async def admin_index() -> HTMLResponse:
     try:
         return HTMLResponse(_INDEX.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -214,7 +234,9 @@ async def admin_index(_: None = Depends(require_panel_auth)) -> HTMLResponse:
 
 
 @router.get("/admin/api/overview")
-async def admin_overview(request: Request, _: None = Depends(require_panel_auth)) -> dict[str, Any]:
+async def admin_overview(
+    request: Request, auth: PanelAuth = Depends(require_panel_auth)
+) -> dict[str, Any]:
     svc: ServicesClient = request.app.state.svc
     store: AccessStore = request.app.state.access_store
     redis: aioredis.Redis = request.app.state.redis
@@ -254,15 +276,18 @@ async def admin_overview(request: Request, _: None = Depends(require_panel_auth)
             "due_jobs": jobs[:20],
         },
         "links": {
-            "mini_app": settings.public_app_url or "/app",
-            "admin_panel": "/admin",
+            "mini_app": settings.mini_app_https_url or settings.local_app_url,
+            "admin_panel": admin_app_url() or "/admin",
         },
+        "auth_via": auth.via,
         "ts": int(time.time()),
     }
 
 
 @router.get("/admin/api/health")
-async def admin_health(request: Request, _: None = Depends(require_panel_auth)) -> dict[str, Any]:
+async def admin_health(
+    request: Request, _auth: PanelAuth = Depends(require_panel_auth)
+) -> dict[str, Any]:
     svc: ServicesClient = request.app.state.svc
     redis: aioredis.Redis = request.app.state.redis
     stack = await _fetch_stack(svc)
@@ -279,7 +304,7 @@ async def admin_health(request: Request, _: None = Depends(require_panel_auth)) 
 async def admin_set_mode(
     body: ModeBody,
     request: Request,
-    _: None = Depends(require_panel_auth),
+    _auth: PanelAuth = Depends(require_panel_auth),
 ) -> dict[str, Any]:
     mode = body.mode.lower().strip()
     if mode not in {"chat", "agent", "hybrid", "computer"}:
@@ -290,7 +315,7 @@ async def admin_set_mode(
 @router.delete("/admin/api/mode")
 async def admin_reset_mode(
     request: Request,
-    _: None = Depends(require_panel_auth),
+    _auth: PanelAuth = Depends(require_panel_auth),
 ) -> dict[str, Any]:
     return await request.app.state.svc.reset_mode()
 
@@ -299,7 +324,7 @@ async def admin_reset_mode(
 async def admin_approve(
     body: UserIdBody,
     request: Request,
-    _: None = Depends(require_panel_auth),
+    _auth: PanelAuth = Depends(require_panel_auth),
 ) -> dict[str, Any]:
     store: AccessStore = request.app.state.access_store
     uid = body.user_id
@@ -325,7 +350,7 @@ async def admin_approve(
 async def admin_deny(
     body: UserIdBody,
     request: Request,
-    _: None = Depends(require_panel_auth),
+    _auth: PanelAuth = Depends(require_panel_auth),
 ) -> dict[str, Any]:
     store: AccessStore = request.app.state.access_store
     ok, msg = await store.deny(body.user_id)
@@ -336,7 +361,7 @@ async def admin_deny(
 async def admin_revoke(
     body: UserIdBody,
     request: Request,
-    _: None = Depends(require_panel_auth),
+    _auth: PanelAuth = Depends(require_panel_auth),
 ) -> dict[str, Any]:
     uid = body.user_id
     if uid in settings.allowed_ids:
@@ -356,7 +381,7 @@ async def admin_revoke(
 async def admin_reset_rl(
     body: UserIdBody,
     request: Request,
-    _: None = Depends(require_panel_auth),
+    _auth: PanelAuth = Depends(require_panel_auth),
 ) -> dict[str, Any]:
     redis: aioredis.Redis = request.app.state.redis
     action = f"rl:{body.user_id}"
