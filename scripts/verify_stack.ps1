@@ -143,7 +143,7 @@ if ((EnvVal "ENABLE_BROWSER") -eq "true") {
         if ($d.text -match "example|Example|вимкнено|Некоректний|title") {
             Ok "browser: tool/dispatch browser_open"
         } else { Warn "browser: unexpected dispatch: $($d.text.Substring(0, [Math]::Min(60, $d.text.Length)))" }
-    } catch { Warn "browser: C3 dispatch smoke failed — rebuild tools?" }
+    } catch { Warn "browser: C3 dispatch smoke failed - rebuild tools?" }
 }
 
 Write-Host "`nSummary: fail=$fail warn=$warn`n" -ForegroundColor Cyan

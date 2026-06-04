@@ -135,7 +135,7 @@ function Start-JarvisHostagent {
 
     $args = @('-m', 'uvicorn', 'app.main:app', '--host', $bind, '--port', "$port")
     Start-Process -FilePath 'python' -ArgumentList $args -WorkingDirectory $workDir -WindowStyle Hidden
-    Log "hostagent: started ($bind`:$port)"
+    Log "hostagent: started (${bind}:$port)"
 
     for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Seconds 1
