@@ -42,10 +42,12 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
 
 def build_jarvis(memory: MemoryClient, twin_url: str = "") -> tuple[JARVIS, AgentRunner, CompositeChatBackend]:
     log_path = Path(settings.data_dir) / "logs" / "llm.jsonl"
+    # LLMInterface обслуговує CHAT-шлях (відповіді без інструментів) → chat-модель.
+    # Агентський tool-loop окремо передає ollama_model_agent у OllamaChatBackend.chat().
     llm = build_llm_stack(
         backend="ollama",
         ollama_host=settings.ollama_host,
-        ollama_model=settings.ollama_model_agent,
+        ollama_model=settings.ollama_model_chat,
         timeout=settings.ollama_timeout,
         log_path=str(log_path),
     )
