@@ -3,9 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 
-def main_menu_keyboard() -> dict[str, Any]:
-    return {
-        "inline_keyboard": [
+def main_menu_keyboard(app_url: str | None = None) -> dict[str, Any]:
+    rows: list[list[dict[str, Any]]] = []
+    # Telegram приймає web_app-кнопки лише з https-URL.
+    if app_url and app_url.startswith("https://"):
+        rows.append([{"text": "📊 Відкрити дашборд", "web_app": {"url": app_url}}])
+    rows.extend(
+        [
             [
                 {"text": "📊 Статус", "callback_data": "dash:status"},
                 {"text": "🧠 Режим", "callback_data": "dash:mode"},
@@ -20,7 +24,8 @@ def main_menu_keyboard() -> dict[str, Any]:
                 {"text": "❓ Довідка", "callback_data": "dash:help"},
             ],
         ]
-    }
+    )
+    return {"inline_keyboard": rows}
 
 
 def admin_menu_keyboard() -> dict[str, Any]:

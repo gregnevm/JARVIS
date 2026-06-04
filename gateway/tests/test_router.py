@@ -15,6 +15,9 @@ class FakeTG:
     async def send_message(self, chat_id, text, parse_mode=None):
         self.sent.append((chat_id, text))
 
+    async def send_chat_action(self, chat_id, action="typing"):
+        pass
+
     async def send_voice(self, chat_id, audio, caption=None):
         self.voices.append((chat_id, audio))
 

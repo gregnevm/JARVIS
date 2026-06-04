@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     rate_limit_per_min: int = 20
     upload_dir: str = "/data/uploads"
 
+    # --- Telegram Mini App (веб-дашборд) ---
+    # Публічний HTTPS-URL, за яким Telegram-клієнт відкриває Mini App (вимога Telegram —
+    # лише https). Напр. named cloudflare tunnel: https://jarvis.example.com/app
+    # Порожньо = кнопку-меню не реєструємо (апп лишається доступним у браузері на :8000/app).
+    public_app_url: str = ""
+    # Дозволити відкривати /app та /app/* без Telegram initData (для локального
+    # перегляду в браузері). У проді (named tunnel) лиши False — пускає лише з Telegram.
+    webapp_dev_open: bool = True
+
     @property
     def allowed_ids(self) -> set[int]:
         """ALLOWED_USER_IDS ('1,2,3') → set[int]. Порожньо = нікого не пускаємо."""

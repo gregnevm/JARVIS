@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..config import settings
 from ..services import ServicesClient
 from ..telegram import TelegramClient
-from .dashboard import format_dashboard, format_help
+from .dashboard import esc, format_dashboard, format_help
 from .admin import handle_admin_command, is_admin_command
 from .keyboards import main_menu_keyboard, mode_keyboard
 
@@ -54,27 +55,27 @@ async def handle_command(
         dash = await svc.dashboard()
         twin = await svc.twin_status()
         body = format_dashboard(dash, twin)
-        await tg.send_message(chat_id, body, parse_mode="Markdown", reply_markup=main_menu_keyboard())
+        await tg.send_message(chat_id, body, parse_mode="HTML", reply_markup=main_menu_keyboard(settings.public_app_url))
         return True
 
     if cmd == "/help":
         await tg.send_message(
-            chat_id, format_help(), parse_mode="Markdown", reply_markup=main_menu_keyboard()
+            chat_id, format_help(), parse_mode="HTML", reply_markup=main_menu_keyboard(settings.public_app_url)
         )
         return True
 
     if cmd == "/status":
         dash = await svc.dashboard()
         twin = await svc.twin_status()
-        await tg.send_message(chat_id, format_dashboard(dash, twin), parse_mode="Markdown")
+        await tg.send_message(chat_id, format_dashboard(dash, twin), parse_mode="HTML")
         return True
 
     if cmd == "/sync":
         twin = await svc.twin_status()
         if not twin:
-            await tg.send_message(chat_id, "Twin недоступний (перевір сервіс twin:8765).")
+            await tg.send_message(chat_id, "🔴 Twin недоступний (перевір сервіс twin:8765).")
             return True
-        await tg.send_message(chat_id, format_dashboard({}, twin), parse_mode="Markdown")
+        await tg.send_message(chat_id, format_dashboard({}, twin), parse_mode="HTML")
         return True
 
     if cmd == "/mode":
@@ -82,12 +83,12 @@ async def handle_command(
             mode = parts[1]
             res = await svc.set_mode(mode)
             if res.get("error"):
-                await tg.send_message(chat_id, f"Не вдалося змінити режим: {res['error']}")
+                await tg.send_message(chat_id, f"🔴 Не вдалося змінити режим: {esc(res['error'])}")
             else:
                 await tg.send_message(
                     chat_id,
-                    f"✅ Режим: `{res.get('mode', mode)}`",
-                    parse_mode="Markdown",
+                    f"✅ Режим: <code>{esc(res.get('mode', mode))}</code>",
+                    parse_mode="HTML",
                     reply_markup=mode_keyboard(),
                 )
             return True
@@ -95,8 +96,9 @@ async def handle_command(
         cur = dash.get("agent_mode", "?")
         await tg.send_message(
             chat_id,
-            f"Поточний режим: `{cur}`\nОбери кнопкою або: `/mode chat|agent|hybrid`",
-            parse_mode="Markdown",
+            f"🧠 Поточний режим: <code>{esc(cur)}</code>\n"
+            "Обери кнопкою або: <code>/mode chat|agent|hybrid</code>",
+            parse_mode="HTML",
             reply_markup=mode_keyboard(),
         )
         return True
@@ -130,8 +132,12 @@ async def handle_callback(
     if data.startswith("mode:"):
         mode = data.split(":", 1)[1]
         res = await svc.set_mode(mode)
-        text = f"✅ Режим: `{res.get('mode', mode)}`" if not res.get("error") else f"⚠️ {res['error']}"
-        await tg.send_message(int(chat_id), text, parse_mode="Markdown", reply_markup=mode_keyboard())
+        text = (
+            f"✅ Режим: <code>{esc(res.get('mode', mode))}</code>"
+            if not res.get("error")
+            else f"🔴 {esc(res['error'])}"
+        )
+        await tg.send_message(int(chat_id), text, parse_mode="HTML", reply_markup=mode_keyboard())
         return
 
     if data == "dash:menu":
@@ -140,14 +146,14 @@ async def handle_callback(
         await tg.send_message(
             int(chat_id),
             format_dashboard(dash, twin),
-            parse_mode="Markdown",
-            reply_markup=main_menu_keyboard(),
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard(settings.public_app_url),
         )
         return
 
     if data == "dash:help":
         await tg.send_message(
-            int(chat_id), format_help(), parse_mode="Markdown", reply_markup=main_menu_keyboard()
+            int(chat_id), format_help(), parse_mode="HTML", reply_markup=main_menu_keyboard(settings.public_app_url)
         )
         return
 
@@ -157,14 +163,14 @@ async def handle_callback(
         if data == "dash:mode":
             await tg.send_message(
                 int(chat_id),
-                f"Режим: `{dash.get('agent_mode', '?')}`",
-                parse_mode="Markdown",
+                f"🧠 Режим: <code>{esc(dash.get('agent_mode', '?'))}</code>",
+                parse_mode="HTML",
                 reply_markup=mode_keyboard(),
             )
         else:
             await tg.send_message(
                 int(chat_id),
                 format_dashboard(dash, twin),
-                parse_mode="Markdown",
-                reply_markup=main_menu_keyboard(),
+                parse_mode="HTML",
+                reply_markup=main_menu_keyboard(settings.public_app_url),
             )
