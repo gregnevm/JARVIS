@@ -85,6 +85,9 @@ def test_parse_ddg_respects_limit():
 def test_schemas_default_excludes_code_exec(monkeypatch):
     monkeypatch.setattr(settings, "enable_code_exec", False)
     monkeypatch.setattr(settings, "enable_computer_use", False)
+    monkeypatch.setattr(settings, "ollama_model_vision", "")
+    monkeypatch.setattr(settings, "image_gen_url", "")
+    monkeypatch.setattr(settings, "image_gen_model", "")
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
     assert names == [
         "calc", "web_search", "web_fetch", "parse_file", "ocr_image", "take_note",
