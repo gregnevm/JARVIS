@@ -6,15 +6,26 @@ import contextlib
 import hmac
 import logging
 from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable
 from typing import Any, AsyncIterator
 
 import redis.asyncio as aioredis
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from starlette.responses import Response
+
+from pathlib import Path
 
 from . import router
+from .access_store import AccessStore
+from .auth import allowed_ids_snapshot, bind_access_store
 from .config import settings
+from .bot.setup import register_bot_ui
 from .reminders import reminder_loop
+from .health_watch import health_watch_loop
+from .job_runner import job_runner_loop
 from .services import ServicesClient
+from .admin_panel import router as admin_panel_router
+from .platform import router as platform_router
 from .webapp import router as webapp_router
 from .tools_client import ToolsClient
 from .ratelimit import RateLimiter
@@ -32,7 +43,15 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("jarvis.gateway")
 
 # Апдейти, які нас цікавлять (інші Telegram навіть не присилає → менше шуму/трафіку).
-ALLOWED_UPDATES = ["message", "edited_message", "callback_query"]
+# message_reaction треба явно запросити (Telegram не шле його за замовчуванням).
+ALLOWED_UPDATES = [
+    "message",
+    "edited_message",
+    "callback_query",
+    "inline_query",
+    "chosen_inline_result",
+    "message_reaction",
+]
 
 
 @asynccontextmanager
@@ -43,31 +62,69 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.stt = WhisperClient(settings.whisper_url, settings.whisper_language)
     app.state.redis = aioredis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
     app.state.limiter = RateLimiter(app.state.redis, settings.rate_limit_per_min)
-    app.state.tts = TtsClient(settings.tts_url) if settings.enable_voice_reply else None
+    # TTS-клієнт завжди (увімкнення — runtime flag або ENABLE_VOICE_REPLY).
+    app.state.tts = TtsClient(settings.tts_url)
+
+    access_store = AccessStore(Path(settings.access_store_path))
+    await access_store.load()
+    bind_access_store(access_store)
+    app.state.access_store = access_store
 
     mode = settings.telegram_ingest_mode.strip().lower()
     poll_task: asyncio.Task[None] | None = None
     if mode == "polling":
         poll_task = asyncio.create_task(_poll_loop(app))
+    elif mode == "webhook":
+        webhook_url = settings.telegram_webhook_url.strip()
+        if webhook_url:
+            secret = settings.telegram_webhook_secret.strip() or None
+            await app.state.tg.set_webhook(
+                webhook_url, secret_token=secret, allowed_updates=ALLOWED_UPDATES
+            )
+            logger.info("Webhook registered → %s", webhook_url)
+        else:
+            logger.warning("TELEGRAM_INGEST_MODE=webhook but TELEGRAM_WEBHOOK_URL is empty")
 
-    # Поллер нагадувань — незалежний від ingest-режиму (шле прострочене з Redis ZSET).
-    reminder_task = asyncio.create_task(reminder_loop(app.state.redis, app.state.tg))
+    reminder_task = asyncio.create_task(
+        reminder_loop(
+            app.state.redis,
+            app.state.tg,
+            interval=settings.reminder_poll_seconds,
+        )
+    )
+    health_task: asyncio.Task[None] | None = None
+    if settings.health_watch_interval > 0:
+        alert_ids = settings.health_alert_ids
+        health_task = asyncio.create_task(
+            health_watch_loop(
+                app.state.redis,
+                app.state.tg,
+                app.state.svc,
+                settings.health_watch_interval,
+                alert_ids=alert_ids or None,
+            )
+        )
+    job_task = asyncio.create_task(
+        job_runner_loop(app.state.tools, app.state.tg, interval=30.0)
+    )
 
-    # Mini App: якщо є публічний https-URL — реєструємо кнопку-меню (вхід у дашборд).
-    if settings.public_app_url.startswith("https://"):
-        await app.state.tg.set_chat_menu_button(settings.public_app_url, "📊 Dashboard")
-        logger.info("Mini App menu button set → %s", settings.public_app_url)
+    # BotFather UI: команди, опис, Mini App menu button.
+    await register_bot_ui(app.state.tg)
 
+    wl = sorted(allowed_ids_snapshot())
+    pending_n = len(access_store.pending_ids)
     logger.info(
-        "Gateway up. ingest=%s | Whitelist: %s | rate_limit=%s/min | voice_reply=%s",
+        "Gateway up. ingest=%s | Whitelist: %s | pending=%s | rate=%s/min guest=%s | voice=%s",
         mode,
-        sorted(settings.allowed_ids) or "ПОРОЖНІЙ (нікого не пускає!)",
+        wl or "ПОРОЖНІЙ (нікого не пускає!)",
+        pending_n,
         settings.rate_limit_per_min,
+        settings.guest_rate_limit_per_min or "same",
         settings.enable_voice_reply,
     )
     yield
 
-    for task in (poll_task, reminder_task):
+    for task in (poll_task, reminder_task, health_task, job_task):
         if task is not None:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -113,6 +170,22 @@ async def _poll_loop(app: FastAPI) -> None:
 
 app = FastAPI(title="JARVIS Gateway", lifespan=lifespan)
 app.include_router(webapp_router)
+app.include_router(admin_panel_router)
+app.include_router(platform_router)
+
+
+@app.middleware("http")
+async def _request_id_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    from .request_id import new_request_id, set_request_id
+
+    rid = request.headers.get("X-Request-ID") or new_request_id()
+    set_request_id(rid)
+    request.state.request_id = rid
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    return response
 
 
 @app.get("/health")

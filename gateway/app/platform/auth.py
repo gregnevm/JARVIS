@@ -1,0 +1,81 @@
+"""Авторизація Platform-консолі.
+
+Два канали (як `/admin`, але з власним PLATFORM_PASSWORD):
+  * Telegram Mini App  — `X-Telegram-Init-Data` HMAC, лише ADMIN_USER_IDS;
+  * Браузер (LAN)      — HTTP Basic, пароль PLATFORM_PASSWORD або ADMIN_PANEL_PASSWORD.
+
+Reuse: `telegram_webapp_auth.authorize_admin`. Дублювати логіку `/admin` не треба —
+просто приймаємо обидва паролі, щоб Platform не вимагав окремого секрету.
+"""
+from __future__ import annotations
+
+import secrets
+from dataclasses import dataclass
+
+from fastapi import Depends, Header, HTTPException
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
+from ..config import settings
+from ..telegram_webapp_auth import authorize_admin
+
+_security = HTTPBasic(auto_error=False)
+
+
+@dataclass(frozen=True)
+class PlatformAuth:
+    """Хто і як зайшов: via=telegram|basic, user_id для runtime-запитів."""
+
+    via: str
+    user_id: int
+
+
+def _primary_admin_id() -> int:
+    ids = sorted(settings.admin_ids)
+    return ids[0] if ids else 0
+
+
+def _password() -> str:
+    """Активний пароль браузерного входу (PLATFORM_PASSWORD має пріоритет)."""
+    return (settings.platform_password.strip() or settings.admin_panel_password.strip())
+
+
+def platform_enabled() -> bool:
+    """Браузерний вхід доступний лише якщо задано пароль."""
+    return bool(_password())
+
+
+def _check_credentials(username: str, password: str) -> bool:
+    want_user = settings.admin_panel_user.strip() or "admin"
+    want_pass = _password()
+    if not want_pass:
+        return False
+    user_ok = secrets.compare_digest(username.encode(), want_user.encode())
+    pass_ok = secrets.compare_digest(password.encode(), want_pass.encode())
+    return user_ok and pass_ok
+
+
+def require_platform_auth(
+    credentials: HTTPBasicCredentials | None = Depends(_security),
+    x_telegram_init_data: str | None = Header(default=None, alias="X-Telegram-Init-Data"),
+) -> PlatformAuth:
+    if x_telegram_init_data:
+        uid = authorize_admin(x_telegram_init_data)
+        return PlatformAuth(via="telegram", user_id=uid)
+    if platform_enabled():
+        if credentials is None:
+            raise HTTPException(
+                status_code=401,
+                detail="authentication required",
+                headers={"WWW-Authenticate": 'Basic realm="JARVIS Platform"'},
+            )
+        if not _check_credentials(credentials.username, credentials.password):
+            raise HTTPException(
+                status_code=401,
+                detail="invalid credentials",
+                headers={"WWW-Authenticate": 'Basic realm="JARVIS Platform"'},
+            )
+        return PlatformAuth(via="basic", user_id=_primary_admin_id())
+    raise HTTPException(
+        status_code=503,
+        detail="Platform: увійди через Telegram (/platform) або задай PLATFORM_PASSWORD",
+    )

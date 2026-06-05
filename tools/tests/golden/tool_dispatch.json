@@ -1,0 +1,4 @@
+[
+  {"tool": "calc", "args": {"expression": "2+2"}, "expect_substr": "4"},
+  {"tool": "browser_open", "args": {"url": "ftp://x"}, "enable_browser": true, "expect_substr": "Некоректний"}
+]

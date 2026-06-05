@@ -46,3 +46,19 @@ def test_rollback(tmp_path: Path, monkeypatch):
 def test_promote_unknown_404(tmp_path: Path, monkeypatch):
     with _client(tmp_path, monkeypatch) as c:
         assert c.post("/registry/lora/nope/promote").status_code == 404
+
+
+def test_promote_eval_gate(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(settings, "min_eval_promote", 0.9)
+    with _client(tmp_path, monkeypatch) as c:
+        c.post(
+            "/registry/lora",
+            json={"version": "low", "path": "/l", "eval_score": 0.5},
+        )
+        r = c.post("/registry/lora/low/promote")
+        assert r.status_code == 400
+        c.post(
+            "/registry/lora",
+            json={"version": "ok", "path": "/o", "eval_score": 0.95},
+        )
+        assert c.post("/registry/lora/ok/promote").status_code == 200

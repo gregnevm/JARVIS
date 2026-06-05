@@ -9,16 +9,29 @@ class FakeTG:
         self._mid = mid
         self.sent: list[tuple[int, str]] = []
         self.edits: list[tuple[int, int, str]] = []
+        self.thread_ids: list[int | None] = []
 
-    async def send_message_id(self, chat_id, text, parse_mode=None):
+    async def send_message_id(self, chat_id, text, parse_mode=None, message_thread_id=None, **kwargs):
         self.sent.append((chat_id, text))
+        self.thread_ids.append(message_thread_id)
         return self._mid
 
-    async def edit_message_text(self, chat_id, message_id, text, parse_mode=None):
+    async def edit_message_text(
+        self,
+        chat_id,
+        message_id,
+        text,
+        parse_mode=None,
+        reply_markup=None,
+        message_thread_id=None,
+        **kwargs,
+    ):
         self.edits.append((chat_id, message_id, text))
+        self.thread_ids.append(message_thread_id)
 
-    async def send_message(self, chat_id, text, parse_mode=None):
+    async def send_message(self, chat_id, text, parse_mode=None, reply_markup=None, **kwargs):
         self.sent.append((chat_id, text))
+        self.thread_ids.append(kwargs.get("message_thread_id"))
 
 
 class FakeTools:
@@ -95,3 +108,18 @@ def test_long_answer_overflow_to_extra_messages():
     assert out == long
     assert len(tg.edits[-1][2]) <= 4096                # перше вікно в межах ліміту
     assert any(len(t) <= 4096 and t == "y" * (5000 - 4096) for _, t in tg.sent[1:])
+
+
+def test_stream_passes_message_thread_id():
+    tg = FakeTG()
+    tools = FakeTools([{"done": True, "text": "ok", "mode": "chat", "iters": 0}])
+    _run(
+        stream_reply(
+            tg,
+            tools,
+            5,
+            {"user_id": 1, "text": "x", "message_thread_id": 42},
+            message_thread_id=42,
+        )
+    )
+    assert all(tid == 42 for tid in tg.thread_ids if tid is not None)

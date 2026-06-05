@@ -1,0 +1,72 @@
+# JARVIS — чеклист змінних середовища (ops)
+
+Після merge residual-фіксів перевір `.env` на хості (не комітити секрети).
+
+## Обовʼязково для Computer Use + FS
+
+| Змінна | Приклад | Навіщо |
+|--------|---------|--------|
+| `ENABLE_COMPUTER_USE` | `true` | Агент + host tools (скріншот, PS, FS) |
+| `HOSTAGENT_TOKEN` | *(секрет)* | Звʼязок tools ↔ hostagent |
+| `HOSTAGENT_FS_ROOTS` | `C:\Users\you\Documents,O:\JARVIS` | Обмеження шляхів FS (comma-separated). Без цього — доступ до будь-якого абсолютного шляху на хості |
+
+Hostagent читає `HOSTAGENT_FS_ROOTS` як `fs_roots` у `hostagent/.env` або через compose.
+
+## C3 Browser (Playwright)
+
+| Змінна | Приклад | Навіщо |
+|--------|---------|--------|
+| `ENABLE_BROWSER` | `true` | `browser_*` у computer mode (потрібен rebuild `tools` з Chromium) |
+
+Профіль браузера: [`docs/adr/C3-browser-profile.md`](adr/C3-browser-profile.md).
+
+| `COMPUTER_RATE_LIMIT_PER_HOUR` | `120` | Мутуючі computer-дії на годину; `0` = вимкнено |
+
+## Telegram Mini App / deep link
+
+| Змінна | Приклад | Навіщо |
+|--------|---------|--------|
+| `PUBLIC_APP_URL` | `https://your-tunnel.example/app` | HTTPS URL для Web App кнопки (`/app`, `/start canvas`). Без HTTPS — текстовий фолбек |
+
+Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
+
+## Нагадування
+
+| Змінна | За замовч. | Навіщо |
+|--------|------------|--------|
+| `REMINDER_POLL_SECONDS` | `5` | Інтервал полера gateway для due reminders |
+
+## Безпека (рекомендовано)
+
+| Змінна | Навіщо |
+|--------|--------|
+| `TELEGRAM_WEBHOOK_SECRET` | Перевірка `X-Telegram-Bot-Api-Secret-Token` у webhook-режимі |
+| `COMPUTER_MODE_ADMINS_ONLY` | Обмежити `/mode computer` |
+| `WEBAPP_DEV_OPEN` | `false` у проді — `/app` лише з Telegram initData |
+| **M4** | Ротація `TELEGRAM_BOT_TOKEN` у @BotFather після витоку в логах/чаті |
+
+## Autostart і моніторинг
+
+| Змінна / скрипт | Навіщо |
+|-----------------|--------|
+| `HEALTH_WATCH_INTERVAL` | Секунди між перевірками стеку; `0` = вимкнено; дефолт `300` |
+| `HOSTAGENT_DROP_DIR` | Куди класти файли з caption «на диск» без явного шляху |
+| `scripts/install_autostart.ps1` | Один раз: logon + watchdog кожні 5 хв |
+| `scripts/autostart.ps1` | Ollama → Docker → compose → SD Forge → host-agent |
+| `scripts/verify_stack.ps1` | Після autostart або вручну — exit 1 при fail |
+| `scripts/verify_stack.ps1 -StrictProd` | Прод: `WEBAPP_DEV_OPEN=true` → fail |
+| `scripts/Install-JARVIS.ps1` | Перший setup (compose + verify) |
+
+## Бекапи
+
+Див. [`docs/BACKUP.md`](BACKUP.md).
+
+## Після змін
+
+```powershell
+cd O:\JARVIS\hostagent; .\run.bat
+cd O:\JARVIS
+docker compose up -d --build gateway tools
+```
+
+Тести: `pytest gateway/tests tools/tests hostagent/tests`

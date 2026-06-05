@@ -10,6 +10,7 @@ import redis.asyncio as aioredis
 from ..auth import is_admin
 from ..services import ServicesClient
 from ..telegram import TelegramClient
+from ..telegram_webapp_auth import admin_app_url
 from .dashboard import esc
 from .keyboards import admin_confirm_keyboard, admin_menu_keyboard
 
@@ -135,12 +136,25 @@ async def handle_admin_command(
         return True
 
     if parts[0].split("@")[0] == "/admin" and len(parts) == 1:
+        url = admin_app_url()
+        lines = [
+            "🛠 <b>Admin Control Panel</b>\n",
+        ]
+        if url.startswith("https://"):
+            lines.append("Відкрий <b>Mini App</b> кнопкою нижче — повна панель у Telegram.\n")
+        else:
+            lines.append(
+                "Для Mini App у Telegram задай <code>PUBLIC_APP_URL=https://…/app</code> "
+                "(адмін: …/admin) або <code>PUBLIC_ADMIN_APP_URL</code>.\n"
+            )
+        lines.append(
+            "Inline-дії нижче — з підтвердженням.\n"
+            "CLI: <code>/admin mode agent</code>, <code>/admin reset</code>, "
+            "<code>/admin rl USER_ID</code>"
+        )
         await tg.send_message(
             chat_id,
-            "🛠 <b>Admin panel</b>\n\n"
-            "Обери дію — завжди буде запит підтвердження.\n"
-            "Або: <code>/admin mode agent</code>, <code>/admin reset</code>, "
-            "<code>/admin rl USER_ID</code>",
+            "\n".join(lines),
             parse_mode="HTML",
             reply_markup=admin_menu_keyboard(),
         )
@@ -149,12 +163,12 @@ async def handle_admin_command(
     action = None
     if len(parts) >= 2 and parts[1] == "reset":
         action = "mode:reset"
-    elif len(parts) >= 3 and parts[1] == "mode" and parts[2] in ("chat", "agent", "hybrid"):
+    elif len(parts) >= 3 and parts[1] == "mode" and parts[2] in ("chat", "agent", "hybrid", "computer"):
         action = f"mode:{parts[2]}"
     elif len(parts) >= 2 and parts[1] == "mode" and len(parts) == 2:
         await tg.send_message(
             chat_id,
-            "Вкажи режим: <code>/admin mode chat|agent|hybrid</code> або <code>/admin reset</code>",
+            "Вкажи режим: <code>/admin mode chat|agent|hybrid|computer</code> або <code>/admin reset</code>",
             parse_mode="HTML",
         )
         return True
@@ -214,7 +228,7 @@ async def handle_admin_callback(
         await tg.send_message(chat_id, result, parse_mode="HTML")
         return True
 
-    # adm:Y:m:agent | adm:Y:r | adm:Y:rl:42 — пряме підтвердження з кнопки меню
+    # adm:Y:m:agent | adm:Y:r | adm:Y:rl:42 — запит підтвердження (як CLI /admin)
     if len(parts) >= 4 and parts[2] == "m":
         action = f"mode:{parts[3]}"
     elif len(parts) >= 3 and parts[2] == "r":
@@ -226,7 +240,5 @@ async def handle_admin_callback(
         await tg.send_message(chat_id, "Невідома кнопка.")
         return True
 
-    await clear_pending(redis, user_id)
-    result = await execute_action(action, svc, redis)
-    await tg.send_message(chat_id, result, parse_mode="HTML")
+    await request_confirmation(chat_id, user_id, action, tg, redis)
     return True

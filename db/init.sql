@@ -58,3 +58,36 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_vector
     ON embeddings USING hnsw (embedding vector_cosine_ops);
 
 CREATE INDEX IF NOT EXISTS idx_embeddings_user ON embeddings (user_id);
+
+-- ------------------------------------------------------------
+-- Проєкти (P1) — ізольовані workspace (як Claude Projects / Cursor folders).
+--  RAG скоупиться по project_id: chunks одного проєкту не течуть в інший.
+--  NULL project_id = «загальний» контекст (поведінка як до P1, без регресії).
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS projects (
+    id            BIGSERIAL    PRIMARY KEY,
+    user_id       BIGINT       NOT NULL,
+    name          TEXT         NOT NULL,
+    system_prompt TEXT         NOT NULL DEFAULT '',
+    archived      BOOLEAN      NOT NULL DEFAULT false,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id, archived);
+
+CREATE TABLE IF NOT EXISTS project_files (
+    id          BIGSERIAL    PRIMARY KEY,
+    project_id  BIGINT       NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name        TEXT         NOT NULL,
+    content     TEXT         NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_files_project ON project_files (project_id);
+
+-- Scoped RAG: messages/embeddings можуть належати проєкту (NULL = загальний).
+ALTER TABLE messages   ADD COLUMN IF NOT EXISTS project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL;
+ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS project_id BIGINT REFERENCES projects(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_embeddings_user_project ON embeddings (user_id, project_id);

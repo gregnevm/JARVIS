@@ -27,6 +27,7 @@ class JARVIS:
         *,
         chat_id: int | None = None,
         source: str = "text",
+        mode: str | None = None,
     ) -> dict[str, Any]:
         req = AgentRequest(
             user_id=user_id,
@@ -34,6 +35,7 @@ class JARVIS:
             chat_id=chat_id,
             source=source,
             agent_mode=self._get_mode(),
+            mode_hint=(mode or "auto"),
         )
         resp = await self._pipeline.handle(req)
         return resp.to_dict()

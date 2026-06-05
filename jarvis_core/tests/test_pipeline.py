@@ -25,7 +25,10 @@ def test_inference_runs():
     async def run(u: int, t: str, m: str):
         return {"text": f"ok:{m}", "mode": m, "iters": 0}
 
-    chain = build_agent_pipeline(lambda t, m: "agent", run)
+    def _decide(t: str, m: str, **kwargs: object) -> str:
+        return "agent"
+
+    chain = build_agent_pipeline(_decide, run)
 
     async def _run():
         return await chain.handle(AgentRequest(user_id=1, text="привіт", agent_mode="agent"))

@@ -1,10 +1,21 @@
 # JARVIS — Roadmap
 
 Стек живий, Telegram E2E доведений, фази 1-7 (skeleton → polish) закриті, фаза 7.5
-(зміцнення без Docker: mypy strict + 76 тестів + CI) теж. Цей файл — про те, що
-ефективно зробити **далі**, а не про вже зроблене (історія — у `README.md` + `memory/`).
+(зміцнення без Docker: mypy strict + 76 тестів + CI) теж.
 
-Поділено на **must / nice / explore** і пронумеровано — щоб брати по черзі.
+**Продуктовий план (фази 0–7, KPI, editions):** [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).  
+**Platform (консоль `/platform`, Memory, Projects, MCP…):** [`docs/PLATFORM_ROADMAP.md`](docs/PLATFORM_ROADMAP.md).
+
+Цей файл — **короткий ops-backlog** (must / nice / explore), а не повний product roadmap.
+Історія зробленого — у `README.md` + `memory/`.
+
+---
+
+## Post-audit fixes (2026-06-04)
+
+Після другого проходу аудиту: паритет streaming/deliver, origin для Computer confirm,
+`agent_turn` модуль, `/start canvas` → Mini App `?canvas=1`, hybrid routing для скріншотів.
+Операційний чеклист змінних: [`docs/ENV_CHECKLIST.md`](docs/ENV_CHECKLIST.md).
 
 ---
 
@@ -181,11 +192,11 @@ API через `llama-server`. Drop-in заміна (`OLLAMA_HOST` → llama-ser
 
 Закоментований блок `ollama` у `docker-compose.yml` лишається для саме таких сценаріїв.
 
-### E3. Multi-user
-Зараз `ALLOWED_USER_IDS` — простий whitelist. Для родини/друзів-команди:
-- pgvector сесії вже мають `user_id` (готово в БД).
-- Додати простий per-user `RATE_LIMIT_PER_MIN`.
-- Можливо, per-user history isolation (зараз memory.search фільтрує по user_id — уже ОК).
+### E3. Multi-user ✅ (базово)
+- **Погодження через бота:** `/allow`, `/pending`, inline ✅/❌; збереження `data/access/users.json`.
+- **Базовий whitelist** у `.env` + динамічні друзі; `ADMIN_USER_IDS` — лише власник.
+- **Ізоляція:** RAG/нотатки/нагадування по `user_id`; `GUEST_RATE_LIMIT_PER_MIN` для друзів.
+- **Безпека:** `/mode` і computer-режим — лише адміни (`can_change_agent_mode`).
 
 ### E4. Власні інструменти агента
 Toolkit має `calc, web_search, web_fetch, parse_file, code_exec`. Очевидні наступні:

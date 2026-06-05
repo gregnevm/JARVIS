@@ -4,6 +4,8 @@ Self-hosted Telegram-бот на мікросервісах. Усе працює
 агент-луп у **Tools** (Python), пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**,
 синхронізація Edge↔Twin через **twin** (SyncServer + ModelRegistry). Жодних зовнішніх AI API.
 Запуск — один `docker compose up`. Цільова архітектура PortableAI — `docs/DESIGN.md`.
+Продуктовий roadmap (фази 0–7) — `docs/PRODUCT_ROADMAP.md`; Platform (консоль, 12 можливостей) — `docs/PLATFORM_ROADMAP.md`; ops-backlog — `ROADMAP.md`.
+Бекапи — `docs/BACKUP.md`; перевірка стеку — `scripts/verify_stack.ps1`.
 
 > Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
 > Tools + агент-луп на двох моделях, polish (rate limit, circuit breaker, healthchecks).
@@ -108,9 +110,60 @@ docker compose logs -f gateway
 
 ```bash
 curl http://localhost:8000/health     # gateway
+curl http://localhost:8200/health     # tools
 curl http://localhost:8100/health     # memory
+curl http://localhost:8300/health     # tts (якщо ENABLE_VOICE_REPLY=true)
+curl http://127.0.0.1:8400/health     # host-agent (процес на Windows, не в Compose)
+curl http://localhost:11434/api/tags  # Ollama на хості
 docker compose ps                     # статуси + healthcheck
+docker compose logs gateway --tail 5  # ingest=polling, whitelist, "Long polling started"
 ```
+
+### Перевірка після змін `.env`
+
+1. **Не використовуй** `docker compose restart` для підхоплення env — лише recreate:
+   `docker compose up -d gateway tools` (або `--build` після змін коду).
+2. Після змін computer-use / токена host-agent — перезапусти процес на хості
+   (`hostagent/run.bat` або scheduled task з `scripts/install_autostart.ps1`).
+3. Прогони health-перевірки з блоку вище; gateway-лог має містити `ingest=polling`
+   і непорожній whitelist.
+4. Юніт-тести (по одному сервісу, інакше колізія пакета `app`):
+   `pytest gateway/tests`, `pytest tools/tests`, `pytest hostagent/tests`, …
+
+### Computer Use (швидкий старт)
+
+Керування Windows-хостом з Telegram (PowerShell/CLI/FS). Повний план: `docs/COMPUTER_USE.md`.
+
+1. У `.env`: `ENABLE_COMPUTER_USE=true`, `HOSTAGENT_TOKEN=<secrets.token_hex(24)>`
+   (той самий рядок — tools і host-agent читають `HOSTAGENT_TOKEN`).
+2. Whitelist: `PS_WHITELIST`, `CLI_WHITELIST`. Admin вимкнено за замовч. (`COMPUTER_ALLOW_ADMIN=false`).
+3. На хості (поза Docker):
+
+```powershell
+cd O:\JARVIS\hostagent
+.\run.bat
+# або: pip install -r requirements.txt
+#      $env:HOSTAGENT_TOKEN = "..." ; python -m uvicorn app.main:app --host 127.0.0.1 --port 8400
+```
+
+4. Перевірка: `curl http://127.0.0.1:8400/health` → `{"status":"ok"}`.
+5. `docker compose up -d gateway tools` — tools ходить на `http://host.docker.internal:8400`.
+6. У чаті: `/mode computer` або `AGENT_MODE=computer`; мутуючі дії — підтвердження ✅/❌ у Telegram.
+
+> **Безпека:** ротуй `TELEGRAM_BOT_TOKEN` у @BotFather, якщо токен світився в логах/чаті
+> (див. `ROADMAP.md` M4). Після revoke — онови `.env` і `docker compose up -d gateway`.
+
+### Windows: автозапуск усього стеку (завжди)
+
+Щоб **Ollama, Docker Compose, host-agent** піднімались після логону і відновлювались
+кожні 5 хв (watchdog), один раз:
+
+```powershell
+powershell -File scripts/install_autostart.ps1
+```
+
+У кореневому `.env` має бути `HOSTAGENT_TOKEN` (той самий, що для `ENABLE_COMPUTER_USE`).
+Лог: `data/autostart.log`. Видалити: `install_autostart.ps1 -Uninstall`.
 
 ---
 
@@ -118,7 +171,10 @@ docker compose ps                     # статуси + healthcheck
 
 1. **Токен:** напиши [@BotFather](https://t.me/BotFather) → `/newbot` → отримаєш `TELEGRAM_BOT_TOKEN`.
 2. **Свій user_id:** напиши [@userinfobot](https://t.me/userinfobot) — він поверне твій числовий ID.
-   Впиши його в `ALLOWED_USER_IDS` (кілька — через кому). Бот ігнорує всіх, кого нема у списку.
+   Впиши його в `ALLOWED_USER_IDS`. Друзів можна додавати вручну в `.env` або **погоджувати через бота**:
+   друг пише боту будь-що → тобі приходить запит з кнопками ✅/❌ → `/allow ID` або `/pending`.
+   Погоджені зберігаються в `data/access/users.json` (переживає рестарт). У `.env` лиши лише
+   `ADMIN_USER_IDS` = свій ID, якщо не хочеш давати друзям `/admin`.
 
 ### Як заходять апдейти (long polling — за замовчуванням)
 
@@ -184,6 +240,20 @@ gateway-ом на `GET /app`, дані — `GET /app/data`, зміна режи�
 Named tunnel дає стабільний URL (на відміну від quick tunnel, який «стрибає»).
 У проді постав `WEBAPP_DEV_OPEN=false` — тоді `/app` пускає лише з Telegram.
 
+**Quick tunnel (без домену, автоматично).** Тимчасовий `*.trycloudflare.com` — URL
+змінюється після рестарту контейнера, але скрипт сам оновлює `.env` і gateway:
+
+1. У `.env`: `ENABLE_QUICK_TUNNEL=true` (і порожній `CLOUDFLARE_TUNNEL_TOKEN`).
+2. `powershell -File scripts/setup_quick_tunnel.ps1` — підніме тунель, пропише
+   `PUBLIC_APP_URL`, перезапустить gateway (кнопка «📊 Dashboard»).
+3. Autostart/watchdog (кожні 5 хв) повторює синхронізацію, якщо URL змінився.
+
+Зупинити: `powershell -File scripts/setup_quick_tunnel.ps1 -Stop`.
+
+**Named tunnel (стабільний домен):** `powershell -File scripts/setup_tunnel.ps1` після
+`CLOUDFLARE_TUNNEL_TOKEN` + `PUBLIC_APP_URL=https://<домен>/app` у `.env`.
+У чаті: команда `/app` або кнопка «Dashboard»; deep links: `/start app`, `/start mode_agent`.
+
 ---
 
 ## Структура проєкту
@@ -200,6 +270,7 @@ Named tunnel дає стабільний URL (на відміну від quick t
 ├── whisper/                # STT (готовий образ, без коду)
 ├── memory/                 # RAG: embeddings + retrieval + tests/   (Фаза 4)
 ├── tools/                  # агентські інструменти + tests/         (Фаза 6)
+├── hostagent/              # Computer Use: FastAPI на Windows-хості + tests/
 ├── db/
 │   └── init.sql            # схема: sessions, messages, embeddings(vector)
 ├── n8n/
@@ -236,10 +307,10 @@ mypy gateway/app          # strict-типізація (конфіг у pyproject
 pytest gateway/tests      # юніт-тести: mocked-клієнти, без мережі/БД
 ```
 
-Те саме для `memory` і `tools`. Тести покривають чисту логіку: маршрутизацію агента,
-інструменти (`calc`/`coerce_args`/парсер DDG), rate-limit, circuit breaker, парсинг
-whitelist, роутинг text/voice. У CI (`.github/workflows/ci.yml`) усе це йде matrix-ом
-по трьох сервісах + валідація `docker compose config`.
+Те саме для `memory`, `tools` і `hostagent`. Тести покривають чисту логіку: маршрутизацію агента,
+інструменти (`calc`/`coerce_args`/парсер DDG), rate-limit, circuit breaker, computer-use,
+парсинг whitelist, роутинг text/voice. У CI (`.github/workflows/ci.yml`) matrix по
+`jarvis_core`, `gateway`, `memory`, `tools`, `twin`, `hostagent` + `docker compose config`.
 
 ---
 
@@ -277,6 +348,8 @@ NDJSON-стрім (`/agent/stream`), gateway шле плейсхолдер «✍
 редагує його через `editMessageText` — текст «друкується», як у ChatGPT. У режимі
 agent між цим показуються мітки інструментів («🧮 рахую…», «🔍 шукаю…»). Будь-який
 збій стріму → тихий фолбек на класичний `/agent` тим самим повідомленням.
+
+**Ops:** [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) · [`docs/IMAGE_GEN.md`](docs/IMAGE_GEN.md) · [`docs/COMPUTER_ROLLBACK.md`](docs/COMPUTER_ROLLBACK.md)
 
 **Надійність:** rate-limit на `user_id` через Redis (`RATE_LIMIT_PER_MIN`, fail-open),
 circuit breaker на Ollama (N помилок підряд → пауза, fail-fast замість зависань),

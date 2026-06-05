@@ -84,10 +84,14 @@ def test_parse_ddg_respects_limit():
 # --- схеми інструментів ---
 def test_schemas_default_excludes_code_exec(monkeypatch):
     monkeypatch.setattr(settings, "enable_code_exec", False)
+    monkeypatch.setattr(settings, "enable_computer_use", False)
+    monkeypatch.setattr(settings, "ollama_model_vision", "")
+    monkeypatch.setattr(settings, "image_gen_url", "")
+    monkeypatch.setattr(settings, "image_gen_model", "")
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
     assert names == [
-        "calc", "web_search", "web_fetch", "take_note", "recall_notes",
-        "set_reminder", "list_reminders",
+        "calc", "web_search", "web_fetch", "parse_file", "ocr_image", "take_note",
+        "recall_notes", "set_reminder", "list_reminders", "cancel_reminder", "show_in_app",
     ]
     assert "code_exec" not in names
 
@@ -115,6 +119,52 @@ def test_parse_file_unsupported(tmp_path: Path):
     assert toolkit.parse_file(str(f)).startswith("Непідтримуваний формат")
 
 
+# --- зображення (vision / OCR / генерація) ---
+async def test_describe_image_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "ollama_model_vision", "")
+    assert (await toolkit.describe_image("/x.jpg")).startswith("Опис зображень вимкнено")
+
+
+async def test_generate_image_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "image_gen_url", "")
+    monkeypatch.setattr(settings, "image_gen_model", "")
+    assert (await toolkit.generate_image("кіт")).startswith("Генерація зображень вимкнена")
+
+
+async def test_generate_image_ollama(monkeypatch, tmp_path):
+    async def _fake(prompt: str) -> bytes:
+        assert prompt == "banana"
+        return b"\x89PNG\r\n\x1a\n"
+
+    async def _lock_acquire():
+        return True
+
+    async def _lock_release():
+        return None
+
+    monkeypatch.setattr(settings, "image_gen_url", "ollama")
+    monkeypatch.setattr(settings, "image_gen_model", "x/z-image-turbo")
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path))
+    monkeypatch.setattr(toolkit, "_generate_image_ollama", _fake)
+    monkeypatch.setattr("app.image_gen_lock.try_acquire", _lock_acquire)
+    monkeypatch.setattr("app.image_gen_lock.release", _lock_release)
+    out = await toolkit.generate_image("banana")
+    assert "[[photo:" in out
+    assert (tmp_path / "uploads").exists()
+
+
+def test_ocr_image_missing_file():
+    assert toolkit.ocr_image("/no/such/img.png").startswith("Файл не знайдено")
+
+
+def test_vision_imagegen_schemas_gated(monkeypatch):
+    monkeypatch.setattr(settings, "ollama_model_vision", "llava:7b")
+    monkeypatch.setattr(settings, "image_gen_url", "http://localhost:7860")
+    monkeypatch.setattr(settings, "image_gen_model", "")
+    names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
+    assert "describe_image" in names and "generate_image" in names
+
+
 # --- dispatch ---
 async def test_dispatch_calc():
     assert await toolkit.dispatch("calc", {"expression": "6*7"}) == "42"
@@ -122,6 +172,10 @@ async def test_dispatch_calc():
 
 async def test_dispatch_unknown_tool():
     assert (await toolkit.dispatch("nope", {})).startswith("Невідомий інструмент")
+
+
+async def test_dispatch_calc_via_name():
+    assert await toolkit.dispatch("calc", {"expression": "3*3"}) == "9"
 
 
 # --- code_exec ---

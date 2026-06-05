@@ -17,7 +17,12 @@ data/uploads/*
 !data/uploads/.gitkeep
 data/notes/
 data/logs/
+data/access/
 data/twin/
+# Рантайм-артефакти: вивчений PS-whitelist і ефемерний URL quick-тунелю.
+data/computer_learned.json
+data/quick_tunnel.last_url
+vendor/sd-forge/
 
 # Логи / тимчасові
 *.log

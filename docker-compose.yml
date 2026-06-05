@@ -22,6 +22,8 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/data
+      # HTML/CSS дашборда — без rebuild при зміні app.html / admin.html
+      - ./gateway/app/static:/app/app/static:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -251,6 +253,21 @@ services:
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       - gateway
+    networks: [jarvis-net]
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Quick tunnel (без домену/акаунту): *.trycloudflare.com — URL змінюється після рестарту.
+  # Автоматизація: ENABLE_QUICK_TUNNEL=true + scripts/setup_quick_tunnel.ps1
+  #     docker compose --profile quick-tunnel up -d
+  cloudflared-quick:
+    profiles: ["quick-tunnel"]
+    container_name: jarvis-quick-tunnel
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://gateway:8000
+    depends_on:
+      gateway:
+        condition: service_healthy
     networks: [jarvis-net]
     restart: unless-stopped
     logging: *default-logging

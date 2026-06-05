@@ -13,8 +13,8 @@ def get_agent_mode() -> str:
 def set_agent_mode(mode: str) -> str:
     global _mode_override
     m = mode.lower().strip()
-    if m not in ("chat", "agent", "hybrid"):
-        raise ValueError("mode must be chat, agent, or hybrid")
+    if m not in ("chat", "agent", "hybrid", "computer"):
+        raise ValueError("mode must be chat, agent, hybrid, or computer")
     _mode_override = m
     return m
 
