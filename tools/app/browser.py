@@ -22,7 +22,7 @@ async def _ensure_page() -> Any:
     if _page is not None:
         return _page
     try:
-        from playwright.async_api import async_playwright  # type: ignore[import-not-found]
+        from playwright.async_api import async_playwright
     except ImportError:
         raise RuntimeError("Playwright не встановлено (pip install playwright).") from None
     pw = await async_playwright().start()

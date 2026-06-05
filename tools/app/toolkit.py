@@ -198,7 +198,7 @@ def ocr_image(path: str, lang: str = "ukr+eng") -> str:
     if not p.is_file():
         return f"Файл не знайдено: {path}"
     try:
-        import pytesseract  # type: ignore[import-not-found]
+        import pytesseract
         from PIL import Image
     except Exception:  # noqa: BLE001
         return "OCR недоступний (немає pytesseract/Pillow або системного tesseract)."
