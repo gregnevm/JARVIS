@@ -143,7 +143,7 @@ async def export_ics(user_id: int) -> str:
         return ""
     rows = cast("list[tuple[str, float]]", raw)
     now_ts = int(time.time())
-    events: list[list[str]] = []
+    events: list[str] = []
     for member, score in rows:
         try:
             rec = json.loads(member)

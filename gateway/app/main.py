@@ -6,10 +6,12 @@ import contextlib
 import hmac
 import logging
 from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable
 from typing import Any, AsyncIterator
 
 import redis.asyncio as aioredis
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from starlette.responses import Response
 
 from pathlib import Path
 
@@ -173,7 +175,9 @@ app.include_router(platform_router)
 
 
 @app.middleware("http")
-async def _request_id_middleware(request: Request, call_next):
+async def _request_id_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     from .request_id import new_request_id, set_request_id
 
     rid = request.headers.get("X-Request-ID") or new_request_id()

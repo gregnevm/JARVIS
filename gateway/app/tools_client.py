@@ -314,6 +314,7 @@ class ToolsClient:
             resp = await self._client.get(f"{self._base}/jobs/due")
             resp.raise_for_status()
             data = resp.json()
-            return data.get("jobs") if isinstance(data, dict) else []
+            jobs = data.get("jobs") if isinstance(data, dict) else []
+            return jobs if isinstance(jobs, list) else []
         except httpx.HTTPError:
             return []

@@ -61,6 +61,12 @@ _TIER = {
 _redis: aioredis.Redis | None = None
 
 
+def _redis_str(raw: bytes | str | None) -> str:
+    if raw is None:
+        return ""
+    return raw.decode() if isinstance(raw, bytes) else str(raw)
+
+
 def _client() -> aioredis.Redis:
     global _redis
     if _redis is None:
@@ -201,7 +207,7 @@ async def load_pending(user_id: int, code: str) -> dict[str, Any] | None:
     raw = await _client().get(_pending_key(user_id))
     if not raw:
         return None
-    stored_code, _, payload = raw.partition(":")
+    stored_code, _, payload = _redis_str(raw).partition(":")
     if stored_code != code.lower().strip():
         return None
     try:
@@ -226,7 +232,7 @@ async def save_origin(user_id: int, text: str) -> None:
 
 async def load_origin(user_id: int) -> str:
     raw = await _client().get(_origin_key(user_id))
-    return (raw or "").strip() if raw else ""
+    return _redis_str(raw).strip()
 
 
 async def clear_origin(user_id: int) -> None:
@@ -238,7 +244,7 @@ async def load_pending_raw(user_id: int) -> dict[str, Any]:
     raw = await _client().get(_pending_key(user_id))
     if not raw:
         return {"pending": False}
-    stored_code, _, payload = raw.partition(":")
+    stored_code, _, payload = _redis_str(raw).partition(":")
     try:
         data = json.loads(payload)
     except json.JSONDecodeError:
@@ -246,7 +252,8 @@ async def load_pending_raw(user_id: int) -> dict[str, Any]:
     if not isinstance(data, dict):
         data = {}
     tool = str(data.get("tool") or "")
-    args = data.get("args") if isinstance(data.get("args"), dict) else {}
+    raw_args = data.get("args")
+    args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
     return {
         "pending": True,
         "code": stored_code,
@@ -327,7 +334,8 @@ async def execute_confirmed(user_id: int, code: str) -> tuple[str, str]:
         return "Дію прострочено або код невірний.", ""
     origin = await load_origin(user_id)
     tool = str(data.get("tool", ""))
-    args = data.get("args") if isinstance(data.get("args"), dict) else {}
+    raw_args = data.get("args")
+    args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
     tier = str(data.get("tier") or audit_tier(tool, args))
 
     if _needs_admin_second_confirm(tool, args, data):

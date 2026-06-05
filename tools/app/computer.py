@@ -392,6 +392,12 @@ async def clipboard_write(text: str, *, user_id: int = 0) -> str:
     )
 
 
+async def capture_screenshot(*, user_id: int = 0) -> str:
+    return await wrap_execute(
+        user_id, "capture_screenshot", {}, lambda: _capture_screenshot_impl()
+    )
+
+
 async def see_screen(question: str = "", *, user_id: int = 0) -> str:
     """Smart screen: screenshot → vision (якщо увімкнено)."""
     shot = await capture_screenshot(user_id=user_id)

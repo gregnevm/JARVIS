@@ -29,8 +29,10 @@ def _load_raw() -> dict[str, list[str]]:
         return {"ps": [], "cli": []}
     if not isinstance(data, dict):
         return {"ps": [], "cli": []}
-    ps = data.get("ps") if isinstance(data.get("ps"), list) else []
-    cli = data.get("cli") if isinstance(data.get("cli"), list) else []
+    ps_raw = data.get("ps")
+    cli_raw = data.get("cli")
+    ps = ps_raw if isinstance(ps_raw, list) else []
+    cli = cli_raw if isinstance(cli_raw, list) else []
     return {
         "ps": [str(x).strip().lower() for x in ps if str(x).strip()],
         "cli": [str(x).strip().lower() for x in cli if str(x).strip()],

@@ -5,6 +5,7 @@ import base64
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from ..auth import computer_denied_message
 from ..config import settings
@@ -37,7 +38,7 @@ async def handle_remote_command(
     tg: TelegramClient,
     tools: ToolsClient,
     *,
-    redis=None,
+    redis: Any | None = None,
 ) -> bool:
     denied = computer_denied_message(user_id)
     t = (text or "").strip()
@@ -114,7 +115,7 @@ async def handle_remote_command(
 
 
 async def maybe_drop_to_host(
-    message: dict,
+    message: dict[str, Any],
     saved_path: str,
     caption: str,
     chat_id: int,

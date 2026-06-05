@@ -297,7 +297,8 @@ class TelegramClient:
                 data["parse_mode"] = parse_mode
         try:
             if isinstance(src, bytes):
-                files = {field: (f"{field}.bin", src)}
+                fname = f"{field}.bin"
+                files = {field: (fname, src)}
                 resp = await self._client.post(f"{self._api}/{method}", data=data, files=files)
             elif isinstance(src, str) and src.startswith(("http://", "https://")):
                 resp = await self._client.post(
@@ -329,8 +330,27 @@ class TelegramClient:
         return await self._send_media("sendPhoto", "photo", chat_id, src, caption)
 
     async def send_document(
-        self, chat_id: int, src: str | bytes, caption: str | None = None
+        self,
+        chat_id: int,
+        src: str | bytes,
+        caption: str | None = None,
+        *,
+        filename: str | None = None,
     ) -> bool:
+        if isinstance(src, bytes) and filename:
+            data: dict[str, str] = {"chat_id": str(chat_id)}
+            if caption:
+                data["caption"] = caption[:1024]
+            files = {"document": (filename, src)}
+            try:
+                resp = await self._client.post(
+                    f"{self._api}/sendDocument", data=data, files=files
+                )
+                resp.raise_for_status()
+                return True
+            except (httpx.HTTPError, OSError) as exc:
+                logger.error("sendDocument failed: %s", exc)
+                return False
         return await self._send_media("sendDocument", "document", chat_id, src, caption)
 
     async def send_video(

@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Request
+from starlette.responses import Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -97,7 +99,9 @@ app = FastAPI(title="JARVIS Tools", lifespan=lifespan)
 
 
 @app.middleware("http")
-async def _log_request_id(request: Request, call_next):
+async def _log_request_id(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     rid = request.headers.get("X-Request-ID", "")
     if rid:
         logger.info("request_id=%s %s %s", rid, request.method, request.url.path)

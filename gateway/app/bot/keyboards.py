@@ -17,7 +17,7 @@ BTN_HIDE = "⌨️ Сховати"
 
 def reply_keyboard(app_url: str | None = None, *, show_computer: bool = True) -> dict[str, Any]:
     """Reply Keyboard — постійні кнопки під полем вводу."""
-    rows: list[list[dict[str, str]]] = [
+    rows: list[list[dict[str, Any]]] = [
         [{"text": BTN_STATUS}, {"text": BTN_BRIEF}],
     ]
     if show_computer:
@@ -136,7 +136,7 @@ def computer_confirm_keyboard(code: str) -> dict[str, Any]:
     }
 
 
-def admin_confirm_keyboard(code: str) -> dict[str, Any]:
+def admin_ps_confirm_keyboard(code: str) -> dict[str, Any]:
     return {
         "inline_keyboard": [
             [

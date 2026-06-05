@@ -10,7 +10,7 @@ from ..outbound import deliver
 from ..tools_client import ToolsClient
 from ..telegram import TelegramClient
 from .dashboard import esc
-from .keyboards import admin_confirm_keyboard, computer_confirm_keyboard
+from .keyboards import admin_ps_confirm_keyboard, computer_confirm_keyboard
 
 logger = logging.getLogger("jarvis.gateway.computer")
 
@@ -63,7 +63,7 @@ async def send_admin_confirm(
         f"🔴 <b>Admin PowerShell</b> — друге підтвердження\n\n{desc}\n\n"
         f"Код: <code>{esc(code)}</code>",
         parse_mode="HTML",
-        reply_markup=admin_confirm_keyboard(code),
+        reply_markup=admin_ps_confirm_keyboard(code),
     )
 
 
@@ -110,7 +110,6 @@ async def handle_computer_callback(
             tg,
             chat_id,
             f"✅ <b>Admin PS виконано</b>\n\n<pre>{esc(result[:3500])}</pre>",
-            parse_mode="HTML",
         )
         await resume_after_computer(
             tg, tools, chat_id, user_id, result, redis, origin_text=origin
@@ -143,7 +142,7 @@ async def handle_computer_callback(
     if admin_c:
         await send_admin_confirm(chat_id, admin_c, tg)
         return True
-    await deliver(tg, chat_id, f"✅ <b>Виконано</b>\n\n<pre>{esc(result[:3500])}</pre>", parse_mode="HTML")
+    await deliver(tg, chat_id, f"✅ <b>Виконано</b>\n\n<pre>{esc(result[:3500])}</pre>")
     await resume_after_computer(
         tg,
         tools,

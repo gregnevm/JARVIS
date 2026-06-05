@@ -60,7 +60,8 @@ async def mark_step_done(user_id: int, step: str) -> dict[str, Any] | None:
     task = await get_active(user_id)
     if not task:
         return None
-    done = task.get("done") if isinstance(task.get("done"), list) else []
+    raw_done = task.get("done")
+    done: list[str] = [str(x) for x in raw_done] if isinstance(raw_done, list) else []
     done.append(step[:200])
     task["done"] = done
     await _client().setex(_akey(user_id), _TTL, json.dumps(task, ensure_ascii=False))

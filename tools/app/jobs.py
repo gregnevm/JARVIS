@@ -42,22 +42,27 @@ async def due_jobs(now: int | None = None) -> list[dict[str, Any]]:
     raw = await _client().zrangebyscore(_JOBS_KEY, "-inf", cutoff, start=0, num=20)
     out: list[dict[str, Any]] = []
     for member in raw:
+        member_s = str(member)
         try:
-            rec = json.loads(member)
+            rec = json.loads(member_s)
             if isinstance(rec, dict):
                 out.append(rec)
         except json.JSONDecodeError:
             continue
-        await _client().zrem(_JOBS_KEY, member)
+        await _client().zrem(_JOBS_KEY, member_s)
     return out
 
 
 async def list_jobs(user_id: int) -> str:
     raw = await _client().zrange(_JOBS_KEY, 0, -1, withscores=True)
     lines: list[str] = []
-    for member, score in raw:
+    for item in raw:
+        if not isinstance(item, tuple) or len(item) != 2:
+            continue
+        member, score = item
+        member_s = str(member)
         try:
-            rec = json.loads(member)
+            rec = json.loads(member_s)
         except json.JSONDecodeError:
             continue
         if int(rec.get("user_id", 0)) != int(user_id):

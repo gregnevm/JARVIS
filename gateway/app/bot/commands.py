@@ -513,7 +513,7 @@ async def handle_callback(
             redis=redis,
             user_id=int(user_id),
         )
-        return True
+        return
 
     if data.startswith("mode:"):
         mode = data.split(":", 1)[1]
@@ -524,7 +524,7 @@ async def handle_callback(
             if cq_id:
                 await tg.answer_callback_query(str(cq_id), text=denied[:200])
             await tg.send_message(chat_id, denied)
-            return True
+            return
         res = await svc.set_mode(mode)
         if res.get("error"):
             toast = f"Помилка: {res['error'][:180]}"

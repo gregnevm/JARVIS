@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -45,9 +45,9 @@ async def vision_vram_scope() -> AsyncIterator[None]:
         await unload_agent_models()
 
 
-def vision_chat_payload(prompt: str, image_b64: str) -> dict:
+def vision_chat_payload(prompt: str, image_b64: str) -> dict[str, Any]:
     """Payload для /api/chat з мінімальним keep_alive (не тримати vision у VRAM)."""
-    payload: dict = {
+    payload: dict[str, Any] = {
         "model": settings.ollama_model_vision,
         "messages": [{"role": "user", "content": prompt, "images": [image_b64]}],
         "stream": False,

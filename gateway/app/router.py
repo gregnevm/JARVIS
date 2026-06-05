@@ -405,6 +405,8 @@ async def _handle_inline_query(
         )
         return
 
+    if user_id is None:
+        return
     answer = await tools.process({"user_id": int(user_id), "text": query})
     from .outbound import parse_directives
 
@@ -519,7 +521,10 @@ async def _handle_album(
     payload = build_agent_payload(
         user_id=int(user_id),
         chat_id=int(chat_id),
-        text=album_prompt(items, cap),
+        text=album_prompt(
+            items,
+            cap.decode() if isinstance(cap, bytes) else (cap if isinstance(cap, str) else None),
+        ),
         source="album",
         mode="auto",
     )
