@@ -231,6 +231,27 @@ Start-SdForgeIfConfigured
 # --- 5) Host-agent (Windows, outside Docker) ---
 Start-JarvisHostagent
 
+# --- 5b) Quick tunnel for Mini App (optional, ENABLE_QUICK_TUNNEL=true) ---
+function Start-QuickTunnelIfEnabled {
+    $envPath = Join-Path $root '.env'
+    Import-JarvisEnv $envPath
+    if ($env:ENABLE_QUICK_TUNNEL -ne 'true') { return }
+    if ($env:CLOUDFLARE_TUNNEL_TOKEN) {
+        Log 'quick-tunnel: skipped (CLOUDFLARE_TUNNEL_TOKEN set — use named tunnel)'
+        return
+    }
+    $setup = Join-Path $root 'scripts\setup_quick_tunnel.ps1'
+    if (-not (Test-Path $setup)) {
+        Log 'quick-tunnel: setup script missing'
+        return
+    }
+    Log 'quick-tunnel: syncing...'
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $setup -SyncOnly 2>&1 |
+        ForEach-Object { Log "quick-tunnel: $_" }
+}
+
+Start-QuickTunnelIfEnabled
+
 # --- 6) Ollama API health ---
 for ($i = 0; $i -lt 15; $i++) {
     try {

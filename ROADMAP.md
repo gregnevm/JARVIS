@@ -3,7 +3,8 @@
 Стек живий, Telegram E2E доведений, фази 1-7 (skeleton → polish) закриті, фаза 7.5
 (зміцнення без Docker: mypy strict + 76 тестів + CI) теж.
 
-**Продуктовий план (фази 0–7, KPI, editions):** [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).
+**Продуктовий план (фази 0–7, KPI, editions):** [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).  
+**Platform (консоль `/platform`, Memory, Projects, MCP…):** [`docs/PLATFORM_ROADMAP.md`](docs/PLATFORM_ROADMAP.md).
 
 Цей файл — **короткий ops-backlog** (must / nice / explore), а не повний product roadmap.
 Історія зробленого — у `README.md` + `memory/`.

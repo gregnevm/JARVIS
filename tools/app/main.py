@@ -372,6 +372,16 @@ async def computer_revoke_trust_ep(req: TrustRequest) -> dict[str, str]:
     return {"status": "revoked"}
 
 
+@app.get("/computer/trust/status")
+async def computer_trust_status_ep(user_id: int) -> dict[str, Any]:
+    from .computer_trust import is_trusted, trust_remaining
+
+    return {
+        "trusted": await is_trusted(user_id),
+        "ttl_seconds": await trust_remaining(user_id),
+    }
+
+
 @app.get("/computer/pending")
 async def computer_pending_ep(user_id: int) -> dict[str, Any]:
     from .computer_confirm import load_pending_raw
@@ -380,10 +390,31 @@ async def computer_pending_ep(user_id: int) -> dict[str, Any]:
 
 
 @app.get("/computer/audit")
-async def computer_audit_ep(limit: int = 20) -> dict[str, Any]:
+async def computer_audit_ep(limit: int = 20, tool: str | None = None) -> dict[str, Any]:
     from .computer_audit import tail_actions
 
-    return {"entries": tail_actions(limit=limit)}
+    lim = max(1, min(limit, 100))
+    return {"entries": tail_actions(limit=lim, tool=tool)}
+
+
+@app.get("/computer/powershell/policy")
+async def computer_powershell_policy_ep() -> dict[str, Any]:
+    from . import computer
+    from .computer_learned import effective_ps_allowed, learned_summary
+    from .ps_whitelist import parse_whitelist
+
+    env_ps = sorted(parse_whitelist(settings.ps_whitelist))
+    learned = learned_summary()["ps"]
+    effective = sorted(effective_ps_allowed())
+    return {
+        "enable_computer_use": settings.enable_computer_use,
+        "allow_admin": settings.computer_allow_admin,
+        "require_confirm": settings.computer_require_confirm,
+        "hostagent_up": await computer.hostagent_healthy(),
+        "ps_whitelist": env_ps,
+        "learned_ps": learned,
+        "effective": effective,
+    }
 
 
 @app.get("/computer/learned")

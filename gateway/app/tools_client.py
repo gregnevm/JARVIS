@@ -206,6 +206,41 @@ class ToolsClient:
         except httpx.HTTPError as exc:
             logger.error("grant trust failed: %s", exc)
 
+    async def get_ps_pending(self, user_id: int) -> dict[str, Any]:
+        try:
+            r = await self._client.get(
+                f"{self._base}/computer/pending", params={"user_id": user_id}
+            )
+            return r.json() if r.status_code == 200 else {"pending": False}
+        except httpx.HTTPError:
+            return {"pending": False}
+
+    async def get_ps_audit(self, *, limit: int = 30) -> dict[str, Any]:
+        try:
+            r = await self._client.get(
+                f"{self._base}/computer/audit",
+                params={"limit": limit, "tool": "run_powershell"},
+            )
+            return r.json() if r.status_code == 200 else {"entries": []}
+        except httpx.HTTPError:
+            return {"entries": []}
+
+    async def get_ps_policy(self) -> dict[str, Any]:
+        try:
+            r = await self._client.get(f"{self._base}/computer/powershell/policy")
+            return r.json() if r.status_code == 200 else {}
+        except httpx.HTTPError:
+            return {}
+
+    async def get_trust_status(self, user_id: int) -> dict[str, Any]:
+        try:
+            r = await self._client.get(
+                f"{self._base}/computer/trust/status", params={"user_id": user_id}
+            )
+            return r.json() if r.status_code == 200 else {"trusted": False, "ttl_seconds": 0}
+        except httpx.HTTPError:
+            return {"trusted": False, "ttl_seconds": 0}
+
     async def remote_status(self, user_id: int) -> dict[str, Any]:
         out: dict[str, Any] = {}
         try:

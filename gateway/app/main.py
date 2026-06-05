@@ -23,6 +23,7 @@ from .health_watch import health_watch_loop
 from .job_runner import job_runner_loop
 from .services import ServicesClient
 from .admin_panel import router as admin_panel_router
+from .platform import router as platform_router
 from .webapp import router as webapp_router
 from .tools_client import ToolsClient
 from .ratelimit import RateLimiter
@@ -168,6 +169,7 @@ async def _poll_loop(app: FastAPI) -> None:
 app = FastAPI(title="JARVIS Gateway", lifespan=lifespan)
 app.include_router(webapp_router)
 app.include_router(admin_panel_router)
+app.include_router(platform_router)
 
 
 @app.middleware("http")

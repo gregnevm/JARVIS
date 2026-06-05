@@ -22,6 +22,20 @@ def _enabled() -> bool:
     return settings.enable_computer_use and bool(settings.hostagent_token)
 
 
+async def hostagent_healthy() -> bool:
+    if not _enabled():
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as cli:
+            resp = await cli.get(
+                f"{settings.hostagent_url.rstrip('/')}/health",
+                headers=_headers(),
+            )
+            return resp.status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
 def _headers() -> dict[str, str]:
     return {_TOKEN_HEADER: settings.hostagent_token}
 

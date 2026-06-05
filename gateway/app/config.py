@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     # Веб-панель адміна на /admin (HTTP Basic Auth). Порожній пароль = панель вимкнена.
     admin_panel_user: str = "admin"
     admin_panel_password: str = ""
+    # Веб-консоль /platform (HTTP Basic Auth у браузері). Порожньо → fallback на
+    # ADMIN_PANEL_PASSWORD. Telegram-адміни заходять через initData без пароля.
+    platform_password: str = ""
+    # Спільний з tools каталог даних (Docker: ./data:/data). Звідки Platform читає
+    # session-логи (logs/sessions/*.jsonl) і профілі (profiles/*.json).
+    data_dir: str = "/data"
     # Публічний URL для webhook (лише TELEGRAM_INGEST_MODE=webhook).
     telegram_webhook_url: str = ""
     # Telegram ID з доступом до Computer Use. Порожньо → ADMIN_USER_IDS → ALLOWED_USER_IDS (.env).

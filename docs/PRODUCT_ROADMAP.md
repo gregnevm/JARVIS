@@ -14,6 +14,7 @@
 | [`docs/COMPUTER_USE.md`](COMPUTER_USE.md) | Computer Use C0–C6 |
 | [`docs/ENV_CHECKLIST.md`](ENV_CHECKLIST.md) | Операційний чеклист `.env` |
 | [`docs/SMOKE_TEST.md`](SMOKE_TEST.md) | Регресійний smoke |
+| [`docs/PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) | Веб-консоль `/platform` + 12 агентних можливостей (P0–P11) |
 
 ---
 

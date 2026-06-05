@@ -222,11 +222,17 @@ class AgentRunner:
         self._mem = memory
 
     async def _persist_turn(
-        self, user_id: int, text: str, answer: str, mode: str, iters: int
+        self,
+        user_id: int,
+        text: str,
+        answer: str,
+        mode: str,
+        iters: int,
+        project_id: int | None = None,
     ) -> None:
-        await self._mem.store(user_id, text, role="user")
+        await self._mem.store(user_id, text, role="user", project_id=project_id)
         if answer:
-            await self._mem.store(user_id, answer, role="assistant")
+            await self._mem.store(user_id, answer, role="assistant", project_id=project_id)
         from .session_ingest import append_turn
 
         append_turn(
@@ -237,10 +243,26 @@ class AgentRunner:
             iters=iters,
         )
 
-    async def _memory_context(self, user_id: int, text: str) -> tuple[str, str]:
+    async def _resolve_project(self, user_id: int) -> tuple[int | None, str]:
+        """Активний проєкт користувача → (project_id, system-блок). Видалений/чужий
+        проєкт скидаємо (fail-safe на загальний контекст)."""
+        from .projects import active_project_id, project_prompt_block, set_active_project
+
+        pid = await active_project_id(user_id)
+        if pid is None:
+            return None, ""
+        proj = await self._mem.get_project(user_id, pid)
+        if not proj:
+            await set_active_project(user_id, None)
+            return None, ""
+        return pid, project_prompt_block(proj)
+
+    async def _memory_context(
+        self, user_id: int, text: str, project_id: int | None = None
+    ) -> tuple[str, str]:
         from .metrics import record_rag
 
-        results = await self._mem.search(user_id, text, top_k=5)
+        results = await self._mem.search(user_id, text, top_k=5, project_id=project_id)
         await record_rag(len(results))
         rag = " | ".join(str(r.get("content", "")) for r in results)
         thread = await build_thread_context(self._mem, user_id)
@@ -259,7 +281,9 @@ class AgentRunner:
         t0 = time.perf_counter()
         iters = 0
         resolved = "chat"
-        ctx, prof = await self._memory_context(user_id, text)
+        project_id, project_block = await self._resolve_project(user_id)
+        ctx, prof = await self._memory_context(user_id, text, project_id)
+        prof += project_block
         hint = mode_hint or mode
         resolved = _resolve_mode_hint(hint) or decide_mode(
             text, get_agent_mode(), mode_hint=hint, user_id=user_id
@@ -280,7 +304,7 @@ class AgentRunner:
                     profile=prof,
                 )
 
-            await self._persist_turn(user_id, text, answer or "", resolved, iters)
+            await self._persist_turn(user_id, text, answer or "", resolved, iters, project_id)
             return {"text": answer or FALLBACK, "mode": resolved, "iters": iters}
         finally:
             await record_turn((time.perf_counter() - t0) * 1000, resolved, iters)
@@ -303,7 +327,9 @@ class AgentRunner:
         t0 = time.perf_counter()
         iters = 0
         resolved = "chat"
-        ctx, prof = await self._memory_context(user_id, text)
+        project_id, project_block = await self._resolve_project(user_id)
+        ctx, prof = await self._memory_context(user_id, text, project_id)
+        prof += project_block
         hint = mode_hint or mode
         resolved = _resolve_mode_hint(hint) or decide_mode(
             text, get_agent_mode(), mode_hint=hint, user_id=user_id
@@ -334,7 +360,7 @@ class AgentRunner:
                     yield ev
 
             answer = "".join(parts).strip()
-            await self._persist_turn(user_id, text, answer or "", resolved, iters)
+            await self._persist_turn(user_id, text, answer or "", resolved, iters, project_id)
             yield {
                 "done": True,
                 "mode": resolved,
@@ -394,7 +420,9 @@ class AgentRunner:
                 name = str(fn.get("name", ""))
                 args = coerce_args(fn.get("arguments"))
                 yield {"status": _tool_status(name)}
+                yield {"tool_start": {"name": name, "args": args}}
                 result = await dispatch(name, args, user_id, allow_computer=allow_computer)
+                yield {"tool_done": {"name": name, "result": result}}
                 confirm = _parse_confirm(result)
                 if confirm:
                     from .computer_confirm import save_origin

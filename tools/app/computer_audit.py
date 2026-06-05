@@ -50,7 +50,7 @@ def log_action(
     )
 
 
-def tail_actions(*, limit: int = 10) -> list[dict[str, Any]]:
+def tail_actions(*, limit: int = 10, tool: str | None = None) -> list[dict[str, Any]]:
     p = _log_path()
     if not p.is_file():
         return []
@@ -58,14 +58,19 @@ def tail_actions(*, limit: int = 10) -> list[dict[str, Any]]:
         lines = p.read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
+    want = (tool or "").strip()
+    scan = max(limit * 4, limit * 2) if want else limit * 2
     out: list[dict[str, Any]] = []
-    for line in reversed(lines[-limit * 2 :]):
+    for line in reversed(lines[-scan:]):
         if not line.strip():
             continue
         try:
             rec = json.loads(line)
-            if isinstance(rec, dict):
-                out.append(rec)
+            if not isinstance(rec, dict):
+                continue
+            if want and str(rec.get("tool", "")) != want:
+                continue
+            out.append(rec)
         except json.JSONDecodeError:
             continue
         if len(out) >= limit:

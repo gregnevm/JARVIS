@@ -32,7 +32,9 @@ def test_app_html(client):
     r = client.get("/app")
     assert r.status_code == 200
     assert "JARVIS" in r.text
-    assert 'fetch("/app/data"' in r.text or 'const API = "/app"' in r.text
+    assert 'const API = "/app"' in r.text
+    assert "panelPs" in r.text
+    assert "/ps/ask" in r.text
 
 
 def test_app_data_dev_open(client):

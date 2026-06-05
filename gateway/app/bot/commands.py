@@ -44,6 +44,7 @@ COMMANDS = frozenset(
         "/reminders",
         "/dataset",
         "/keyboard",
+        "/project",
     }
 )
 
@@ -100,13 +101,15 @@ async def _send_dashboard(
     )
 
 
-def _mini_app_url(*, canvas: bool = False) -> str:
+def _mini_app_url(*, canvas: bool = False, ps: bool = False) -> str:
     url = settings.mini_app_https_url
     if not url:
         return ""
     if canvas:
         sep = "&" if "?" in url else "?"
         return f"{url}{sep}canvas=1"
+    if ps:
+        return f"{url}#ps"
     return url
 
 
@@ -117,11 +120,17 @@ async def _send_mini_app(
     *,
     user_id: int | None = None,
     canvas: bool = False,
+    ps: bool = False,
 ) -> None:
     """Відкриває Telegram Mini App — не передаємо /app агенту як шлях FS."""
-    url = _mini_app_url(canvas=canvas)
+    url = _mini_app_url(canvas=canvas, ps=ps)
     if url.startswith("https://"):
-        title = "📊 <b>Mini App — Канвас</b>" if canvas else "📊 <b>Mini App — JARVIS Dashboard</b>"
+        if canvas:
+            title = "📊 <b>Mini App — Канвас</b>"
+        elif ps:
+            title = "💻 <b>Mini App — PowerShell Panel</b>"
+        else:
+            title = "📊 <b>Mini App — JARVIS Dashboard</b>"
         await tg.send_message(
             chat_id,
             f"{title}\nНатисни кнопку нижче.",
@@ -142,6 +151,76 @@ async def _send_mini_app(
 
         local = local_app_url(settings.gateway_browser_url, canvas=canvas)
         lines.append(f"🖥 Браузер на цій машині: <code>{esc(local)}</code>")
+    await tg.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
+
+
+async def _handle_project(
+    raw: str, chat_id: int, user_id: int, tg: TelegramClient, redis: aioredis.Redis
+) -> None:
+    """`/project` — список / new <назва> / <id> (switch) / off (вийти). Активний
+    проєкт скоупить RAG і додає system prompt у відповіді агента."""
+    from ..projects import get_active, mem_create, mem_get, mem_list, set_active
+
+    tokens = raw.split(maxsplit=2)
+    sub = tokens[1].lower() if len(tokens) > 1 else "list"
+
+    if sub in ("off", "clear", "exit", "none"):
+        await set_active(redis, user_id, None)
+        await tg.send_message(chat_id, "📁 Вийшов із проєкту — загальний контекст.")
+        return
+
+    if sub in ("new", "create", "+"):
+        name = tokens[2].strip() if len(tokens) > 2 else ""
+        if not name:
+            await tg.send_message(
+                chat_id, "Вкажи назву: <code>/project new Робота</code>", parse_mode="HTML"
+            )
+            return
+        proj = await mem_create(user_id, name)
+        if not proj:
+            await tg.send_message(chat_id, "Не вдалося створити проєкт.")
+            return
+        await set_active(redis, user_id, int(proj["id"]))
+        await tg.send_message(
+            chat_id,
+            f"✅ Проєкт «{esc(proj['name'])}» #{proj['id']} створено й активовано.",
+            parse_mode="HTML",
+        )
+        return
+
+    target: int | None = None
+    if sub == "switch" and len(tokens) > 2 and tokens[2].strip().isdigit():
+        target = int(tokens[2].strip())
+    elif sub.isdigit():
+        target = int(sub)
+    if target is not None:
+        proj = await mem_get(user_id, target)
+        if not proj:
+            await tg.send_message(chat_id, "Проєкт не знайдено.")
+            return
+        await set_active(redis, user_id, target)
+        await tg.send_message(
+            chat_id, f"📁 Активний проєкт: «{esc(proj['name'])}» #{target}.", parse_mode="HTML"
+        )
+        return
+
+    projects = await mem_list(user_id)
+    active = await get_active(redis, user_id)
+    if not projects:
+        await tg.send_message(
+            chat_id,
+            "Проєктів ще немає. Створи: <code>/project new Назва</code>",
+            parse_mode="HTML",
+        )
+        return
+    lines = ["📁 <b>Твої проєкти</b>"]
+    for p in projects:
+        mark = " ✅" if p["id"] == active else ""
+        lines.append(f"#{p['id']} {esc(p['name'])}{mark}")
+    lines.append(
+        "\nПеремкнути: <code>/project &lt;id&gt;</code> · "
+        "Новий: <code>/project new Назва</code> · Вийти: <code>/project off</code>"
+    )
     await tg.send_message(chat_id, "\n".join(lines), parse_mode="HTML")
 
 
@@ -213,7 +292,7 @@ async def handle_command(
         return True
 
     if cmd == "/app":
-        await _send_mini_app(chat_id, tg, svc, user_id=user_id)
+        await _send_mini_app(chat_id, tg, svc, user_id=user_id, ps=True)
         return True
 
     if cmd == "/help":
@@ -276,6 +355,13 @@ async def handle_command(
             f"<code>{info.get('train_path', '')}</code>",
             parse_mode="HTML",
         )
+        return True
+
+    if cmd == "/project":
+        if redis is None:
+            await tg.send_message(chat_id, "Проєкти недоступні (Redis).")
+            return True
+        await _handle_project(raw, chat_id, user_id, tg, redis)
         return True
 
     if cmd == "/reminders":

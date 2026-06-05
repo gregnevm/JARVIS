@@ -234,7 +234,7 @@ async def clear_origin(user_id: int) -> None:
 
 
 async def load_pending_raw(user_id: int) -> dict[str, Any]:
-    """Для Mini App — поточний pending без коду."""
+    """Для Mini App — поточний pending з повним описом дії."""
     raw = await _client().get(_pending_key(user_id))
     if not raw:
         return {"pending": False}
@@ -243,11 +243,19 @@ async def load_pending_raw(user_id: int) -> dict[str, Any]:
         data = json.loads(payload)
     except json.JSONDecodeError:
         data = {}
+    if not isinstance(data, dict):
+        data = {}
+    tool = str(data.get("tool") or "")
+    args = data.get("args") if isinstance(data.get("args"), dict) else {}
     return {
         "pending": True,
         "code": stored_code,
-        "tool": data.get("tool") if isinstance(data, dict) else "",
+        "tool": tool,
         "tier": data.get("tier") if isinstance(data, dict) else "",
+        "script": str(args.get("script", "")) if tool == "run_powershell" else "",
+        "description": describe_action(tool, args) if tool else "",
+        "mutating": is_mutating(tool, args) if tool else False,
+        "as_admin": bool(args.get("as_admin")),
     }
 
 

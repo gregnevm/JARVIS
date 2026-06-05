@@ -257,6 +257,21 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  # Quick tunnel (без домену/акаунту): *.trycloudflare.com — URL змінюється після рестарту.
+  # Автоматизація: ENABLE_QUICK_TUNNEL=true + scripts/setup_quick_tunnel.ps1
+  #     docker compose --profile quick-tunnel up -d
+  cloudflared-quick:
+    profiles: ["quick-tunnel"]
+    container_name: jarvis-quick-tunnel
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://gateway:8000
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks: [jarvis-net]
+    restart: unless-stopped
+    logging: *default-logging
+
   # =========================================================
   # --- OPTIONAL: Ollama у контейнері з GPU ---
   # За замовчуванням Ollama працює на ХОСТІ (host.docker.internal),

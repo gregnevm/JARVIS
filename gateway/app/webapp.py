@@ -287,3 +287,8 @@ async def app_run_macro(
     user_id = authorize(x_telegram_init_data)
     text = await request.app.state.tools.run_macro(user_id, name)
     return {"text": text}
+
+
+from .webapp_ps import register_ps_routes  # noqa: E402
+
+register_ps_routes(router)

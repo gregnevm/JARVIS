@@ -120,21 +120,128 @@
     border: 1px solid var(--card-brd); background: var(--card); color: var(--muted); cursor: pointer;
     max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .art-chip.active { color: var(--txt); border-color: var(--accent); background: rgba(91,140,255,.12); }
+
+  .wrap.wide { max-width: 960px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { border: 1px solid var(--card-brd); background: var(--card); color: var(--muted);
+    padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .tab.active { color: #fff; border-color: transparent;
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px;
+    border-radius: 999px; text-transform: uppercase; letter-spacing: .6px; }
+  .pill.live { background: rgba(45,212,167,.15); color: var(--ok); }
+  .pill.idle { background: rgba(139,149,168,.15); color: var(--muted); }
+  .pill.run { background: rgba(91,140,255,.18); color: var(--accent); }
+  .pill.confirm { background: rgba(255,180,84,.18); color: var(--warn); }
+  .ps-split { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; margin-bottom: 14px; }
+  @media (max-width: 720px) { .ps-split { grid-template-columns: 1fr; } }
+  .ps-prompt { width: 100%; min-height: 120px; resize: vertical; border: 1px solid var(--card-brd);
+    background: rgba(0,0,0,.22); color: var(--txt); border-radius: 14px; padding: 12px;
+    font: 14px/1.45 inherit; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .preset { border: 1px solid var(--card-brd); background: var(--card); color: var(--muted);
+    padding: 6px 10px; border-radius: 999px; font-size: 11.5px; cursor: pointer; }
+  .preset:active { transform: scale(.96); }
+  .btn-run { border: 0; background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff; padding: 10px 18px; border-radius: 12px; font-weight: 700; cursor: pointer; }
+  .btn-run:disabled { opacity: .5; }
+  .trace-box { background: rgba(0,0,0,.28); border: 1px solid var(--card-brd); border-radius: 14px;
+    min-height: 200px; max-height: 320px; overflow: auto; padding: 10px 12px; font-size: 12.5px; }
+  .trace-line { margin: 6px 0; line-height: 1.45; }
+  .trace-line.status { color: var(--muted); }
+  .trace-line.tool { color: var(--accent); }
+  .trace-line.answer { color: var(--txt); white-space: pre-wrap; }
+  .mono-block { font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre-wrap;
+    word-break: break-word; background: rgba(0,0,0,.35); border: 1px solid var(--card-brd);
+    border-radius: 12px; padding: 10px; margin-top: 8px; max-height: 220px; overflow: auto; }
+  .confirm-card { border: 1px solid rgba(255,180,84,.35); background: rgba(255,180,84,.08);
+    border-radius: 14px; padding: 12px; margin-top: 10px; display: none; }
+  .confirm-card.show { display: block; }
+  .confirm-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-ok { border: 0; background: var(--ok); color: #041; padding: 8px 14px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+  .btn-no { border: 1px solid var(--card-brd); background: var(--card); color: var(--txt);
+    padding: 8px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+  .audit-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .audit-table th, .audit-table td { border-bottom: 1px solid var(--card-brd); padding: 7px 6px; text-align: left; }
+  .audit-table th { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .8px; }
+  .wl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .wl-chip { font-size: 11px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--card-brd);
+    background: var(--card); color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+  .onboard { border: 1px dashed var(--card-brd); border-radius: 14px; padding: 14px; color: var(--muted);
+    font-size: 13px; line-height: 1.55; margin-bottom: 14px; }
+  .onboard ol { margin: 8px 0 0 18px; padding: 0; }
+  .onboard li { margin: 4px 0; }
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap wide" id="appWrap">
   <header>
     <div class="logo">🧩</div>
     <div>
       <div class="title">JARVIS</div>
       <div class="subtitle"><span class="pulse" id="pulse"></span><span id="conn">під'єднання…</span></div>
     </div>
+    <span class="pill idle" id="psLive">idle</span>
     <button class="refresh" id="refresh" title="Оновити">⟳</button>
   </header>
 
+  <nav class="tabs">
+    <button type="button" class="tab active" data-tab="ps">PowerShell</button>
+    <button type="button" class="tab" data-tab="system">System</button>
+  </nav>
+
   <div class="err" id="err"></div>
 
+  <div id="panelPs" class="panel active">
+    <div class="onboard" id="psOnboard" hidden>
+      <strong>Computer Use не готовий.</strong>
+      <ol>
+        <li>Увімкни <code>ENABLE_COMPUTER_USE=true</code>, <code>COMPUTER_ALLOW_ADMIN=true</code>, <code>HOSTAGENT_ALLOW_ADMIN=1</code></li>
+        <li>Запусти host-agent на Windows-хості (порт 8400) і перезапусти після зміни .env</li>
+        <li>Додай свій Telegram ID у <code>COMPUTER_OWNER_USER_IDS</code></li>
+        <li>Відкрий Mini App з Telegram (не лише браузер без initData)</li>
+      </ol>
+    </div>
+    <div class="ps-split">
+      <div class="card">
+        <div class="k">Запит (природна мова)</div>
+        <textarea class="ps-prompt" id="psPrompt" placeholder="Напр.: покажи статус сервісу Docker"></textarea>
+        <div class="presets" id="psPresets">
+          <button type="button" class="preset" data-q="Покажи список запущених сервісів Windows">сервіси</button>
+          <button type="button" class="preset" data-q="Виконай docker ps і коротко підсумуй">docker ps</button>
+          <button type="button" class="preset" data-q="Покажи вільне місце на диску C:">диск C:</button>
+          <button type="button" class="preset" data-q="Покажи 5 останніх помилок з System Event Log">Event Log</button>
+        </div>
+        <button type="button" class="btn-run" id="psRun">Запустити</button>
+      </div>
+      <div class="card">
+        <div class="k">Trace + Terminal</div>
+        <div class="trace-box" id="psTrace"></div>
+        <div class="mono-block" id="psTerminal">—</div>
+        <div class="confirm-card" id="psConfirm">
+          <div class="k" id="psConfirmLabel" style="color:var(--warn)">Потрібне підтвердження</div>
+          <div id="psConfirmDesc" class="mono-block" style="margin-top:6px"></div>
+          <div class="confirm-actions">
+            <button type="button" class="btn-ok" id="psApprove">Approve</button>
+            <button type="button" class="btn-no" id="psDeny">Deny</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section-label">Audit (PowerShell)</div>
+    <div class="card span2" style="overflow:auto">
+      <table class="audit-table" id="psAuditTable">
+        <thead><tr><th>Час</th><th>Tier</th><th>Confirmed</th><th>Preview</th></tr></thead>
+        <tbody id="psAuditBody"><tr><td colspan="4">—</td></tr></tbody>
+      </table>
+    </div>
+    <div class="section-label">Whitelist (read-only)</div>
+    <div class="card span2"><div class="wl-chips" id="psWhitelist">—</div></div>
+  </div>
+
+  <div id="panelSystem" class="panel">
   <div class="section-label">Core</div>
   <div class="grid">
     <div class="card span2">
@@ -253,6 +360,7 @@
   </div>
 
   <footer id="footer">—</footer>
+  </div>
 </div>
 
 <script>
@@ -277,6 +385,10 @@
   const API = "/app";
   const headers = () => initData ? { "X-Telegram-Init-Data": initData } : {};
   let busy = false;
+  let psStreaming = false;
+  let psPendingCode = null;
+  let psPollTimer = null;
+  let activeTab = "ps";
   let pollMs = 6000;
   let modeLocked = false;
   let canAdmin = false;
@@ -705,7 +817,7 @@
     || location.hash === "#canvas";
 
   async function tick() {
-    if (document.hidden) return;
+    if (document.hidden || activeTab !== "system") return;
     try {
       await apiFetch("/ping", { headers: headers() }, 0);
     } catch (e) { /* gateway down */ }
@@ -713,7 +825,298 @@
     await loadArtifact();
   }
 
-  load(true);
+  function setTab(name) {
+    activeTab = name === "system" ? "system" : "ps";
+    document.querySelectorAll(".tab").forEach(t =>
+      t.classList.toggle("active", t.dataset.tab === activeTab));
+    $("panelPs").classList.toggle("active", activeTab === "ps");
+    $("panelSystem").classList.toggle("active", activeTab === "system");
+    try { localStorage.setItem("jarvis_tab", activeTab); } catch (e) {}
+    if (activeTab === "ps") { loadPsMeta(); }
+    if (activeTab === "system") { load(true); }
+  }
+
+  document.querySelectorAll(".tab").forEach(t =>
+    t.addEventListener("click", () => {
+      haptic("light");
+      const tab = t.dataset.tab || "ps";
+      location.hash = tab === "system" ? "#system" : "#ps";
+      setTab(tab);
+    }));
+
+  function routeHash() {
+    const h = (location.hash || "").replace("#", "");
+    if (h === "system" || h === "canvas") setTab("system");
+    else setTab("ps");
+  }
+
+  function setPsLive(state) {
+    const el = $("psLive");
+    if (!el) return;
+    el.className = "pill " + (state || "idle");
+    el.textContent = state || "idle";
+  }
+
+  function appendTrace(cls, text) {
+    const box = $("psTrace");
+    if (!box) return;
+    const d = document.createElement("div");
+    d.className = "trace-line " + (cls || "");
+    d.textContent = text;
+    box.appendChild(d);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setTerminal(text) {
+    const t = $("psTerminal");
+    if (t) t.textContent = text || "—";
+  }
+
+  const _ADMIN_CONFIRM_RE = /\[\[COMPUTER_ADMIN_CONFIRM:([a-f0-9]+)\]\]/;
+
+  function parseAdminConfirm(text) {
+    const m = _ADMIN_CONFIRM_RE.exec(text || "");
+    return m ? m[1] : null;
+  }
+
+  function showConfirm(show, desc, code, isAdmin) {
+    const card = $("psConfirm");
+    if (!card) return;
+    psPendingCode = code || null;
+    card.classList.toggle("show", !!show);
+    const label = $("psConfirmLabel");
+    if (label) {
+      label.textContent = isAdmin
+        ? "Admin PowerShell — друге підтвердження"
+        : "Потрібне підтвердження";
+      label.style.color = isAdmin ? "var(--bad)" : "var(--warn)";
+    }
+    if ($("psConfirmDesc")) $("psConfirmDesc").textContent = desc || "";
+    setPsLive(show ? "confirm" : (psStreaming ? "run" : "idle"));
+  }
+
+  async function readSse(path, body, onEv) {
+    const r = await fetch(API + path, {
+      method: "POST",
+      headers: Object.assign({ "Content-Type": "application/json", "Accept": "text/event-stream" }, headers()),
+      body: JSON.stringify(Object.assign({ init_data: initData }, body || {})),
+      cache: "no-store",
+    });
+    if (r.status === 401) throw new Error("потрібна авторизація — відкрий з Telegram");
+    if (r.status === 403) {
+      let msg = "немає доступу до Computer Use";
+      try { const j = await r.clone().json(); if (j.detail) msg = String(j.detail); } catch (e) {}
+      throw new Error(msg);
+    }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const chunks = buf.split("\n\n");
+      buf = chunks.pop() || "";
+      for (const chunk of chunks) {
+        const line = chunk.split("\n").map(s => s.replace(/^data:\s?/, "")).join("").trim();
+        if (!line) continue;
+        try { onEv(JSON.parse(line)); } catch (e) {}
+      }
+    }
+  }
+
+  function handlePsEvent(ev) {
+    if (ev.status) appendTrace("status", ev.status);
+    if (ev.tool_start) {
+      const n = ev.tool_start.name || "?";
+      const args = ev.tool_start.args || {};
+      appendTrace("tool", "→ " + n);
+      if (n === "run_powershell" && args.script) {
+        appendTrace("tool", (args.as_admin ? "[admin] " : "") + args.script);
+      }
+    }
+    if (ev.tool_done) {
+      const n = ev.tool_done.name || "?";
+      const res = String(ev.tool_done.result || "");
+      if (n === "run_powershell" && res && res.indexOf("[[COMPUTER_CONFIRM:") < 0) {
+        setTerminal(res);
+      }
+      if (res && res.indexOf("[[COMPUTER_CONFIRM:") < 0 && n === "run_powershell") {
+        appendTrace("tool", "✓ stdout");
+      }
+    }
+    if (ev.confirm) {
+      haptic("medium");
+      const adminDesc = ev.confirm.desc || "";
+      const isAdmin = /\[admin\]|Admin PowerShell/i.test(adminDesc);
+      showConfirm(true, adminDesc, ev.confirm.code || null, isAdmin);
+      appendTrace("status", isAdmin ? "очікує admin confirm" : "очікує підтвердження");
+    }
+    if (ev.delta) appendTrace("answer", ev.delta);
+    if (ev.done) {
+      psStreaming = false;
+      setPsLive("idle");
+      if (ev.text) appendTrace("answer", ev.text);
+      stopPsPoll();
+      loadPsAudit();
+    }
+  }
+
+  async function runPsAsk(text) {
+    $("psTrace").innerHTML = "";
+    setTerminal("—");
+    showConfirm(false);
+    psStreaming = true;
+    setPsLive("run");
+    $("psRun").disabled = true;
+    startPsPoll();
+    try {
+      await readSse("/ps/ask", { text: text }, handlePsEvent);
+    } catch (e) {
+      fail(e.message || "помилка PS ask");
+      psStreaming = false;
+      setPsLive("idle");
+      stopPsPoll();
+    } finally {
+      $("psRun").disabled = false;
+    }
+  }
+
+  async function resumePs(result, origin) {
+    psStreaming = true;
+    setPsLive("run");
+    $("psRun").disabled = true;
+    startPsPoll();
+    try {
+      await readSse("/ps/resume", { result: result, origin: origin || "" }, handlePsEvent);
+    } catch (e) {
+      fail(e.message || "помилка resume");
+      psStreaming = false;
+      setPsLive("idle");
+      stopPsPoll();
+    } finally {
+      $("psRun").disabled = false;
+    }
+  }
+
+  async function pollPsPending() {
+    if (!psStreaming && !psPendingCode) return;
+    try {
+      const r = await apiFetch("/ps/pending", { headers: headers() }, 0);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.pending && d.code) {
+        showConfirm(true, d.description || d.script || "", d.code, !!d.as_admin);
+      }
+    } catch (e) {}
+  }
+
+  function startPsPoll() {
+    stopPsPoll();
+    psPollTimer = setInterval(pollPsPending, 3000);
+  }
+  function stopPsPoll() {
+    if (psPollTimer) { clearInterval(psPollTimer); psPollTimer = null; }
+  }
+
+  async function loadPsPolicy() {
+    try {
+      const r = await apiFetch("/ps/policy", { headers: headers() });
+      if (!r.ok) return;
+      const p = await r.json();
+      const chips = $("psWhitelist");
+      const eff = p.effective || [];
+      chips.innerHTML = eff.length
+        ? eff.map(c => '<span class="wl-chip">' + String(c).replace(/</g,"") + '</span>').join("")
+        : '<span class="wl-chip">порожньо</span>';
+      const onboard = $("psOnboard");
+      const bad = !p.enable_computer_use || !p.hostagent_up;
+      if (onboard) onboard.hidden = !bad;
+      return p;
+    } catch (e) { return null; }
+  }
+
+  async function loadPsAudit() {
+    try {
+      const r = await apiFetch("/ps/audit?limit=30", { headers: headers() });
+      if (!r.ok) return;
+      const d = await r.json();
+      const rows = d.entries || [];
+      const body = $("psAuditBody");
+      if (!body) return;
+      body.innerHTML = rows.length ? rows.map(e => {
+        const ts = e.ts ? new Date(e.ts * 1000).toLocaleString("uk-UA") : "—";
+        const ok = e.confirmed ? "✓" : "—";
+        const prev = String(e.result_preview || (e.args && e.args.script) || "").slice(0, 60).replace(/</g,"");
+        return "<tr><td>" + ts + "</td><td>" + (e.tier || "T0") + "</td><td>" + ok +
+          "</td><td class='mono'>" + prev + "</td></tr>";
+      }).join("") : '<tr><td colspan="4">немає записів</td></tr>';
+    } catch (e) {}
+  }
+
+  async function loadPsMeta() {
+    await Promise.all([loadPsPolicy(), loadPsAudit()]);
+    try {
+      const r = await apiFetch("/ps/status", { headers: headers() });
+      if (r.ok) {
+        const s = await r.json();
+        $("pulse").className = "pulse " + (s.hostagent_up && s.ollama_up ? "on" : "off");
+        $("conn").textContent = s.hostagent_up ? "host-agent online" : "host-agent offline";
+      }
+    } catch (e) {}
+  }
+
+  $("psRun")?.addEventListener("click", () => {
+    const text = ($("psPrompt").value || "").trim();
+    if (!text) return;
+    haptic("medium");
+    runPsAsk(text);
+  });
+  $("psPresets")?.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!t || !t.dataset || !t.dataset.q) return;
+    $("psPrompt").value = t.dataset.q;
+    haptic("light");
+  });
+  $("psApprove")?.addEventListener("click", async () => {
+    if (!psPendingCode) return;
+    haptic("heavy");
+    try {
+      const r = await apiFetch("/ps/confirm", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, headers()),
+        body: JSON.stringify({ code: psPendingCode, init_data: initData }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const d = await r.json();
+      const res = d.result || "";
+      const adminCode = parseAdminConfirm(res);
+      if (adminCode) {
+        showConfirm(true, res.replace(_ADMIN_CONFIRM_RE, "").trim(), adminCode, true);
+        appendTrace("status", "перше ✅ — потрібне admin confirm");
+        return;
+      }
+      showConfirm(false);
+      setTerminal(res || "—");
+      appendTrace("tool", "✓ confirmed");
+      await resumePs(res, d.origin || "");
+    } catch (e) { fail(e.message); }
+  });
+  $("psDeny")?.addEventListener("click", async () => {
+    haptic("light");
+    try {
+      await apiFetch("/ps/cancel", { method: "POST", headers: headers() });
+      showConfirm(false);
+      appendTrace("status", "скасовано");
+    } catch (e) { fail(e.message); }
+  });
+
+  routeHash();
+  window.addEventListener("hashchange", routeHash);
+  if (activeTab === "ps") loadPsMeta();
+  else load(true);
+
   if (wantCanvas) {
     loadArtifact();
     $("canvasCard").classList.add("expanded");

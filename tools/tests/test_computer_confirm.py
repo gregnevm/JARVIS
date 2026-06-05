@@ -12,7 +12,9 @@ from app.computer_confirm import (
     execute_confirmed,
     is_mutating,
     load_origin,
+    load_pending_raw,
     save_origin,
+    save_pending,
     wrap_execute,
 )
 from app.config import settings
@@ -54,6 +56,16 @@ def test_is_mutating_readonly_ps():
 
 def test_describe_action():
     assert "PowerShell" in describe_action("run_powershell", {"script": "dir"})
+
+
+async def test_load_pending_raw_includes_script(confirm_env: FakeRedis):
+    await save_pending(42, "run_powershell", {"script": "Set-Content x y"})
+    raw = await load_pending_raw(42)
+    assert raw["pending"] is True
+    assert raw["tool"] == "run_powershell"
+    assert raw["script"] == "Set-Content x y"
+    assert "PowerShell" in raw["description"]
+    assert raw["mutating"] is True
 
 
 async def test_wrap_execute_returns_confirm_marker(confirm_env: FakeRedis):

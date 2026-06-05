@@ -13,7 +13,8 @@ Write-Host "Tailscale Funnel (приклад):"
 Write-Host "  tailscale funnel 8000"
 Write-Host "  PUBLIC_APP_URL=https://<machine>.<tailnet>.ts.net/app"
 Write-Host ""
-Write-Host "Cloudflare named tunnel — див. README webhook-режим."
+Write-Host "Cloudflare named tunnel — scripts/setup_tunnel.ps1 (стабільний домен)."
+Write-Host "Cloudflare quick tunnel — scripts/setup_quick_tunnel.ps1 (без домену, автоматично)."
 
 if (Test-Path $envFile) {
     $pub = (Select-String -Path $envFile -Pattern '^PUBLIC_APP_URL=' | Select-Object -First 1)

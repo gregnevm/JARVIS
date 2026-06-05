@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JARVIS Platform</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #070a0f; --bg2: #0e151d; --card: rgba(255,255,255,.045); --brd: rgba(255,255,255,.09);
+    --txt: #e8ecf4; --muted: #8b95a8; --accent: #ff8c42; --accent2: #e85d75;
+    --ok: #2dd4a7; --bad: #ff5d6c; --warn: #ffcf5c; --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, "Segoe UI", sans-serif; color: var(--txt);
+    background: radial-gradient(1100px 540px at 100% 0%, rgba(232,93,117,.12), transparent 50%),
+      radial-gradient(820px 420px at 0% 0%, rgba(255,140,66,.10), transparent 45%), var(--bg);
+    min-height: 100vh;
+  }
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 234px; flex-shrink: 0; border-right: 1px solid var(--brd);
+    padding: 18px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 16px; }
+  .logo { width: 40px; height: 40px; border-radius: 11px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center; font-size: 20px; }
+  .brand h1 { margin: 0; font-size: 17px; }
+  .brand .sub { color: var(--muted); font-size: 11px; }
+  nav.side { display: flex; flex-direction: column; gap: 3px; }
+  .navitem { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
+    color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+  .navitem:hover { background: var(--card); color: var(--txt); }
+  .navitem.active { color: #fff; background: linear-gradient(135deg, rgba(255,140,66,.22), rgba(232,93,117,.22));
+    border-color: var(--brd); }
+  .navitem .ic { width: 20px; text-align: center; }
+  .side-foot { margin-top: 16px; padding: 10px 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .main { flex: 1; padding: 22px 26px 60px; max-width: 1180px; }
+  .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .topbar h2 { margin: 0; font-size: 22px; }
+  .topbar .spacer { margin-left: auto; }
+  .pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--brd); color: var(--muted); }
+  button { border: 1px solid var(--brd); background: var(--card); color: var(--txt);
+    padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  button.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border: 0; color: #fff; }
+  button.danger { color: #ffb4bc; border-color: rgba(255,93,108,.4); }
+  button:disabled { opacity: .5; cursor: default; }
+  .section { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--muted); margin: 20px 2px 9px; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 11px; }
+  .card { background: var(--card); border: 1px solid var(--brd); border-radius: var(--radius); padding: 14px; }
+  .card.wide { grid-column: 1 / -1; }
+  .k { font-size: 11.5px; color: var(--muted); }
+  .v { font-size: 17px; font-weight: 650; margin-top: 5px; word-break: break-word; }
+  .v.sm { font-size: 14px; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 7px; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .dot.bad { background: var(--bad); }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; display: inline-block; }
+  .badge.on { background: rgba(45,212,167,.15); color: var(--ok); }
+  .badge.off { background: rgba(139,149,168,.15); color: var(--muted); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--brd); vertical-align: top; }
+  th { color: var(--muted); font-size: 10.5px; text-transform: uppercase; }
+  input, select, textarea { font-family: inherit; background: rgba(0,0,0,.28); color: var(--txt);
+    border: 1px solid var(--brd); border-radius: 9px; padding: 9px 11px; font-size: 13px; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea { width: 100%; resize: vertical; min-height: 78px; line-height: 1.5; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .seg { display: inline-flex; gap: 4px; background: rgba(0,0,0,.28); padding: 4px; border-radius: 11px; }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 7px 13px; border-radius: 8px; }
+  .seg button.active { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+  .err { display: none; background: rgba(255,93,108,.12); border: 1px solid rgba(255,93,108,.35);
+    color: #ffd2d6; padding: 12px; border-radius: 12px; margin-bottom: 14px; font-size: 13px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #1a2233;
+    border: 1px solid var(--brd); padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; z-index: 99; }
+  /* Workbench */
+  .wb-out { background: rgba(0,0,0,.25); border: 1px solid var(--brd); border-radius: 12px;
+    padding: 14px; min-height: 120px; white-space: pre-wrap; line-height: 1.55; font-size: 14px; }
+  .trace { margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+  .trace .tool { background: rgba(255,140,66,.08); border: 1px solid rgba(255,140,66,.25);
+    border-radius: 9px; padding: 8px 11px; font-size: 12.5px; }
+  .trace .tool .nm { color: var(--accent); font-weight: 700; }
+  .trace .tool pre { margin: 6px 0 0; white-space: pre-wrap; color: var(--muted); font-size: 12px; max-height: 180px; overflow: auto; }
+  .settings-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,.05); font-size: 13px; }
+  .settings-row .lbl { color: var(--muted); }
+  .switch { position: relative; width: 42px; height: 24px; }
+  .switch input { display: none; }
+  .switch .sl { position: absolute; inset: 0; background: rgba(139,149,168,.3); border-radius: 999px; transition: .2s; cursor: pointer; }
+  .switch .sl::before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .sl { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .switch input:checked + .sl::before { transform: translateX(18px); }
+  .empty { color: var(--muted); font-size: 13px; padding: 16px 4px; }
+  a.link { color: var(--accent); text-decoration: none; }
+  @media (max-width: 760px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; position: static; border-right: 0; border-bottom: 1px solid var(--brd); }
+    nav.side { flex-direction: row; flex-wrap: wrap; }
+    .navitem { font-size: 12.5px; padding: 8px 10px; }
+    .side-foot { display: none; }
+    .main { padding: 16px 14px 50px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">🧭</div>
+      <div><h1>Platform</h1><div class="sub" id="brandSub">JARVIS console</div></div>
+    </div>
+    <nav class="side" id="nav">
+      <div class="navitem active" data-tab="overview"><span class="ic">📊</span> Огляд</div>
+      <div class="navitem" data-tab="workbench"><span class="ic">⚡</span> Workbench</div>
+      <div class="navitem" data-tab="memory"><span class="ic">🧠</span> Памʼять</div>
+      <div class="navitem" data-tab="projects"><span class="ic">📁</span> Проєкти</div>
+      <div class="navitem" data-tab="logs"><span class="ic">📜</span> Логи</div>
+      <div class="navitem" data-tab="settings"><span class="ic">⚙️</span> Налаштування</div>
+      <div class="navitem" data-tab="users"><span class="ic">👥</span> Доступ</div>
+      <div class="navitem" data-tab="models"><span class="ic">🤖</span> Моделі</div>
+    </nav>
+    <div class="side-foot">
+      Self-hosted · без зовнішніх API.<br />
+      <a class="link" href="/admin">Legacy admin →</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h2 id="title">Огляд</h2>
+      <div class="spacer"></div>
+      <span class="pill" id="authPill">…</span>
+      <button type="button" id="btnRefresh">⟳ Оновити</button>
+    </div>
+    <div class="err" id="err"></div>
+
+    <section class="panel active" id="panel-overview"></section>
+    <section class="panel" id="panel-workbench"></section>
+    <section class="panel" id="panel-memory"></section>
+    <section class="panel" id="panel-projects"></section>
+    <section class="panel" id="panel-logs"></section>
+    <section class="panel" id="panel-settings"></section>
+    <section class="panel" id="panel-users"></section>
+    <section class="panel" id="panel-models"></section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+const initData = (tg && tg.initData) || "";
+
+const TITLES = { overview:"Огляд", workbench:"Workbench", memory:"Памʼять",
+  projects:"Проєкти", logs:"Логи", settings:"Налаштування", users:"Доступ", models:"Моделі" };
+
+function headers(extra) {
+  const h = Object.assign({ "Content-Type": "application/json" }, extra || {});
+  if (initData) h["X-Telegram-Init-Data"] = initData;
+  return h;
+}
+async function api(path, opts) {
+  opts = opts || {};
+  const r = await fetch(path, { headers: headers(opts.headers), method: opts.method || "GET",
+    body: opts.body ? JSON.stringify(opts.body) : undefined, credentials: "same-origin" });
+  if (!r.ok) {
+    let detail = r.status + "";
+    try { detail = (await r.json()).detail || detail; } catch (e) {}
+    throw new Error(detail);
+  }
+  return r.json();
+}
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
+  ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = "none"), 2600);
+}
+function showErr(msg) {
+  const e = document.getElementById("err");
+  if (!msg) { e.style.display = "none"; return; }
+  e.textContent = "⚠ " + msg; e.style.display = "block";
+}
+const dot = (ok) => `<span class="dot ${ok ? "ok" : "bad"}"></span>`;
+const badge = (on) => `<span class="badge ${on ? "on" : "off"}">${on ? "увімкнено" : "вимкнено"}</span>`;
+const card = (k, v, cls) => `<div class="card"><div class="k">${esc(k)}</div><div class="v ${cls||""}">${v}</div></div>`;
+const fmtBytes = (n) => !n ? "0" : n > 1e9 ? (n/1e9).toFixed(1)+" GB" : n > 1e6 ? (n/1e6).toFixed(1)+" MB" : (n/1e3).toFixed(0)+" KB";
+
+let current = "overview";
+function switchTab(tab) {
+  current = tab;
+  document.querySelectorAll(".navitem").forEach((n) => n.classList.toggle("active", n.dataset.tab === tab));
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === "panel-" + tab));
+  document.getElementById("title").textContent = TITLES[tab];
+  showErr("");
+  RENDER[tab] && RENDER[tab]();
+}
+document.getElementById("nav").addEventListener("click", (e) => {
+  const item = e.target.closest(".navitem"); if (item) switchTab(item.dataset.tab);
+});
+document.getElementById("btnRefresh").addEventListener("click", () => RENDER[current] && RENDER[current]());
+
+// ---------------- Overview ----------------
+async function renderOverview() {
+  const el = document.getElementById("panel-overview");
+  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  let d;
+  try { d = await api("/platform/api/overview"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  document.getElementById("authPill").textContent = "auth: " + (d.auth_via || "?");
+  const m = d.metrics || {}, t = m.turn_ms || {};
+  const models = d.models || {};
+  let html = "";
+  html += '<div class="section">Стек (runtime)</div><div class="grid">';
+  for (const [k, v] of Object.entries(d.stack || {}))
+    html += card(v.label || k, dot(v.ok) + (v.ok ? "ok" : "fail"), "sm");
+  html += "</div>";
+  html += '<div class="section">Сервіси (HTTP)</div><div class="grid">';
+  for (const s of d.services || [])
+    html += card(s.name, dot(s.ok) + (s.ok ? `${s.status} · ${s.ms}ms` : "down"), "sm");
+  html += "</div>";
+  html += '<div class="section">Inference</div><div class="grid">';
+  html += card("Ollama", dot(models.ollama_up) + esc(models.ollama_host), "sm mono");
+  html += card("CHAT", esc(models.chat_model || "—"), "sm mono");
+  html += card("AGENT", esc(models.agent_model || "—"), "sm mono");
+  html += card("Режим агента", esc(d.agent_mode || "—"), "sm");
+  html += "</div>";
+  html += '<div class="section">Метрики (rolling)</div><div class="grid">';
+  html += card("Turn p50", (t.p50_ms || 0) + " ms");
+  html += card("Turn p95", (t.p95_ms || 0) + " ms");
+  html += card("Turn avg", (t.avg_ms || 0) + " ms · n=" + (t.count || 0), "sm");
+  html += card("RAG hit-rate", Math.round((m.rag_hit_rate || 0) * 100) + "% · q=" + (m.rag_queries || 0), "sm");
+  html += "</div>";
+  const tools = m.tools || {};
+  if (Object.keys(tools).length) {
+    html += '<div class="section">Латентність інструментів</div><div class="card wide"><table>';
+    html += "<tr><th>Tool</th><th>n</th><th>p50</th><th>p95</th></tr>";
+    for (const [nm, s] of Object.entries(tools))
+      html += `<tr><td class="mono">${esc(nm)}</td><td>${s.count}</td><td>${s.p50_ms}ms</td><td>${s.p95_ms}ms</td></tr>`;
+    html += "</table></div>";
+  }
+  el.innerHTML = html;
+}
+
+// ---------------- Workbench ----------------
+let wbMode = "auto";
+function renderWorkbench() {
+  const el = document.getElementById("panel-workbench");
+  if (el.dataset.init) return;
+  el.dataset.init = "1";
+  const modes = ["auto", "chat", "agent", "hybrid", "computer"];
+  el.innerHTML =
+    '<div class="seg" id="wbSeg">' + modes.map((m) =>
+      `<button data-m="${m}" class="${m === wbMode ? "active" : ""}">${m}</button>`).join("") + "</div>" +
+    '<textarea id="wbInput" placeholder="Запит до агента… (Ctrl+Enter — надіслати)"></textarea>' +
+    '<div class="toolbar" style="margin-top:10px"><button class="primary" id="wbSend">▶ Надіслати</button>' +
+    '<span class="pill" id="wbStatus">готово</span></div>' +
+    '<div class="trace" id="wbTrace"></div>' +
+    '<div class="section">Відповідь</div><div class="wb-out" id="wbOut"></div>';
+  el.querySelector("#wbSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    wbMode = b.dataset.m;
+    el.querySelectorAll("#wbSeg button").forEach((x) => x.classList.toggle("active", x === b));
+  });
+  el.querySelector("#wbSend").addEventListener("click", wbSend);
+  el.querySelector("#wbInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) wbSend();
+  });
+}
+async function wbSend() {
+  const input = document.getElementById("wbInput");
+  const text = input.value.trim(); if (!text) return;
+  const out = document.getElementById("wbOut"), trace = document.getElementById("wbTrace");
+  const st = document.getElementById("wbStatus"), btn = document.getElementById("wbSend");
+  out.textContent = ""; trace.innerHTML = ""; st.textContent = "стрім…"; btn.disabled = true;
+  let acc = "";
+  const toolEls = {};
+  try {
+    const resp = await fetch("/platform/api/workbench/ask", { method: "POST",
+      headers: headers(), credentials: "same-origin", body: JSON.stringify({ text, mode: wbMode }) });
+    if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
+    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+        if (!line.startsWith("data:")) continue;
+        let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+        if (ev.delta) { acc += ev.delta; out.textContent = acc; }
+        else if (ev.status && !acc) st.textContent = ev.status;
+        else if (ev.tool_start) {
+          const nm = ev.tool_start.name, key = nm + Object.keys(toolEls).length;
+          const div = document.createElement("div"); div.className = "tool";
+          div.innerHTML = `<span class="nm">▶ ${esc(nm)}</span><pre>${esc(JSON.stringify(ev.tool_start.args || {}))}</pre>`;
+          trace.appendChild(div); toolEls[nm] = div;
+        } else if (ev.tool_done) {
+          const div = toolEls[ev.tool_done.name];
+          if (div) div.innerHTML += `<pre>✓ ${esc(String(ev.tool_done.result || "").slice(0, 1200))}</pre>`;
+        } else if (ev.confirm) {
+          st.textContent = "⏸ потрібне підтвердження (code " + esc(ev.confirm.code || "") + ")";
+        } else if (ev.done) {
+          if (ev.text) { acc = ev.text; out.textContent = acc; }
+          st.textContent = "готово · " + esc(ev.mode || "") + " · " + (ev.iters || 0) + " iters";
+        }
+      }
+    }
+  } catch (e) { showErr(e.message); st.textContent = "помилка"; }
+  btn.disabled = false;
+}
+
+// ---------------- Memory ----------------
+function renderMemory() {
+  const el = document.getElementById("panel-memory");
+  if (el.dataset.init) return;
+  el.dataset.init = "1";
+  el.innerHTML =
+    '<div class="toolbar"><input id="memUser" type="number" placeholder="user_id (порожньо = я)" style="width:200px"/>' +
+    '<input id="memQuery" placeholder="RAG-запит…" style="flex:1;min-width:200px"/>' +
+    '<button class="primary" id="memSearch">🔍 Пошук</button>' +
+    '<button id="memProfile">Профіль</button><button id="memHistory">Історія</button></div>' +
+    '<div id="memOut"></div>';
+  el.querySelector("#memSearch").addEventListener("click", memSearch);
+  el.querySelector("#memProfile").addEventListener("click", memProfile);
+  el.querySelector("#memHistory").addEventListener("click", memHistory);
+  el.querySelector("#memQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") memSearch(); });
+}
+function memUid() { const v = document.getElementById("memUser").value.trim(); return v ? parseInt(v, 10) : null; }
+async function memSearch() {
+  const q = document.getElementById("memQuery").value.trim(); if (!q) return;
+  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">Пошук…</div>';
+  try {
+    const d = await api("/platform/api/memory/search", { method: "POST", body: { query: q, top_k: 8, user_id: memUid() } });
+    if (!d.results.length) { out.innerHTML = '<div class="empty">Нічого не знайдено (user ' + d.user_id + ').</div>'; return; }
+    let h = '<div class="section">Top-' + d.results.length + ' (user ' + d.user_id + ')</div><div class="card wide"><table><tr><th>Score</th><th>Контент</th></tr>';
+    for (const r of d.results)
+      h += `<tr><td>${(r.score || 0).toFixed(3)}</td><td>${esc(r.content)}</td></tr>`;
+    out.innerHTML = h + "</table></div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+async function memProfile() {
+  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">…</div>';
+  try {
+    const d = await api("/platform/api/memory/profile" + (memUid() ? "?user_id=" + memUid() : ""));
+    if (!d.exists) { out.innerHTML = '<div class="empty">Профіль для user ' + d.user_id + ' відсутній.</div>'; return; }
+    let h = '<div class="section">Профіль user ' + d.user_id + '</div><div class="card wide">';
+    for (const [k, v] of Object.entries(d.profile))
+      h += `<div class="settings-row"><span class="lbl">${esc(k)}</span><span>${esc(v)}</span></div>`;
+    out.innerHTML = h + "</div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+async function memHistory() {
+  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">…</div>';
+  try {
+    const d = await api("/platform/api/memory/history?limit=20" + (memUid() ? "&user_id=" + memUid() : ""));
+    if (!d.messages.length) { out.innerHTML = '<div class="empty">Порожньо (user ' + d.user_id + ').</div>'; return; }
+    let h = '<div class="section">Останні ' + d.messages.length + ' (user ' + d.user_id + ')</div><div class="card wide"><table><tr><th>Роль</th><th>Контент</th></tr>';
+    for (const r of d.messages)
+      h += `<tr><td>${esc(r.role)}</td><td>${esc(r.content)}</td></tr>`;
+    out.innerHTML = h + "</table></div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+
+// ---------------- Logs ----------------
+let logUsers = [];
+async function renderLogs() {
+  const el = document.getElementById("panel-logs");
+  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  try { logUsers = (await api("/platform/api/logs/users")).users; } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  const opts = logUsers.map((u) => `<option value="${u.user_id}">user ${u.user_id} · ${u.turns} turns · ${fmtBytes(u.bytes)}</option>`).join("");
+  el.innerHTML =
+    '<div class="toolbar"><select id="logUser">' + (opts || '<option value="0">— немає логів —</option>') + "</select>" +
+    '<select id="logMode"><option value="">всі режими</option><option>chat</option><option>agent</option><option>hybrid</option><option>computer</option></select>' +
+    '<select id="logLimit"><option>30</option><option>60</option><option>120</option></select>' +
+    '<button class="primary" id="logLoad">Показати</button></div><div id="logOut"></div>';
+  el.querySelector("#logLoad").addEventListener("click", logLoad);
+  if (logUsers.length) logLoad();
+}
+async function logLoad() {
+  const uid = document.getElementById("logUser").value;
+  const mode = document.getElementById("logMode").value;
+  const limit = document.getElementById("logLimit").value;
+  const out = document.getElementById("logOut"); out.innerHTML = '<div class="empty">…</div>';
+  try {
+    const d = await api(`/platform/api/logs?user_id=${uid}&limit=${limit}` + (mode ? "&mode=" + mode : ""));
+    if (!d.turns.length) { out.innerHTML = '<div class="empty">Немає записів.</div>'; return; }
+    let h = '<div class="card wide"><table><tr><th>Час</th><th>Режим</th><th>Запит → відповідь</th></tr>';
+    for (const t of d.turns) {
+      const ts = t.ts ? new Date(t.ts * 1000).toLocaleString("uk-UA") : "";
+      h += `<tr><td class="mono">${esc(ts)}</td><td>${esc(t.mode)}·${t.iters || 0}</td>` +
+        `<td><b>${esc(String(t.user || "").slice(0, 200))}</b><br/><span class="lbl" style="color:var(--muted)">${esc(String(t.assistant || "").slice(0, 400))}</span></td></tr>`;
+    }
+    out.innerHTML = h + "</table></div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+
+// ---------------- Settings ----------------
+async function renderSettings() {
+  const el = document.getElementById("panel-settings");
+  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  let d;
+  try { d = await api("/platform/api/settings"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  const f = d.flags || {};
+  const modes = ["chat", "agent", "hybrid", "computer"];
+  let h = '<div class="section">Runtime-прапори</div><div class="card wide">';
+  h += flagRow("streaming", "Стрім відповіді", f.streaming);
+  h += flagRow("voice_reply", "Голосова відповідь (TTS)", f.voice_reply);
+  h += "</div>";
+  h += '<div class="section">Режим агента (' + esc(d.agent_mode || "?") + ')</div><div class="seg" id="modeSeg">';
+  h += modes.map((m) => `<button data-mode="${m}" class="${m === d.agent_mode ? "active" : ""}">${m}</button>`).join("");
+  h += '</div> <button id="modeReset" style="margin-left:8px">↺ env (' + esc(d.agent_mode_env || "?") + ")</button>";
+  h += '<div class="section">.env (read-only)</div>';
+  for (const [grp, vals] of Object.entries(d.env || {})) {
+    h += '<div class="section" style="margin-top:8px">' + esc(grp) + '</div><div class="card wide">';
+    for (const [k, v] of Object.entries(vals)) {
+      let disp = v;
+      if (v && typeof v === "object" && "on" in v) disp = badge(v.on);
+      else if (Array.isArray(v)) disp = esc(v.join(", ") || "—");
+      else disp = esc(v);
+      h += `<div class="settings-row"><span class="lbl">${esc(k)}</span><span class="mono">${disp}</span></div>`;
+    }
+    h += "</div>";
+  }
+  el.innerHTML = h;
+  el.querySelectorAll(".switch input").forEach((inp) =>
+    inp.addEventListener("change", () => setFlag(inp.dataset.flag, inp.checked)));
+  el.querySelector("#modeSeg").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (b) setMode(b.dataset.mode);
+  });
+  el.querySelector("#modeReset").addEventListener("click", resetMode);
+}
+const flagRow = (name, label, on) =>
+  `<div class="settings-row"><span class="lbl">${esc(label)}</span>` +
+  `<label class="switch"><input type="checkbox" data-flag="${name}" ${on ? "checked" : ""}/><span class="sl"></span></label></div>`;
+async function setFlag(name, enabled) {
+  try { await api("/platform/api/settings/flag", { method: "POST", body: { name, enabled } });
+    toast(name + " → " + (enabled ? "on" : "off")); } catch (e) { showErr(e.message); }
+}
+async function setMode(mode) {
+  try { await api("/platform/api/settings/mode", { method: "POST", body: { mode } });
+    toast("режим → " + mode); renderSettings(); } catch (e) { showErr(e.message); }
+}
+async function resetMode() {
+  try { await api("/platform/api/settings/mode", { method: "DELETE" }); toast("режим скинуто"); renderSettings(); }
+  catch (e) { showErr(e.message); }
+}
+
+// ---------------- Users ----------------
+async function renderUsers() {
+  const el = document.getElementById("panel-users");
+  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  let d;
+  try { d = await api("/platform/api/users"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  let h = '<div class="section">Очікують підтвердження (' + d.pending.length + ")</div>";
+  if (!d.pending.length) h += '<div class="empty">Немає заявок.</div>';
+  else { h += '<div class="card wide"><table>';
+    for (const u of d.pending)
+      h += `<tr><td>${esc(u.label)}<br/><span class="mono lbl">${u.user_id}</span></td>` +
+        `<td style="text-align:right"><button class="primary" data-approve="${u.user_id}">✓</button> ` +
+        `<button class="danger" data-deny="${u.user_id}">✕</button></td></tr>`;
+    h += "</table></div>"; }
+  h += '<div class="section">Погоджені (' + d.approved.length + ")</div>";
+  if (!d.approved.length) h += '<div class="empty">Порожньо.</div>';
+  else { h += '<div class="card wide"><table>';
+    for (const u of d.approved)
+      h += `<tr><td>${esc(u.label)}<br/><span class="mono lbl">${u.user_id}</span></td>` +
+        `<td style="text-align:right"><button data-rl="${u.user_id}">reset RL</button> ` +
+        `<button class="danger" data-revoke="${u.user_id}">revoke</button></td></tr>`;
+    h += "</table></div>"; }
+  h += '<div class="section">Whitelist (.env)</div><div class="grid">';
+  h += card("ALLOWED (env)", esc((d.env_whitelist || []).join(", ") || "—"), "sm mono");
+  h += card("Адміни", esc((d.admin_ids || []).join(", ") || "—"), "sm mono");
+  h += "</div>";
+  el.innerHTML = h;
+  el.addEventListener("click", usersClick);
+}
+async function usersClick(e) {
+  const b = e.target.closest("button"); if (!b) return;
+  const act = (k) => b.dataset[k];
+  try {
+    if (act("approve")) { await api("/platform/api/users/approve", { method: "POST", body: { user_id: +act("approve") } }); toast("approved"); }
+    else if (act("deny")) { await api("/platform/api/users/deny", { method: "POST", body: { user_id: +act("deny") } }); toast("denied"); }
+    else if (act("revoke")) { await api("/platform/api/users/revoke", { method: "POST", body: { user_id: +act("revoke") } }); toast("revoked"); }
+    else if (act("rl")) { const r = await api("/platform/api/users/ratelimit/reset", { method: "POST", body: { user_id: +act("rl") } }); toast(r.message || "reset"); return; }
+    else return;
+    renderUsers();
+  } catch (err) { showErr(err.message); }
+}
+
+// ---------------- Models ----------------
+async function renderModels() {
+  const el = document.getElementById("panel-models");
+  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  let d, lora;
+  try { d = await api("/platform/api/models"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  try { lora = await api("/platform/api/models/lora"); } catch (e) { lora = { versions: [] }; }
+  const mp = d.mapping || {};
+  let h = '<div class="section">Мапінг ролей</div><div class="grid">';
+  h += card("CHAT", esc(mp.chat || "—"), "sm mono");
+  h += card("AGENT", esc(mp.agent || "—"), "sm mono");
+  h += card("VISION", esc(mp.vision || "—"), "sm mono");
+  h += card("EMBED", esc(mp.embed || "—"), "sm mono");
+  h += "</div>";
+  h += '<div class="section">Ollama models (' + (d.tags || []).length + " на " + esc(d.ollama_host) + ")</div>";
+  if (!(d.tags || []).length) h += '<div class="empty">Список недоступний (Ollama down?).</div>';
+  else { h += '<div class="card wide"><table><tr><th>Назва</th><th>Параметри</th><th>Quant</th><th>Розмір</th></tr>';
+    for (const m of d.tags)
+      h += `<tr><td class="mono">${esc(m.name)}</td><td>${esc(m.param_size || "—")}</td><td>${esc(m.quant || "—")}</td><td>${fmtBytes(m.size)}</td></tr>`;
+    h += "</table></div>"; }
+  const versions = (lora && lora.versions) || [];
+  h += '<div class="section">LoRA registry (' + versions.length + ")</div>";
+  if (!versions.length) h += '<div class="empty">Немає LoRA-версій.</div>';
+  else { h += '<div class="card wide"><table><tr><th>Версія</th><th></th></tr>';
+    for (const v of versions) {
+      const id = typeof v === "string" ? v : (v.version || v.id || JSON.stringify(v));
+      const active = typeof v === "object" && v.active;
+      h += `<tr><td class="mono">${esc(id)} ${active ? '<span class="badge on">active</span>' : ""}</td>` +
+        `<td style="text-align:right"><button data-promote="${esc(id)}">promote</button></td></tr>`;
+    }
+    h += "</table></div><div class='toolbar' style='margin-top:10px'><button id='loraRollback'>↺ rollback -1</button></div>"; }
+  el.innerHTML = h;
+  el.querySelectorAll("[data-promote]").forEach((b) =>
+    b.addEventListener("click", () => loraPromote(b.dataset.promote)));
+  const rb = el.querySelector("#loraRollback");
+  if (rb) rb.addEventListener("click", loraRollback);
+}
+async function loraPromote(version) {
+  try { await api("/platform/api/models/lora/promote", { method: "POST", body: { version } }); toast("promoted " + version); renderModels(); }
+  catch (e) { showErr(e.message); }
+}
+async function loraRollback() {
+  try { await api("/platform/api/models/lora/rollback?n=1", { method: "POST" }); toast("rolled back"); renderModels(); }
+  catch (e) { showErr(e.message); }
+}
+
+// ---------------- Projects ----------------
+let projActive = null;
+async function renderProjects() {
+  const el = document.getElementById("panel-projects");
+  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  let d;
+  try { d = await api("/platform/api/projects?include_archived=true"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  projActive = d.active_id;
+  let h = '<div class="toolbar"><input id="projName" placeholder="Новий проєкт…" style="flex:1;min-width:180px"/>' +
+    '<button class="primary" id="projCreate">+ Створити</button>';
+  if (projActive) h += '<button id="projClear">⨯ Вийти з проєкту</button>';
+  h += "</div>";
+  const active = (d.projects || []).find((p) => p.id === projActive);
+  h += '<div class="card wide" style="margin-bottom:14px"><div class="k">Активний проєкт (впливає на RAG + system prompt агента)</div>' +
+    '<div class="v sm">' + (active ? "📁 " + esc(active.name) : "— загальний контекст —") + "</div></div>";
+  if (!(d.projects || []).length) h += '<div class="empty">Ще немає проєктів.</div>';
+  else { h += '<div class="card wide"><table><tr><th></th><th>Назва</th><th>System prompt</th><th></th></tr>';
+    for (const p of d.projects) {
+      const isA = p.id === projActive;
+      h += `<tr><td>${isA ? '<span class="badge on">active</span>' : ""}${p.archived ? '<span class="badge off">archived</span>' : ""}</td>` +
+        `<td><b>${esc(p.name)}</b> <span class="mono lbl">#${p.id}</span></td>` +
+        `<td class="lbl" style="color:var(--muted)">${esc(String(p.system_prompt || "").slice(0, 80)) || "—"}</td>` +
+        `<td style="text-align:right;white-space:nowrap">` +
+        (isA ? "" : `<button data-switch="${p.id}">activate</button> `) +
+        `<button data-open="${p.id}">edit</button> <button class="danger" data-del="${p.id}">✕</button></td></tr>`;
+    }
+    h += "</table></div>"; }
+  h += '<div id="projDetail" style="margin-top:16px"></div>';
+  el.innerHTML = h;
+  el.querySelector("#projCreate").addEventListener("click", projCreate);
+  const clr = el.querySelector("#projClear");
+  if (clr) clr.addEventListener("click", () => projSetActive(null));
+  el.querySelectorAll("[data-switch]").forEach((b) => b.addEventListener("click", () => projSetActive(+b.dataset.switch)));
+  el.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => projOpen(+b.dataset.open)));
+  el.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => projDelete(+b.dataset.del)));
+}
+async function projCreate() {
+  const inp = document.getElementById("projName"); const name = inp.value.trim(); if (!name) return;
+  try { await api("/platform/api/projects", { method: "POST", body: { name } }); inp.value = ""; toast("створено"); renderProjects(); }
+  catch (e) { showErr(e.message); }
+}
+async function projSetActive(id) {
+  try { await api("/platform/api/projects/active", { method: "POST", body: { project_id: id } });
+    toast(id ? "активний проєкт #" + id : "загальний контекст"); renderProjects(); } catch (e) { showErr(e.message); }
+}
+async function projDelete(id) {
+  try { await api("/platform/api/projects/" + id, { method: "DELETE" }); toast("видалено"); renderProjects(); } catch (e) { showErr(e.message); }
+}
+async function projOpen(id) {
+  const det = document.getElementById("projDetail"); det.innerHTML = '<div class="empty">…</div>';
+  let p;
+  try { p = await api("/platform/api/projects/" + id); } catch (e) { showErr(e.message); return; }
+  let h = '<div class="section">Проєкт «' + esc(p.name) + '» #' + p.id + '</div><div class="card wide">';
+  h += '<div class="k">Назва</div><input id="pdName" value="' + esc(p.name) + '" style="width:100%;margin:5px 0 10px"/>';
+  h += '<div class="k">System prompt (інструкції для агента в цьому проєкті)</div>';
+  h += '<textarea id="pdPrompt" style="min-height:90px">' + esc(p.system_prompt || "") + '</textarea>';
+  h += '<label class="chk" style="display:flex;gap:8px;margin:10px 0;color:var(--muted);font-size:13px">' +
+    '<input type="checkbox" id="pdArch" ' + (p.archived ? "checked" : "") + '/> архівувати</label>';
+  h += '<div class="toolbar"><button class="primary" id="pdSave">💾 Зберегти</button></div></div>';
+  h += '<div class="section">Файли (' + (p.files || []).length + ")</div>";
+  h += '<div class="card wide"><div class="toolbar"><input id="pfName" placeholder="назва.md" style="width:160px"/>' +
+    '<input id="pfContent" placeholder="вміст…" style="flex:1;min-width:160px"/><button id="pfAdd">+ файл</button></div>';
+  if ((p.files || []).length) { h += "<table>";
+    for (const f of p.files)
+      h += `<tr><td class="mono">${esc(f.name)}</td><td class="lbl">${fmtBytes(f.size)}</td>` +
+        `<td style="text-align:right"><button class="danger" data-fdel="${f.id}">✕</button></td></tr>`;
+    h += "</table>"; }
+  else h += '<div class="empty">Немає файлів.</div>';
+  h += "</div>";
+  det.innerHTML = h;
+  det.querySelector("#pdSave").addEventListener("click", () => projSave(id));
+  det.querySelector("#pfAdd").addEventListener("click", () => projAddFile(id));
+  det.querySelectorAll("[data-fdel]").forEach((b) => b.addEventListener("click", () => projDelFile(id, +b.dataset.fdel)));
+}
+async function projSave(id) {
+  const body = { name: document.getElementById("pdName").value.trim(),
+    system_prompt: document.getElementById("pdPrompt").value,
+    archived: document.getElementById("pdArch").checked };
+  try { await api("/platform/api/projects/" + id, { method: "PATCH", body }); toast("збережено"); renderProjects(); }
+  catch (e) { showErr(e.message); }
+}
+async function projAddFile(id) {
+  const name = document.getElementById("pfName").value.trim();
+  const content = document.getElementById("pfContent").value;
+  if (!name || !content) return;
+  try { await api("/platform/api/projects/" + id + "/files", { method: "POST", body: { name, content } }); toast("файл додано"); projOpen(id); }
+  catch (e) { showErr(e.message); }
+}
+async function projDelFile(id, fid) {
+  try { await api("/platform/api/projects/" + id + "/files/" + fid, { method: "DELETE" }); toast("видалено"); projOpen(id); }
+  catch (e) { showErr(e.message); }
+}
+
+const RENDER = { overview: renderOverview, workbench: renderWorkbench, memory: renderMemory,
+  projects: renderProjects, logs: renderLogs, settings: renderSettings, users: renderUsers, models: renderModels };
+
+renderOverview();
+</script>
+</body>
+</html>

@@ -4,7 +4,7 @@ Self-hosted Telegram-бот на мікросервісах. Усе працює
 агент-луп у **Tools** (Python), пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**,
 синхронізація Edge↔Twin через **twin** (SyncServer + ModelRegistry). Жодних зовнішніх AI API.
 Запуск — один `docker compose up`. Цільова архітектура PortableAI — `docs/DESIGN.md`.
-Продуктовий roadmap (фази 0–7) — `docs/PRODUCT_ROADMAP.md`; ops-backlog — `ROADMAP.md`.
+Продуктовий roadmap (фази 0–7) — `docs/PRODUCT_ROADMAP.md`; Platform (консоль, 12 можливостей) — `docs/PLATFORM_ROADMAP.md`; ops-backlog — `ROADMAP.md`.
 Бекапи — `docs/BACKUP.md`; перевірка стеку — `scripts/verify_stack.ps1`.
 
 > Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
@@ -240,7 +240,17 @@ gateway-ом на `GET /app`, дані — `GET /app/data`, зміна режи�
 Named tunnel дає стабільний URL (на відміну від quick tunnel, який «стрибає»).
 У проді постав `WEBAPP_DEV_OPEN=false` — тоді `/app` пускає лише з Telegram.
 
-**Швидко (5 хв):** `powershell -File scripts/setup_tunnel.ps1` після
+**Quick tunnel (без домену, автоматично).** Тимчасовий `*.trycloudflare.com` — URL
+змінюється після рестарту контейнера, але скрипт сам оновлює `.env` і gateway:
+
+1. У `.env`: `ENABLE_QUICK_TUNNEL=true` (і порожній `CLOUDFLARE_TUNNEL_TOKEN`).
+2. `powershell -File scripts/setup_quick_tunnel.ps1` — підніме тунель, пропише
+   `PUBLIC_APP_URL`, перезапустить gateway (кнопка «📊 Dashboard»).
+3. Autostart/watchdog (кожні 5 хв) повторює синхронізацію, якщо URL змінився.
+
+Зупинити: `powershell -File scripts/setup_quick_tunnel.ps1 -Stop`.
+
+**Named tunnel (стабільний домен):** `powershell -File scripts/setup_tunnel.ps1` після
 `CLOUDFLARE_TUNNEL_TOKEN` + `PUBLIC_APP_URL=https://<домен>/app` у `.env`.
 У чаті: команда `/app` або кнопка «Dashboard»; deep links: `/start app`, `/start mode_agent`.
 

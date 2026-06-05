@@ -16,6 +16,7 @@ BOT_COMMANDS: list[dict[str, str]] = [
     {"command": "brief", "description": "Короткий бриф"},
     {"command": "mode", "description": "Режим chat/agent/hybrid/computer"},
     {"command": "reminders", "description": "Активні нагадування"},
+    {"command": "project", "description": "Проєкти: list / new / switch / off"},
     {"command": "sync", "description": "Twin ingest + LoRA"},
     {"command": "help", "description": "Довідка"},
     {"command": "keyboard", "description": "Показати або сховати кнопки"},

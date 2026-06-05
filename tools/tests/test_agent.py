@@ -120,14 +120,17 @@ class FakeMemory:
         self.results = results or []
         self.stored: list[tuple[str, str]] = []
 
-    async def search(self, user_id, query, top_k=5):
+    async def search(self, user_id, query, top_k=5, project_id=None):
         return self.results
 
-    async def store(self, user_id, content, role="user"):
+    async def store(self, user_id, content, role="user", project_id=None):
         self.stored.append((role, content))
 
     async def history(self, user_id, limit=12):
         return []
+
+    async def get_project(self, user_id, project_id):
+        return None
 
 
 async def test_run_chat_mode(monkeypatch):
