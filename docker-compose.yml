@@ -15,7 +15,9 @@ services:
   # Для webhook-режиму (прод зі стабільним доменом): TELEGRAM_INGEST_MODE=webhook.
   # ---------------------------------------------------------
   gateway:
-    build: ./gateway
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
     env_file: .env
     # Порт потрібен лише для webhook-режиму та /health. У polling можна не публікувати.
     ports:
