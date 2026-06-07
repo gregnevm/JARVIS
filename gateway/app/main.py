@@ -23,9 +23,11 @@ from .bot.setup import register_bot_ui
 from .reminders import reminder_loop
 from .health_watch import health_watch_loop
 from .job_runner import job_runner_loop
+from .bg_job_runner import bg_job_runner_loop
 from .services import ServicesClient
 from .admin_panel import router as admin_panel_router
 from .platform import router as platform_router
+from .openai_api import router as openai_router
 from .webapp import router as webapp_router
 from .tools_client import ToolsClient
 from .ratelimit import RateLimiter
@@ -107,6 +109,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     job_task = asyncio.create_task(
         job_runner_loop(app.state.tools, app.state.tg, interval=30.0)
     )
+    bg_job_task = asyncio.create_task(
+        bg_job_runner_loop(app.state.tools, app.state.tg, interval=3.0)
+    )
 
     # BotFather UI: команди, опис, Mini App menu button.
     await register_bot_ui(app.state.tg)
@@ -124,7 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
 
-    for task in (poll_task, reminder_task, health_task, job_task):
+    for task in (poll_task, reminder_task, health_task, job_task, bg_job_task):
         if task is not None:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -172,6 +177,7 @@ app = FastAPI(title="JARVIS Gateway", lifespan=lifespan)
 app.include_router(webapp_router)
 app.include_router(admin_panel_router)
 app.include_router(platform_router)
+app.include_router(openai_router)
 
 
 @app.middleware("http")

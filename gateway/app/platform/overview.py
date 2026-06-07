@@ -22,9 +22,10 @@ def _metrics_snapshot(core: dict[str, Any]) -> dict[str, Any]:
     """Витягує observability-метрики з dashboard payload (tools/app/metrics.py)."""
     m = core.get("metrics") if isinstance(core, dict) else None
     if not isinstance(m, dict):
-        return {"turn_ms": {}, "rag_hit_rate": 0.0, "rag_queries": 0, "tools": {}}
+        return {"turn_ms": {}, "tok_s": {}, "rag_hit_rate": 0.0, "rag_queries": 0, "tools": {}}
     return {
         "turn_ms": m.get("turn_ms") or {},
+        "tok_s": m.get("tok_s") or {},
         "rag_hit_rate": m.get("rag_hit_rate", 0.0),
         "rag_queries": m.get("rag_queries", 0),
         "tools": m.get("tools") or {},

@@ -11,6 +11,17 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
 from . import logs, memory, models, overview, projects, settings_api, users, workbench
+from . import jobs as platform_jobs
+from . import plans as platform_plans
+from . import mcp as platform_mcp
+from . import connectors as platform_connectors
+from . import research as platform_research
+from . import skills as platform_skills
+from . import subagents as platform_subagents
+from . import hooks as platform_hooks
+from . import teams as platform_teams
+from . import orchestrator as platform_orchestrator
+from . import improve as platform_improve
 from .auth import PlatformAuth, require_platform_auth
 
 router = APIRouter()
@@ -33,5 +44,25 @@ async def platform_whoami(auth: PlatformAuth = Depends(require_platform_auth)) -
     return {"via": auth.via, "user_id": auth.user_id}
 
 
-for _mod in (overview, workbench, memory, projects, logs, settings_api, users, models):
+for _mod in (
+    overview,
+    workbench,
+    memory,
+    projects,
+    logs,
+    settings_api,
+    users,
+    models,
+    platform_jobs,
+    platform_plans,
+    platform_research,
+    platform_mcp,
+    platform_connectors,
+    platform_skills,
+    platform_subagents,
+    platform_hooks,
+    platform_teams,
+    platform_orchestrator,
+    platform_improve,
+):
     _mod.register(router)

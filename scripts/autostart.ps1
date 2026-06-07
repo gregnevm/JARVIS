@@ -11,6 +11,7 @@ param([switch]$SkipVerify)
 
 $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'lib\jarvis_hardware.ps1')
 $log = Join-Path $root 'data\autostart.log'
 New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
 
@@ -155,9 +156,16 @@ New-Item -ItemType Directory -Force -Path $accessDir | Out-Null
 Log "=== autostart start ==="
 
 # --- 1) Ollama ---
-$env:OLLAMA_HOST = '0.0.0.0:11434'
-$env:OLLAMA_KEEP_ALIVE = '24h'
-$env:OLLAMA_VULKAN = '1'
+$hwProfile = Read-JarvisHardwareProfile -Root $root
+if (-not $hwProfile) {
+    $gpu = Get-JarvisGpuInfo
+    $hwProfile = Get-JarvisHardwareProfile -GpuInfo $gpu
+}
+$ollamaEnv = Get-JarvisOllamaUserEnv -Profile $hwProfile
+$env:OLLAMA_HOST = $ollamaEnv.OLLAMA_HOST
+$env:OLLAMA_KEEP_ALIVE = $ollamaEnv.OLLAMA_KEEP_ALIVE
+if ($ollamaEnv.OLLAMA_VULKAN) { $env:OLLAMA_VULKAN = $ollamaEnv.OLLAMA_VULKAN }
+else { Remove-Item Env:OLLAMA_VULKAN -ErrorAction SilentlyContinue }
 $ollama = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
 if (Get-Process ollama -ErrorAction SilentlyContinue) {
     Log "Ollama: already running"
@@ -222,14 +230,18 @@ function Start-SdForgeIfConfigured {
         Log 'sd-forge: start script missing'
         return
     }
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $start 2>&1 | ForEach-Object { Log "sd-forge: $_" }
+    # Фоном: start_sd_forge.ps1 чекає API до 20 хв — не блокує hostagent/verify.
+    Start-Process -FilePath 'powershell' -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $start
+    ) -WindowStyle Hidden
+    Log 'sd-forge: start queued (background)'
 }
 
-# --- 4) SD Forge (локальні картинки, :7860) ---
-Start-SdForgeIfConfigured
-
-# --- 5) Host-agent (Windows, outside Docker) ---
+# --- 4) Host-agent (Windows, outside Docker) — перед Forge, щоб Computer Use був після ребуту ---
 Start-JarvisHostagent
+
+# --- 5) SD Forge (локальні картинки, :7860) ---
+Start-SdForgeIfConfigured
 
 # --- 5b) Quick tunnel for Mini App (optional, ENABLE_QUICK_TUNNEL=true) ---
 function Start-QuickTunnelIfEnabled {

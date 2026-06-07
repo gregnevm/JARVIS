@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any, Protocol
 
 import httpx
@@ -75,6 +75,7 @@ class OllamaChatBackend:
         fail_threshold: int = 3,
         cooldown: float = 60.0,
         client: httpx.AsyncClient | None = None,
+        on_inference_stats: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
     ) -> None:
         self._url = f"{host.rstrip('/')}/api/chat"
         self._client = client or httpx.AsyncClient(timeout=timeout)
@@ -83,6 +84,19 @@ class OllamaChatBackend:
         self._cooldown = cooldown
         self._fails = 0
         self._open_until = 0.0
+        self._on_stats = on_inference_stats
+
+    async def _emit_stats(self, data: dict[str, Any]) -> None:
+        if not self._on_stats:
+            return
+        from jarvis_core.llm.parsers import ollama_inference_stats
+
+        stats = ollama_inference_stats(data)
+        if not stats:
+            return
+        result = self._on_stats(stats)
+        if asyncio.iscoroutine(result):
+            await result
 
     async def aclose(self) -> None:
         if self._owns_client:
@@ -126,6 +140,7 @@ class OllamaChatBackend:
             self._trip()
             raise ValueError(f"unexpected ollama response: {data!r}")
         self._fails = 0
+        await self._emit_stats(data)
         return msg
 
     async def chat_stream(
@@ -149,9 +164,17 @@ class OllamaChatBackend:
             async with self._client.stream("POST", self._url, json=payload) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
-                    text, done = ollama_chat_chunk(line)
+                    text, done, stats = ollama_chat_chunk(line)
                     if text:
                         yield text
+                    if stats:
+                        await self._emit_stats(
+                            {
+                                "eval_count": stats["eval_count"],
+                                "eval_duration": stats["eval_duration_ns"],
+                                "model": stats.get("model") or model,
+                            }
+                        )
                     if done:
                         break
         except httpx.HTTPError:

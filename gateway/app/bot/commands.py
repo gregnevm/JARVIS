@@ -17,6 +17,7 @@ from ..services import ServicesClient
 from ..telegram import TelegramClient
 from ..tools_client import ToolsClient
 from .dashboard import esc, format_dashboard, format_help
+from ._helpers import send_denial
 from .access import handle_access_command, is_access_command
 from .admin import handle_admin_command, is_admin_command
 from .keyboards import (
@@ -45,6 +46,7 @@ COMMANDS = frozenset(
         "/dataset",
         "/keyboard",
         "/project",
+        "/cursor",
     }
 )
 
@@ -261,8 +263,7 @@ async def handle_command(
             denied = agent_mode_denied_message(user_id) or computer_mode_denied_message(
                 user_id, mode
             )
-            if denied:
-                await tg.send_message(chat_id, denied)
+            if await send_denial(tg, chat_id, denied):
                 return True
             res = await svc.set_mode(mode)
             if res.get("error"):
@@ -357,12 +358,86 @@ async def handle_command(
         )
         return True
 
+    if cmd == "/improve":
+        if not is_admin(user_id):
+            await tg.send_message(chat_id, "⛔ Лише для адмінів (ADMIN_USER_IDS).")
+            return True
+        if tools is None:
+            await tg.send_message(chat_id, "Tools недоступний.")
+            return True
+        sub = (parts[1].lower() if len(parts) > 1 else "status").strip()
+        if sub == "scan":
+            out = await tools.improve_scan(int(user_id))
+            if out.get("error"):
+                await tg.send_message(chat_id, f"Scan failed: {out['error']}")
+                return True
+            await tg.send_message(
+                chat_id,
+                "🔄 Improve scan\n"
+                f"scanned: {out.get('scanned', 0)} · queued: {out.get('queued', 0)} · "
+                f"rejected: {out.get('rejected', 0)}\n"
+                f"pending total: {out.get('pending_total', 0)}",
+            )
+            return True
+        st = await tools.improve_status(int(user_id))
+        rt = st.get("retrain") or {}
+        await tg.send_message(
+            chat_id,
+            "📈 Self-improve\n"
+            f"pending: {st.get('pending', 0)} · approved: {st.get('approved_total', 0)}\n"
+            f"retrain +{rt.get('curated_since_export', '?')}/{rt.get('retrain_threshold', '?')} "
+            f"{'✅' if rt.get('retrain_ready') else '—'}\n"
+            "Команди: /improve scan",
+        )
+        return True
+
     if cmd == "/project":
         if redis is None:
             await tg.send_message(chat_id, "Проєкти недоступні (Redis).")
             return True
         await _handle_project(raw, chat_id, user_id, tg, redis)
         return True
+
+    if cmd == "/plan":
+        if tools is None:
+            await tg.send_message(chat_id, "Tools недоступний.")
+            return True
+        from .plans import send_plan_confirm
+
+        plan_parts = raw.split(maxsplit=2)
+        if len(plan_parts) >= 3 and plan_parts[1].lower() == "execute":
+            plan_id = plan_parts[2].strip()
+            await tg.send_message(chat_id, f"⏳ Виконую план <code>{esc(plan_id)}</code>…", parse_mode="HTML")
+            result = await tools.execute_plan(plan_id, user_id)
+            if result.get("error"):
+                await tg.send_message(chat_id, f"🔴 {esc(str(result['error']))}", parse_mode="HTML")
+            else:
+                text = str(result.get("result") or "")[:3500]
+                await tg.send_message(chat_id, text or "План виконано ✅")
+            return True
+        task = raw.split(maxsplit=1)[1].strip() if len(raw.split(maxsplit=1)) > 1 else ""
+        if not task:
+            await tg.send_message(
+                chat_id,
+                "📋 <code>/plan &lt;задача&gt;</code> — створити план\n"
+                "<code>/plan execute &lt;id&gt;</code> — виконати схвалений план",
+                parse_mode="HTML",
+            )
+            return True
+        plan = await tools.create_plan(user_id, task)
+        if plan.get("error"):
+            await tg.send_message(chat_id, f"🔴 {esc(str(plan['error']))}")
+            return True
+        await send_plan_confirm(chat_id, str(plan.get("id") or ""), str(plan.get("summary") or task), tg)
+        return True
+
+    if cmd == "/cursor":
+        if tools is None:
+            await tg.send_message(chat_id, "Tools недоступний.")
+            return True
+        from .cursor_flow import handle_cursor_command
+
+        return await handle_cursor_command(raw, chat_id, user_id, tg, tools, redis)
 
     if cmd == "/reminders":
         if redis is None:
@@ -420,8 +495,7 @@ async def handle_command(
         if len(parts) >= 2:
             mode = parts[1]
             denied = computer_mode_denied_message(user_id, mode)
-            if denied:
-                await tg.send_message(chat_id, denied)
+            if await send_denial(tg, chat_id, denied):
                 return True
             res = await svc.set_mode(mode)
             if res.get("error"):
@@ -482,6 +556,14 @@ async def handle_callback(
         if cq_id:
             await tg.answer_callback_query(str(cq_id))
         if await handle_admin_callback(data, int(chat_id), int(user_id), tg, svc, redis):
+            return
+
+    if data.startswith("pln:") and tools is not None and user_id is not None:
+        from .plans import handle_plan_callback
+
+        if cq_id:
+            await tg.answer_callback_query(str(cq_id))
+        if await handle_plan_callback(data, int(chat_id), int(user_id), tg, tools):
             return
 
     if data.startswith("cmp:") and tools is not None and user_id is not None:

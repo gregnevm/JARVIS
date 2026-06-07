@@ -12,29 +12,11 @@ import uuid
 from datetime import datetime
 from typing import cast
 
-import redis.asyncio as aioredis
-
-from .config import settings
+from .redis_util import get_redis
 
 REMINDERS_KEY = "reminders"
 _MAX_DELAY_MIN = 365 * 24 * 60  # стеля: 1 рік
 _MAX_LIST = 20
-
-_redis: aioredis.Redis | None = None
-
-
-def _client() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
-
-
-async def aclose() -> None:
-    global _redis
-    if _redis is not None:
-        await _redis.aclose()
-        _redis = None
 
 
 async def add_reminder(user_id: int, delay_minutes: int, text: str) -> str:
@@ -50,7 +32,7 @@ async def add_reminder(user_id: int, delay_minutes: int, text: str) -> str:
         ensure_ascii=False,
     )
     try:
-        await _client().zadd(REMINDERS_KEY, {member: due})
+        await get_redis().zadd(REMINDERS_KEY, {member: due})
     except Exception as exc:  # noqa: BLE001
         return f"Не вдалося поставити нагадування: {exc}"
     return f"Нагадаю {datetime.fromtimestamp(due).strftime('%Y-%m-%d %H:%M')} ✅"
@@ -58,7 +40,7 @@ async def add_reminder(user_id: int, delay_minutes: int, text: str) -> str:
 
 async def list_reminders(user_id: int) -> str:
     try:
-        raw = await _client().zrange(REMINDERS_KEY, 0, -1, withscores=True)
+        raw = await get_redis().zrange(REMINDERS_KEY, 0, -1, withscores=True)
     except Exception as exc:  # noqa: BLE001
         return f"Не вдалося прочитати нагадування: {exc}"
     rows = cast("list[tuple[str, float]]", raw)
@@ -86,7 +68,7 @@ async def cancel_reminder(user_id: int, reminder_id: str) -> str:
     if not rid:
         return "Вкажи id нагадування (з /reminders)."
     try:
-        raw = await _client().zrange(REMINDERS_KEY, 0, -1, withscores=True)
+        raw = await get_redis().zrange(REMINDERS_KEY, 0, -1, withscores=True)
     except Exception as exc:  # noqa: BLE001
         return f"Не вдалося: {exc}"
     rows = cast("list[tuple[str, float]]", raw)
@@ -100,7 +82,7 @@ async def cancel_reminder(user_id: int, reminder_id: str) -> str:
             continue
         if str(rec.get("id", "")).lower() != rid:
             continue
-        await _client().zrem(REMINDERS_KEY, member)
+        await get_redis().zrem(REMINDERS_KEY, member)
         removed += 1
     if removed:
         return f"Скасовано нагадувань: {removed} ✅"
@@ -109,7 +91,7 @@ async def cancel_reminder(user_id: int, reminder_id: str) -> str:
 
 async def cancel_all_reminders(user_id: int) -> str:
     try:
-        raw = await _client().zrange(REMINDERS_KEY, 0, -1)
+        raw = await get_redis().zrange(REMINDERS_KEY, 0, -1)
     except Exception as exc:  # noqa: BLE001
         return f"Не вдалося: {exc}"
     removed = 0
@@ -120,7 +102,7 @@ async def cancel_all_reminders(user_id: int) -> str:
             continue
         if int(rec.get("user_id", 0)) != int(user_id):
             continue
-        await _client().zrem(REMINDERS_KEY, member)
+        await get_redis().zrem(REMINDERS_KEY, member)
         removed += 1
     return f"Скасовано всі нагадування ({removed}) ✅" if removed else "Немає активних нагадувань."
 
@@ -138,7 +120,7 @@ def _ics_escape(text: str) -> str:
 async def export_ics(user_id: int) -> str:
     """iCalendar VEVENT для активних нагадувань користувача."""
     try:
-        raw = await _client().zrange(REMINDERS_KEY, 0, -1, withscores=True)
+        raw = await get_redis().zrange(REMINDERS_KEY, 0, -1, withscores=True)
     except Exception as exc:  # noqa: BLE001
         return ""
     rows = cast("list[tuple[str, float]]", raw)

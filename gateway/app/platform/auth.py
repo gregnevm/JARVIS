@@ -29,6 +29,13 @@ class PlatformAuth:
     user_id: int
 
 
+def resolve_uid(auth: "PlatformAuth", user_id: int | None) -> int:
+    """uid з query/body, якщо заданий (admin може запитувати від імені іншого user_id),
+    інакше — uid автентифікованого користувача. Той самий патерн повторювався
+    у кожному platform-роуті (`int(user_id) if user_id is not None else auth.user_id`)."""
+    return int(user_id) if user_id is not None else auth.user_id
+
+
 def _primary_admin_id() -> int:
     ids = sorted(settings.admin_ids)
     return ids[0] if ids else 0

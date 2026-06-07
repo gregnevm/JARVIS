@@ -14,7 +14,7 @@
 | [`docs/COMPUTER_USE.md`](COMPUTER_USE.md) | Computer Use C0–C6 |
 | [`docs/ENV_CHECKLIST.md`](ENV_CHECKLIST.md) | Операційний чеклист `.env` |
 | [`docs/SMOKE_TEST.md`](SMOKE_TEST.md) | Регресійний smoke |
-| [`docs/PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) | Веб-консоль `/platform` + 12 агентних можливостей (P0–P11) |
+| [`docs/PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) | Веб-консоль `/platform` + 13 агентних можливостей (P0–P12) |
 
 ---
 
@@ -112,8 +112,8 @@ flowchart TB
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| 0.1.1 | **M4** — ротація `TELEGRAM_BOT_TOKEN` (інцидент у логах) | Новий токен у `.env`, старий revoked | [ ] |
-| 0.1.2 | Єдиний autostart: `scripts/autostart.ps1` + `verify_stack.ps1` | Ребут → smoke < 5 хв | [x] код; [ ] reboot smoke |
+| 0.1.1 | **M4** — ротація `TELEGRAM_BOT_TOKEN` (інцидент у логах) | Новий токен у `.env`, старий revoked | [x] |
+| 0.1.2 | Єдиний autostart: `scripts/autostart.ps1` + `verify_stack.ps1` | Ребут → smoke < 5 хв | [x] |
 | 0.1.3 | Пройти [`ENV_CHECKLIST.md`](ENV_CHECKLIST.md); `WEBAPP_DEV_OPEN=false` у проді | Немає витоку токенів у логах | [x] `verify_stack -StrictProd` |
 | 0.1.4 | Бекапи: `data/`, postgres volume, `data/twin/`, `computer.jsonl` | Runbook відновлення | [x] [`BACKUP.md`](BACKUP.md) |
 
@@ -271,19 +271,22 @@ flowchart TB
 
 ---
 
-## Фаза 4 — Edge MVP (USB) (1–2 місяці після 3.2)
+## Фаза 4 — Edge MVP (USB) (1–2 місяці після 3.2) · **активна (~70%)**
 
 DESIGN Phase 1–3.
 
 | # | Задача | Статус |
 |---|--------|--------|
-| 4.1 | KoboldCPP + Qwen 7B Q4 на USB layout | [ ] |
-| 4.2 | `KoboldAdapter` — той самий agent loop | [ ] |
-| 4.3 | SQLite-vec RAG на Edge | [ ] |
-| 4.4 | SyncAgent: OFFLINE / LAN / VPN | [ ] |
-| 4.5 | `run_win.bat` / `run_linux.sh` one-click | [ ] |
+| 4.1 | KoboldCPP + Qwen 7B Q4 на USB layout | [x] layout + `run_win.bat` / `run_linux.sh` |
+| 4.2 | `KoboldAdapter` — той самий agent loop | [x] `jarvis_core` + `LLM_BACKEND=kobold` у tools |
+| 4.3 | SQLite-vec RAG на Edge | [x] `edge/rag.py` |
+| 4.4 | SyncAgent: OFFLINE / LAN / VPN | [x] `edge/edge_sync.py` + `GET /registry/lora/active/download` |
+| 4.5 | `run_win.bat` / `run_linux.sh` one-click | [x] |
 
-**Вихід фази 4:** флешка офлайн; LAN → проксі на Twin.
+**Вихід фази 4:** флешка офлайн → LAN → проксі на Twin; LoRA sync автоматичний.
+
+> Деталі та поточний % — `docs/PLATFORM_ROADMAP.md` → "Фаза 4 — Edge USB"
+> (тут і там — той самий перелік 4.1–4.5; тримайте чекбокси в синхроні).
 
 ---
 
@@ -329,8 +332,8 @@ DESIGN Phase 1–3.
 
 ### Тиждень 1–2
 
-1. [ ] M4 — rotate Telegram token  
-2. [ ] `autostart.ps1` + `verify_stack.ps1` на ребуті  
+1. [x] M4 — rotate Telegram token  
+2. [x] `autostart.ps1` + `verify_stack.ps1` на ребуті  
 3. [ ] Стабілізувати health_watch, remote, macros, jobs  
 4. [ ] Smoke після кожної зміни `.env`
 

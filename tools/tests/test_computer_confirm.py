@@ -42,7 +42,7 @@ def confirm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeRedis:
     monkeypatch.setattr(settings, "computer_owner_user_ids", "1,7,42")
     monkeypatch.setattr(settings, "hostagent_token", "tok")
     monkeypatch.setattr(settings, "data_dir", str(tmp_path))
-    monkeypatch.setattr("app.computer_confirm._redis", fake)
+    monkeypatch.setattr("app.computer_confirm.get_redis", lambda: fake)
     monkeypatch.setattr(settings, "ps_whitelist", "Set-Content,Write-Output")
     return fake
 

@@ -42,10 +42,14 @@ if ($Uninstall) {
 
 if (-not (Test-Path $script)) { throw "Not found: $script" }
 
+$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'lib\jarvis_hardware.ps1')
+$hwProfile = Read-JarvisHardwareProfile -Root $root
+if (-not $hwProfile) {
+    $hwProfile = Get-JarvisHardwareProfile -GpuInfo (Get-JarvisGpuInfo)
+}
 # Persist Ollama env (manual launches / Ollama desktop also bind 0.0.0.0).
-[Environment]::SetEnvironmentVariable('OLLAMA_HOST', '0.0.0.0:11434', 'User')
-[Environment]::SetEnvironmentVariable('OLLAMA_KEEP_ALIVE', '24h', 'User')
-[Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '1', 'User')
+Apply-JarvisOllamaUserEnv -Profile $hwProfile | Out-Null
 
 # VBS shim: hidden PowerShell at logon (no console flash).
 $inner = 'powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $script + '"'

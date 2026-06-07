@@ -88,10 +88,14 @@ def test_schemas_default_excludes_code_exec(monkeypatch):
     monkeypatch.setattr(settings, "ollama_model_vision", "")
     monkeypatch.setattr(settings, "image_gen_url", "")
     monkeypatch.setattr(settings, "image_gen_model", "")
+    monkeypatch.setattr(settings, "cursor_tasks_enabled", False)
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
     assert names == [
         "calc", "web_search", "web_fetch", "parse_file", "ocr_image", "take_note",
         "recall_notes", "set_reminder", "list_reminders", "cancel_reminder", "show_in_app",
+        # calendar_upcoming — локальні reminders (не зовнішній connector API)
+        "calendar_upcoming",
+        "spawn_subagent",
     ]
     assert "code_exec" not in names
 
@@ -145,7 +149,7 @@ async def test_generate_image_ollama(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "image_gen_url", "ollama")
     monkeypatch.setattr(settings, "image_gen_model", "x/z-image-turbo")
     monkeypatch.setattr(settings, "data_dir", str(tmp_path))
-    monkeypatch.setattr(toolkit, "_generate_image_ollama", _fake)
+    monkeypatch.setattr("app.toolkit.image._generate_image_ollama", _fake)
     monkeypatch.setattr("app.image_gen_lock.try_acquire", _lock_acquire)
     monkeypatch.setattr("app.image_gen_lock.release", _lock_release)
     out = await toolkit.generate_image("banana")

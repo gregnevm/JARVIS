@@ -1,6 +1,8 @@
 """Хто може керувати Windows-хостом (Computer Use + скріншоти)."""
 from __future__ import annotations
 
+from jarvis_core.auth_ids import parse_comma_separated_ids, resolve_computer_owner_ids
+
 from .config import settings
 
 _DENIED = (
@@ -9,28 +11,14 @@ _DENIED = (
 )
 
 
-def _parse_ids(raw: str) -> set[int]:
-    ids: set[int] = set()
-    for part in (raw or "").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        try:
-            ids.add(int(part))
-        except ValueError:
-            continue
-    return ids
-
-
 def computer_owner_ids() -> set[int]:
     """Явний список → інакше ADMIN_USER_IDS → інакше ALLOWED_USER_IDS (.env)."""
-    owners = _parse_ids(settings.computer_owner_user_ids)
-    if owners:
-        return owners
-    admins = _parse_ids(settings.admin_user_ids)
-    if admins:
-        return admins
-    return _parse_ids(settings.allowed_user_ids)
+    return resolve_computer_owner_ids(
+        computer_owner_user_ids=settings.computer_owner_user_ids,
+        admin_user_ids=settings.admin_user_ids,
+        allowed_user_ids=settings.allowed_user_ids,
+        computer_mode_admins_only=settings.computer_mode_admins_only,
+    )
 
 
 def can_use_computer(user_id: int) -> bool:
@@ -45,7 +33,7 @@ def can_use_computer(user_id: int) -> bool:
 
 
 def admin_user_ids() -> set[int]:
-    return _parse_ids(settings.admin_user_ids)
+    return parse_comma_separated_ids(settings.admin_user_ids)
 
 
 def admin_powershell_denied_message(user_id: int) -> str | None:

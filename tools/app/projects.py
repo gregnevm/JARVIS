@@ -49,4 +49,23 @@ def project_prompt_block(project: dict[str, Any]) -> str:
     block = f" Активний проєкт: «{name}»." if name else ""
     if sp:
         block += f" Інструкції проєкту: {sp}"
+    files_part = project_files_block(project.get("files_content") or [])
+    if files_part:
+        block += files_part
     return block
+
+
+def project_files_block(files: list[Any]) -> str:
+    """Форматує вміст project_files для system prompt."""
+    if not files:
+        return ""
+    parts: list[str] = [" Файли проєкту:"]
+    for f in files:
+        if not isinstance(f, dict):
+            continue
+        name = str(f.get("name") or "file").strip()
+        content = str(f.get("content") or "").strip()
+        if not content:
+            continue
+        parts.append(f" --- {name} ---\n{content}")
+    return "".join(parts) if len(parts) > 1 else ""

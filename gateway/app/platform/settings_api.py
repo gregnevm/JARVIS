@@ -11,12 +11,12 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from .._helpers import AGENT_MODES, require_mode
 from ..admin_panel import _settings_snapshot
 from ..runtime_flags import get_flags, set_flag
 from ..services import ServicesClient
 from .auth import PlatformAuth, require_platform_auth
 
-_MODES = {"chat", "agent", "hybrid", "computer"}
 _FLAGS = {"streaming", "voice_reply"}
 
 
@@ -62,9 +62,7 @@ def register(router: APIRouter) -> None:
         body: ModeBody,
         _auth: PlatformAuth = Depends(require_platform_auth),
     ) -> dict[str, Any]:
-        mode = (body.mode or "").strip().lower()
-        if mode not in _MODES:
-            raise HTTPException(status_code=400, detail="bad mode")
+        mode = require_mode(body.mode, AGENT_MODES)
         return await request.app.state.svc.set_mode(mode)
 
     @router.delete("/platform/api/settings/mode")

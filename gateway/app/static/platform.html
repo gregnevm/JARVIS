@@ -87,6 +87,13 @@
     border-radius: 9px; padding: 8px 11px; font-size: 12.5px; }
   .trace .tool .nm { color: var(--accent); font-weight: 700; }
   .trace .tool pre { margin: 6px 0 0; white-space: pre-wrap; color: var(--muted); font-size: 12px; max-height: 180px; overflow: auto; }
+  .confirm-card { display: none; border: 1px solid rgba(255,207,92,.35); background: rgba(255,207,92,.08);
+    border-radius: 12px; padding: 12px; margin: 10px 0; }
+  .confirm-card.show { display: block; }
+  .confirm-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-ok { border: 0; background: var(--ok); color: #041; padding: 8px 14px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+  .btn-no { border: 1px solid var(--brd); background: var(--card); color: var(--txt);
+    padding: 8px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
   .settings-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0;
     border-bottom: 1px solid rgba(255,255,255,.05); font-size: 13px; }
   .settings-row .lbl { color: var(--muted); }
@@ -121,6 +128,15 @@
       <div class="navitem" data-tab="workbench"><span class="ic">⚡</span> Workbench</div>
       <div class="navitem" data-tab="memory"><span class="ic">🧠</span> Памʼять</div>
       <div class="navitem" data-tab="projects"><span class="ic">📁</span> Проєкти</div>
+      <div class="navitem" data-tab="jobs"><span class="ic">⏳</span> Jobs</div>
+      <div class="navitem" data-tab="planning"><span class="ic">📋</span> Planning</div>
+      <div class="navitem" data-tab="research"><span class="ic">🔬</span> Research</div>
+      <div class="navitem" data-tab="mcp"><span class="ic">🔌</span> MCP</div>
+      <div class="navitem" data-tab="connectors"><span class="ic">🔗</span> Connectors</div>
+      <div class="navitem" data-tab="skills"><span class="ic">🎯</span> Skills</div>
+      <div class="navitem" data-tab="subagents"><span class="ic">🤖</span> Subagents</div>
+      <div class="navitem" data-tab="teams"><span class="ic">👥</span> Teams</div>
+      <div class="navitem" data-tab="hooks"><span class="ic">🪝</span> Hooks</div>
       <div class="navitem" data-tab="logs"><span class="ic">📜</span> Логи</div>
       <div class="navitem" data-tab="settings"><span class="ic">⚙️</span> Налаштування</div>
       <div class="navitem" data-tab="users"><span class="ic">👥</span> Доступ</div>
@@ -145,6 +161,15 @@
     <section class="panel" id="panel-workbench"></section>
     <section class="panel" id="panel-memory"></section>
     <section class="panel" id="panel-projects"></section>
+    <section class="panel" id="panel-jobs"></section>
+    <section class="panel" id="panel-planning"></section>
+    <section class="panel" id="panel-research"></section>
+    <section class="panel" id="panel-mcp"></section>
+    <section class="panel" id="panel-connectors"></section>
+    <section class="panel" id="panel-skills"></section>
+    <section class="panel" id="panel-subagents"></section>
+    <section class="panel" id="panel-teams"></section>
+    <section class="panel" id="panel-hooks"></section>
     <section class="panel" id="panel-logs"></section>
     <section class="panel" id="panel-settings"></section>
     <section class="panel" id="panel-users"></section>
@@ -159,7 +184,10 @@ if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
 const initData = (tg && tg.initData) || "";
 
 const TITLES = { overview:"Огляд", workbench:"Workbench", memory:"Памʼять",
-  projects:"Проєкти", logs:"Логи", settings:"Налаштування", users:"Доступ", models:"Моделі" };
+  projects:"Проєкти", jobs:"Background Jobs", planning:"Planning", research:"Deep Research",
+  mcp:"MCP", connectors:"Connectors", skills:"Skills", subagents:"Subagents", teams:"Agent Teams",
+  hooks:"Hooks",
+  logs:"Логи", settings:"Налаштування", users:"Доступ", models:"Моделі" };
 
 function headers(extra) {
   const h = Object.assign({ "Content-Type": "application/json" }, extra || {});
@@ -215,7 +243,7 @@ async function renderOverview() {
   let d;
   try { d = await api("/platform/api/overview"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
   document.getElementById("authPill").textContent = "auth: " + (d.auth_via || "?");
-  const m = d.metrics || {}, t = m.turn_ms || {};
+  const m = d.metrics || {}, t = m.turn_ms || {}, ts = m.tok_s || {};
   const models = d.models || {};
   let html = "";
   html += '<div class="section">Стек (runtime)</div><div class="grid">';
@@ -236,6 +264,8 @@ async function renderOverview() {
   html += card("Turn p50", (t.p50_ms || 0) + " ms");
   html += card("Turn p95", (t.p95_ms || 0) + " ms");
   html += card("Turn avg", (t.avg_ms || 0) + " ms · n=" + (t.count || 0), "sm");
+  html += card("tok/s p50", (ts.p50 || 0) + " · n=" + (ts.count || 0), "sm");
+  html += card("tok/s p95", (ts.p95 || 0), "sm");
   html += card("RAG hit-rate", Math.round((m.rag_hit_rate || 0) * 100) + "% · q=" + (m.rag_queries || 0), "sm");
   html += "</div>";
   const tools = m.tools || {};
@@ -251,6 +281,62 @@ async function renderOverview() {
 
 // ---------------- Workbench ----------------
 let wbMode = "auto";
+let wbPendingCode = null;
+const _WB_ADMIN_RE = /\[\[COMPUTER_ADMIN_CONFIRM:([a-f0-9]+)\]\]/;
+function wbParseAdminConfirm(text) {
+  const m = _WB_ADMIN_RE.exec(text || "");
+  return m ? m[1] : null;
+}
+function wbShowConfirm(show, desc, code) {
+  const card = document.getElementById("wbConfirm");
+  if (!card) return;
+  card.classList.toggle("show", !!show);
+  const descEl = document.getElementById("wbConfirmDesc");
+  if (descEl) descEl.textContent = desc || "";
+  wbPendingCode = show ? (code || wbPendingCode) : null;
+}
+async function wbProcessStream(resp, ctx) {
+  const out = ctx.out, trace = ctx.trace, st = ctx.st;
+  let acc = ctx.acc || "";
+  const toolEls = ctx.toolEls || {};
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 2);
+      if (!line.startsWith("data:")) continue;
+      let ev;
+      try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+      if (ev.delta) { acc += ev.delta; out.textContent = acc; }
+      else if (ev.status && !acc) st.textContent = ev.status;
+      else if (ev.tool_start) {
+        const nm = ev.tool_start.name;
+        const div = document.createElement("div");
+        div.className = "tool";
+        div.innerHTML = `<span class="nm">▶ ${esc(nm)}</span><pre>${esc(JSON.stringify(ev.tool_start.args || {}))}</pre>`;
+        trace.appendChild(div);
+        toolEls[nm] = div;
+      } else if (ev.tool_done) {
+        const div = toolEls[ev.tool_done.name];
+        if (div) div.innerHTML += `<pre>✓ ${esc(String(ev.tool_done.result || "").slice(0, 1200))}</pre>`;
+      } else if (ev.confirm) {
+        wbShowConfirm(true, ev.confirm.desc || "Потрібне підтвердження", ev.confirm.code || null);
+        st.textContent = "⏸ очікує confirm";
+        return { paused: true, acc };
+      } else if (ev.done) {
+        if (ev.text) { acc = ev.text; out.textContent = acc; }
+        st.textContent = "готово · " + esc(ev.mode || "") + " · " + (ev.iters || 0) + " iters";
+      }
+    }
+  }
+  return { paused: false, acc };
+}
 function renderWorkbench() {
   const el = document.getElementById("panel-workbench");
   if (el.dataset.init) return;
@@ -262,6 +348,11 @@ function renderWorkbench() {
     '<textarea id="wbInput" placeholder="Запит до агента… (Ctrl+Enter — надіслати)"></textarea>' +
     '<div class="toolbar" style="margin-top:10px"><button class="primary" id="wbSend">▶ Надіслати</button>' +
     '<span class="pill" id="wbStatus">готово</span></div>' +
+    '<div class="confirm-card" id="wbConfirm">' +
+    '<div class="k" style="color:var(--warn)">Потрібне підтвердження Computer Use</div>' +
+    '<div id="wbConfirmDesc" class="mono" style="margin-top:8px;font-size:12px;white-space:pre-wrap"></div>' +
+    '<div class="confirm-actions"><button type="button" class="btn-ok" id="wbApprove">Approve</button>' +
+    '<button type="button" class="btn-no" id="wbDeny">Deny</button></div></div>' +
     '<div class="trace" id="wbTrace"></div>' +
     '<div class="section">Відповідь</div><div class="wb-out" id="wbOut"></div>';
   el.querySelector("#wbSeg").addEventListener("click", (e) => {
@@ -270,6 +361,8 @@ function renderWorkbench() {
     el.querySelectorAll("#wbSeg button").forEach((x) => x.classList.toggle("active", x === b));
   });
   el.querySelector("#wbSend").addEventListener("click", wbSend);
+  el.querySelector("#wbApprove").addEventListener("click", wbApprove);
+  el.querySelector("#wbDeny").addEventListener("click", wbDeny);
   el.querySelector("#wbInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) wbSend();
   });
@@ -279,42 +372,49 @@ async function wbSend() {
   const text = input.value.trim(); if (!text) return;
   const out = document.getElementById("wbOut"), trace = document.getElementById("wbTrace");
   const st = document.getElementById("wbStatus"), btn = document.getElementById("wbSend");
-  out.textContent = ""; trace.innerHTML = ""; st.textContent = "стрім…"; btn.disabled = true;
-  let acc = "";
-  const toolEls = {};
+  out.textContent = ""; trace.innerHTML = ""; wbShowConfirm(false); st.textContent = "стрім…"; btn.disabled = true;
   try {
     const resp = await fetch("/platform/api/workbench/ask", { method: "POST",
       headers: headers(), credentials: "same-origin", body: JSON.stringify({ text, mode: wbMode }) });
     if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
-    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
-    for (;;) {
-      const { done, value } = await reader.read(); if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf("\n\n")) >= 0) {
-        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
-        if (!line.startsWith("data:")) continue;
-        let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
-        if (ev.delta) { acc += ev.delta; out.textContent = acc; }
-        else if (ev.status && !acc) st.textContent = ev.status;
-        else if (ev.tool_start) {
-          const nm = ev.tool_start.name, key = nm + Object.keys(toolEls).length;
-          const div = document.createElement("div"); div.className = "tool";
-          div.innerHTML = `<span class="nm">▶ ${esc(nm)}</span><pre>${esc(JSON.stringify(ev.tool_start.args || {}))}</pre>`;
-          trace.appendChild(div); toolEls[nm] = div;
-        } else if (ev.tool_done) {
-          const div = toolEls[ev.tool_done.name];
-          if (div) div.innerHTML += `<pre>✓ ${esc(String(ev.tool_done.result || "").slice(0, 1200))}</pre>`;
-        } else if (ev.confirm) {
-          st.textContent = "⏸ потрібне підтвердження (code " + esc(ev.confirm.code || "") + ")";
-        } else if (ev.done) {
-          if (ev.text) { acc = ev.text; out.textContent = acc; }
-          st.textContent = "готово · " + esc(ev.mode || "") + " · " + (ev.iters || 0) + " iters";
-        }
-      }
-    }
+    await wbProcessStream(resp, { out, trace, st, acc: "" });
   } catch (e) { showErr(e.message); st.textContent = "помилка"; }
   btn.disabled = false;
+}
+async function wbResume(result, origin) {
+  const out = document.getElementById("wbOut"), trace = document.getElementById("wbTrace");
+  const st = document.getElementById("wbStatus"), btn = document.getElementById("wbSend");
+  st.textContent = "resume…"; btn.disabled = true;
+  try {
+    const resp = await fetch("/platform/api/workbench/resume", { method: "POST",
+      headers: headers(), credentials: "same-origin",
+      body: JSON.stringify({ result, origin: origin || "", mode: wbMode }) });
+    if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
+    await wbProcessStream(resp, { out, trace, st, acc: out.textContent || "" });
+  } catch (e) { showErr(e.message); st.textContent = "помилка"; }
+  btn.disabled = false;
+}
+async function wbApprove() {
+  if (!wbPendingCode) return;
+  const st = document.getElementById("wbStatus");
+  try {
+    const d = await api("/platform/api/workbench/confirm", { method: "POST", body: { code: wbPendingCode } });
+    const adminCode = wbParseAdminConfirm(d.result);
+    if (adminCode) {
+      wbShowConfirm(true, (d.result || "").replace(_WB_ADMIN_RE, "").trim(), adminCode);
+      st.textContent = "admin confirm";
+      return;
+    }
+    wbShowConfirm(false);
+    await wbResume(d.result || "", d.origin || "");
+  } catch (e) { showErr(e.message); }
+}
+async function wbDeny() {
+  try {
+    await api("/platform/api/workbench/cancel", { method: "POST", body: {} });
+    wbShowConfirm(false);
+    document.getElementById("wbStatus").textContent = "скасовано";
+  } catch (e) { showErr(e.message); }
 }
 
 // ---------------- Memory ----------------
@@ -324,25 +424,44 @@ function renderMemory() {
   el.dataset.init = "1";
   el.innerHTML =
     '<div class="toolbar"><input id="memUser" type="number" placeholder="user_id (порожньо = я)" style="width:200px"/>' +
+    '<input id="memProject" type="number" placeholder="project_id (опц.)" style="width:160px"/>' +
     '<input id="memQuery" placeholder="RAG-запит…" style="flex:1;min-width:200px"/>' +
     '<button class="primary" id="memSearch">🔍 Пошук</button>' +
-    '<button id="memProfile">Профіль</button><button id="memHistory">Історія</button></div>' +
+    '<button id="memNotes">Нотатки</button><button id="memProfile">Профіль</button><button id="memHistory">Історія</button></div>' +
     '<div id="memOut"></div>';
   el.querySelector("#memSearch").addEventListener("click", memSearch);
+  el.querySelector("#memNotes").addEventListener("click", memNotes);
   el.querySelector("#memProfile").addEventListener("click", memProfile);
   el.querySelector("#memHistory").addEventListener("click", memHistory);
   el.querySelector("#memQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") memSearch(); });
 }
 function memUid() { const v = document.getElementById("memUser").value.trim(); return v ? parseInt(v, 10) : null; }
+function memPid() { const v = document.getElementById("memProject").value.trim(); return v ? parseInt(v, 10) : null; }
 async function memSearch() {
   const q = document.getElementById("memQuery").value.trim(); if (!q) return;
   const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">Пошук…</div>';
+  const body = { query: q, top_k: 8, user_id: memUid() };
+  const pid = memPid(); if (pid) body.project_id = pid;
   try {
-    const d = await api("/platform/api/memory/search", { method: "POST", body: { query: q, top_k: 8, user_id: memUid() } });
-    if (!d.results.length) { out.innerHTML = '<div class="empty">Нічого не знайдено (user ' + d.user_id + ').</div>'; return; }
-    let h = '<div class="section">Top-' + d.results.length + ' (user ' + d.user_id + ')</div><div class="card wide"><table><tr><th>Score</th><th>Контент</th></tr>';
+    const d = await api("/platform/api/memory/search", { method: "POST", body });
+    const scope = d.project_id ? ("project " + d.project_id) : "загальний RAG";
+    if (!d.results.length) { out.innerHTML = '<div class="empty">Нічого (' + scope + ', user ' + d.user_id + ').</div>'; return; }
+    let h = '<div class="section">Top-' + d.results.length + ' · ' + scope + ' · user ' + d.user_id + '</div><div class="card wide"><table><tr><th>Score</th><th>Контент</th></tr>';
     for (const r of d.results)
       h += `<tr><td>${(r.score || 0).toFixed(3)}</td><td>${esc(r.content)}</td></tr>`;
+    out.innerHTML = h + "</table></div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+async function memNotes() {
+  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">…</div>';
+  try {
+    const d = await api("/platform/api/memory/notes?limit=25" + (memUid() ? "&user_id=" + memUid() : ""));
+    if (!d.notes.length) { out.innerHTML = '<div class="empty">Нотаток немає (user ' + d.user_id + ').</div>'; return; }
+    let h = '<div class="section">Нотатки user ' + d.user_id + '</div><div class="card wide"><table><tr><th>Час</th><th>Текст</th></tr>';
+    for (const n of d.notes) {
+      const ts = n.ts ? new Date(n.ts * 1000).toLocaleString("uk-UA") : "—";
+      h += `<tr><td class="mono">${esc(ts)}</td><td>${esc(n.text || "")}</td></tr>`;
+    }
     out.innerHTML = h + "</table></div>";
   } catch (e) { showErr(e.message); out.innerHTML = ""; }
 }
@@ -533,12 +652,20 @@ async function renderModels() {
   if (rb) rb.addEventListener("click", loraRollback);
 }
 async function loraPromote(version) {
-  try { await api("/platform/api/models/lora/promote", { method: "POST", body: { version } }); toast("promoted " + version); renderModels(); }
-  catch (e) { showErr(e.message); }
+  try {
+    const r = await api("/platform/api/models/lora/promote", { method: "POST", body: { version } });
+    const o = r.ollama;
+    toast(o && o.ok ? "promoted " + version + " → ollama " + o.model : "promoted " + version);
+    renderModels();
+  } catch (e) { showErr(e.message); }
 }
 async function loraRollback() {
-  try { await api("/platform/api/models/lora/rollback?n=1", { method: "POST" }); toast("rolled back"); renderModels(); }
-  catch (e) { showErr(e.message); }
+  try {
+    const r = await api("/platform/api/models/lora/rollback?n=1", { method: "POST" });
+    const o = r.ollama;
+    toast(o && o.ok ? "rolled back → ollama " + o.model : "rolled back");
+    renderModels();
+  } catch (e) { showErr(e.message); }
 }
 
 // ---------------- Projects ----------------
@@ -634,8 +761,372 @@ async function projDelFile(id, fid) {
   catch (e) { showErr(e.message); }
 }
 
+// ---------------- Jobs (P2) ----------------
+let jobsTimer = null;
+function jobStatusBadge(st) {
+  const s = String(st || "?");
+  const cls = s === "done" ? "on" : (s === "failed" ? "off" : "on");
+  return `<span class="badge ${cls}">${esc(s)}</span>`;
+}
+function renderJobs() {
+  const el = document.getElementById("panel-jobs");
+  if (!el.dataset.init) {
+    el.dataset.init = "1";
+    el.innerHTML =
+      '<div class="toolbar"><textarea id="jobText" placeholder="Запит для background agent…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
+      '<select id="jobType"><option value="agent_turn">agent_turn</option><option value="deep_research">deep_research</option><option value="subagent">subagent</option><option value="agent_team">agent_team</option></select>' +
+      '<select id="jobMode"><option value="auto">auto</option><option value="chat">chat</option>' +
+      '<option value="agent">agent</option><option value="hybrid">hybrid</option></select>' +
+      '<button class="primary" id="jobCreate">+ Створити job</button>' +
+      '<label class="chk" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="jobAuto" checked /> авто 5с</label></div>' +
+      '<div id="jobsOut"></div>';
+    el.querySelector("#jobCreate").addEventListener("click", jobCreate);
+    el.querySelector("#jobAuto").addEventListener("change", (ev) => {
+      clearInterval(jobsTimer);
+      if (ev.target.checked) jobsTimer = setInterval(loadJobs, 5000);
+    });
+  }
+  loadJobs();
+  clearInterval(jobsTimer);
+  const auto = document.getElementById("jobAuto");
+  if (auto && auto.checked) jobsTimer = setInterval(loadJobs, 5000);
+}
+async function jobCreate() {
+  const text = document.getElementById("jobText").value.trim();
+  if (!text) return toast("вкажи текст");
+  try {
+    const mode = document.getElementById("jobMode").value;
+    const job_type = document.getElementById("jobType").value;
+    const j = await api("/platform/api/jobs", { method: "POST", body: { text, mode, job_type } });
+    toast("job " + j.id); document.getElementById("jobText").value = ""; loadJobs();
+  } catch (e) { showErr(e.message); }
+}
+async function loadJobs() {
+  const out = document.getElementById("jobsOut"); if (!out) return;
+  try {
+    const d = await api("/platform/api/jobs?limit=25");
+    if (!d.jobs.length) { out.innerHTML = '<div class="empty">Немає jobs.</div>'; return; }
+    let h = '<div class="card wide"><table><tr><th>ID</th><th>Status</th><th>Progress</th><th>Створено</th><th>Payload</th><th></th></tr>';
+    for (const j of d.jobs) {
+      const ts = j.created_at ? new Date(j.created_at * 1000).toLocaleString("uk-UA") : "—";
+      const pl = esc(JSON.stringify(j.payload || {}).slice(0, 80));
+      const cancel = j.status === "queued"
+        ? `<button class="danger" data-jcancel="${esc(j.id)}">cancel</button>` : "";
+      h += `<tr><td class="mono">${esc(j.id)}</td><td>${jobStatusBadge(j.status)}</td><td>${j.progress||0}%</td>` +
+        `<td class="mono">${ts}</td><td class="mono">${esc(j.type||"agent_turn")}: ${pl}</td><td>${cancel}</td></tr>`;
+      if (j.result) h += `<tr><td colspan="6" class="lbl">→ ${esc(String(j.result).slice(0,300))}</td></tr>`;
+      if (j.error) h += `<tr><td colspan="6" class="lbl" style="color:var(--bad)">✗ ${esc(j.error)}</td></tr>`;
+    }
+    out.innerHTML = h + "</table></div>";
+    out.querySelectorAll("[data-jcancel]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try { await api("/platform/api/jobs/" + btn.dataset.jcancel, { method: "DELETE" }); toast("cancelled"); loadJobs(); }
+        catch (e) { showErr(e.message); }
+      });
+    });
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+
+// ---------------- Planning (P3) ----------------
+let planPoll = null;
+let activePlanId = null;
+function planBadge(st) {
+  const s = String(st || "?");
+  return `<span class="badge on">${esc(s)}</span>`;
+}
+function renderPlanning() {
+  const el = document.getElementById("panel-planning");
+  if (!el.dataset.init) {
+    el.dataset.init = "1";
+    el.innerHTML =
+      '<div class="toolbar"><textarea id="planText" placeholder="Опиши задачу для плану…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
+      '<button class="primary" id="planCreate">Створити план</button></div>' +
+      '<div id="planViewer"></div><div id="plansList"></div>';
+    el.querySelector("#planCreate").addEventListener("click", planCreate);
+  }
+  loadPlansList();
+}
+async function planCreate() {
+  const text = document.getElementById("planText").value.trim();
+  if (!text) return toast("вкажи задачу");
+  try {
+    const p = await api("/platform/api/plans", { method: "POST", body: { text } });
+    activePlanId = p.id; toast("plan " + p.id); planShow(p); loadPlansList();
+  } catch (e) { showErr(e.message); }
+}
+function planShow(p) {
+  activePlanId = p.id;
+  const v = document.getElementById("planViewer");
+  let steps = (p.steps || []).map((s) =>
+    `<tr><td>${s.id}</td><td>${esc(s.title)}</td><td>${esc(s.status||"pending")}</td><td class="mono">${esc((s.detail||"").slice(0,120))}</td></tr>`
+  ).join("");
+  const risks = (p.risks || []).map((r) => `<li>${esc(r)}</li>`).join("");
+  const canApprove = p.status === "pending";
+  const canExec = p.status === "approved";
+  v.innerHTML =
+    `<div class="card wide"><h3>${esc(p.summary||"")} ${planBadge(p.status)}</h3>` +
+    `<p class="mono">ID: ${esc(p.id)}</p>` +
+    (risks ? `<ul>${risks}</ul>` : "") +
+    `<table><tr><th>#</th><th>Крок</th><th>Status</th><th>Detail</th></tr>${steps}</table>` +
+    `<div class="toolbar">` +
+    (canApprove ? '<button class="primary" id="planApprove">Approve</button><button class="danger" id="planDeny">Deny</button>' : "") +
+    (canExec ? '<button class="primary" id="planExec">Execute</button>' : "") +
+    `</div>` +
+    (p.result ? `<pre class="mono">${esc(String(p.result).slice(0,4000))}</pre>` : "") +
+    `</div>`;
+  const ap = document.getElementById("planApprove");
+  if (ap) ap.addEventListener("click", () => planAction("approve"));
+  const dn = document.getElementById("planDeny");
+  if (dn) dn.addEventListener("click", () => planAction("deny"));
+  const ex = document.getElementById("planExec");
+  if (ex) ex.addEventListener("click", () => planAction("execute"));
+  if (p.status === "executing") startPlanPoll(p.id);
+  else clearInterval(planPoll);
+}
+async function planAction(action) {
+  if (!activePlanId) return;
+  try {
+    if (action === "execute") {
+      toast("executing…");
+      const r = await api("/platform/api/plans/" + activePlanId + "/execute", { method: "POST", body: {} });
+      planShow(r.plan || r);
+    } else {
+      const r = await api("/platform/api/plans/" + activePlanId + "/" + action, { method: "POST", body: {} });
+      planShow(r);
+    }
+    loadPlansList();
+  } catch (e) { showErr(e.message); }
+}
+function startPlanPoll(id) {
+  clearInterval(planPoll);
+  planPoll = setInterval(async () => {
+    try {
+      const p = await api("/platform/api/plans/" + id);
+      planShow(p);
+      if (p.status !== "executing") clearInterval(planPoll);
+    } catch (e) { clearInterval(planPoll); }
+  }, 3000);
+}
+async function loadPlansList() {
+  const out = document.getElementById("plansList"); if (!out) return;
+  try {
+    const d = await api("/platform/api/plans?limit=15");
+    if (!d.plans.length) { out.innerHTML = '<div class="empty">Планів ще немає.</div>'; return; }
+    let h = '<div class="card wide"><table><tr><th>ID</th><th>Status</th><th>Summary</th></tr>';
+    for (const p of d.plans) {
+      h += `<tr style="cursor:pointer" data-pid="${esc(p.id)}"><td class="mono">${esc(p.id)}</td><td>${planBadge(p.status)}</td><td>${esc((p.summary||"").slice(0,80))}</td></tr>`;
+    }
+    out.innerHTML = h + "</table></div>";
+    out.querySelectorAll("[data-pid]").forEach((row) => {
+      row.addEventListener("click", async () => {
+        const p = await api("/platform/api/plans/" + row.dataset.pid);
+        planShow(p);
+      });
+    });
+  } catch (e) { showErr(e.message); }
+}
+
+// ---------------- Research (P4) ----------------
+function renderResearch() {
+  const el = document.getElementById("panel-research");
+  if (!el.dataset.init) {
+    el.dataset.init = "1";
+    el.innerHTML =
+      '<div class="toolbar"><textarea id="researchQuery" placeholder="Тема deep research…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
+      '<input type="number" id="researchHops" value="3" min="1" max="5" style="width:60px" title="max hops" />' +
+      '<button class="primary" id="researchGo">Запустити</button></div>' +
+      '<p class="lbl">Створює background job type=deep_research. Результат — у Jobs або Telegram.</p>';
+    el.querySelector("#researchGo").addEventListener("click", researchGo);
+  }
+}
+async function researchGo() {
+  const query = document.getElementById("researchQuery").value.trim();
+  if (!query) return toast("query?");
+  const max_hops = parseInt(document.getElementById("researchHops").value, 10) || 3;
+  try {
+    const j = await api("/platform/api/research", { method: "POST", body: { query, max_hops } });
+    toast("research job " + j.id);
+  } catch (e) { showErr(e.message); }
+}
+
+// ---------------- MCP (P5) ----------------
+function renderMcp() {
+  const el = document.getElementById("panel-mcp");
+  loadMcp();
+  if (!el.dataset.init) { el.dataset.init = "1"; }
+}
+async function loadMcp() {
+  const el = document.getElementById("panel-mcp");
+  try {
+    const d = await api("/platform/api/mcp/servers");
+    const srv = d.servers || [];
+    if (!srv.length) {
+      el.innerHTML = '<div class="empty">MCP servers не налаштовано (MCP_SERVERS_JSON у .env).</div>';
+      return;
+    }
+    let h = '<div class="card wide"><table><tr><th>Name</th><th>Command</th><th>Status</th><th>Tools</th></tr>';
+    for (const s of srv) {
+      const ok = s.connected ? "on" : "off";
+      h += `<tr><td>${esc(s.name)}</td><td class="mono">${esc(s.command||"")}</td>` +
+        `<td><span class="badge ${ok}">${s.connected?"connected":"down"}</span></td><td>${s.tools||0}</td></tr>`;
+      if (s.error) h += `<tr><td colspan="4" class="lbl">${esc(s.error)}</td></tr>`;
+    }
+    el.innerHTML = h + "</table></div>";
+  } catch (e) { showErr(e.message); el.innerHTML = ""; }
+}
+
+// ---------------- Connectors (P6) ----------------
+function renderConnectors() {
+  const el = document.getElementById("panel-connectors");
+  loadConnectors();
+  if (!el.dataset.init) { el.dataset.init = "1"; }
+}
+async function loadConnectors() {
+  const el = document.getElementById("panel-connectors");
+  try {
+    const d = await api("/platform/api/connectors");
+    const keys = ["notion", "slack", "calendar"];
+    let h = '<div class="grid">';
+    for (const k of keys) {
+      const c = d[k] || {};
+      const ok = c.configured ? "on" : "off";
+      h += `<div class="card"><h3>${esc(k)}</h3><span class="badge ${ok}">${c.configured?"configured":"not set"}</span>` +
+        `<p class="lbl">Env: ${esc(k.toUpperCase())}_TOKEN / CALENDAR_ICS_URL</p></div>`;
+    }
+    el.innerHTML = h + "</div>";
+  } catch (e) { showErr(e.message); el.innerHTML = ""; }
+}
+
+// ---------------- Skills (P7) ----------------
+function renderSkills() {
+  const el = document.getElementById("panel-skills");
+  if (!el.dataset.init) { el.dataset.init = "1"; }
+  loadSkills();
+}
+async function loadSkills() {
+  const el = document.getElementById("panel-skills");
+  try {
+    const d = await api("/platform/api/skills");
+    const skills = d.skills || [];
+    let h = '<p class="lbl">Skills з <code>data/skills/*/SKILL.md</code>. Активний skill → system prompt.</p>';
+    if (!skills.length) {
+      el.innerHTML = h + '<div class="empty">Немає skills. Додай папку з SKILL.md у data/skills/</div>';
+      return;
+    }
+    h += '<div class="card wide"><table><tr><th>ID</th><th>Name</th><th>Description</th><th></th></tr>';
+    for (const s of skills) {
+      h += `<tr><td class="mono">${esc(s.id)}</td><td>${esc(s.name)}</td><td>${esc(s.description||"")}</td>` +
+        `<td><button class="primary" data-skill="${esc(s.id)}">Activate</button></td></tr>`;
+    }
+    el.innerHTML = h + "</table></div>";
+    el.querySelectorAll("[data-skill]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api("/platform/api/skills/active", { method: "POST", body: { skill_id: btn.dataset.skill } });
+          toast("skill " + btn.dataset.skill);
+        } catch (e) { showErr(e.message); }
+      });
+    });
+  } catch (e) { showErr(e.message); el.innerHTML = ""; }
+}
+
+// ---------------- Subagents (P8) ----------------
+function renderSubagents() {
+  const el = document.getElementById("panel-subagents");
+  if (!el.dataset.init) {
+    el.dataset.init = "1";
+    el.innerHTML =
+      '<div class="toolbar"><textarea id="subTask" placeholder="Підзадача для subagent…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
+      '<input type="number" id="subBudget" value="3" min="1" max="8" style="width:50px" />' +
+      '<button class="primary" id="subSpawn">Spawn</button></div><div id="subOut"></div>';
+    el.querySelector("#subSpawn").addEventListener("click", subSpawn);
+  }
+  loadSubagents();
+}
+async function subSpawn() {
+  const task = document.getElementById("subTask").value.trim();
+  if (!task) return toast("task?");
+  const budget_iters = parseInt(document.getElementById("subBudget").value, 10) || 3;
+  try {
+    const r = await api("/platform/api/subagents", { method: "POST", body: { task, budget_iters } });
+    toast("subagent " + r.id); loadSubagents();
+  } catch (e) { showErr(e.message); }
+}
+async function loadSubagents() {
+  const out = document.getElementById("subOut"); if (!out) return;
+  try {
+    const d = await api("/platform/api/subagents?limit=20");
+    if (!d.runs.length) { out.innerHTML = '<div class="empty">Subagent runs порожні.</div>'; return; }
+    let h = '<div class="card wide"><table><tr><th>ID</th><th>Status</th><th>Task</th><th>Result</th></tr>';
+    for (const r of d.runs) {
+      h += `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.status)}</td><td>${esc((r.task||"").slice(0,60))}</td>` +
+        `<td class="mono">${esc((r.result||r.error||"").slice(0,80))}</td></tr>`;
+    }
+    out.innerHTML = h + "</table></div>";
+  } catch (e) { showErr(e.message); }
+}
+
+// ---------------- Teams (P9) ----------------
+function renderTeams() {
+  const el = document.getElementById("panel-teams");
+  if (!el.dataset.init) {
+    el.dataset.init = "1";
+    el.innerHTML =
+      '<p class="lbl">Researcher → Coder → Reviewer pipeline (async bg job).</p>' +
+      '<div class="toolbar"><textarea id="teamTask" placeholder="Задача для команди…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
+      '<input type="number" id="teamBudget" value="3" min="1" max="8" style="width:50px" title="budget per role" />' +
+      '<button class="primary" id="teamSpawn">Run team</button></div><div id="teamOut"></div>';
+    el.querySelector("#teamSpawn").addEventListener("click", teamSpawn);
+  }
+  loadTeams();
+}
+async function teamSpawn() {
+  const task = document.getElementById("teamTask").value.trim();
+  if (!task) return toast("task?");
+  const budget_per_role = parseInt(document.getElementById("teamBudget").value, 10) || 3;
+  try {
+    const r = await api("/platform/api/teams", { method: "POST", body: { task, budget_per_role } });
+    toast("team " + r.id); loadTeams();
+  } catch (e) { showErr(e.message); }
+}
+async function loadTeams() {
+  const out = document.getElementById("teamOut"); if (!out) return;
+  try {
+    const d = await api("/platform/api/teams?limit=15");
+    if (!d.teams.length) { out.innerHTML = '<div class="empty">Team runs порожні.</div>'; return; }
+    let h = '<div class="card wide"><table><tr><th>ID</th><th>Status</th><th>Task</th><th>Steps</th></tr>';
+    for (const t of d.teams) {
+      const steps = (t.steps || []).map((s) => s.role).join(", ");
+      h += `<tr><td class="mono">${esc(t.id)}</td><td>${esc(t.status)}</td><td>${esc((t.task||"").slice(0,50))}</td><td>${esc(steps)}</td></tr>`;
+      if (t.result) h += `<tr><td colspan="4" class="lbl mono">${esc(String(t.result).slice(0,200))}</td></tr>`;
+    }
+    out.innerHTML = h + "</table></div>";
+  } catch (e) { showErr(e.message); }
+}
+
+// ---------------- Hooks (P10) ----------------
+function renderHooks() {
+  const el = document.getElementById("panel-hooks");
+  loadHooks();
+  if (!el.dataset.init) { el.dataset.init = "1"; }
+}
+async function loadHooks() {
+  const el = document.getElementById("panel-hooks");
+  try {
+    const d = await api("/platform/api/hooks");
+    el.innerHTML =
+      `<div class="card wide"><h3>Hooks</h3>` +
+      `<p>Enabled: <span class="badge ${d.enabled?"on":"off"}">${d.enabled}</span></p>` +
+      `<p class="mono">Dir: ${esc(d.dir||"")}</p>` +
+      `<ul><li>pre_turn: ${d.pre_turn||0}</li><li>post_tool: ${d.post_tool||0}</li><li>on_error: ${d.on_error||0}</li></ul>` +
+      `<p class="lbl">Поклади <code>pre_turn.py</code>, <code>post_tool.py</code>, <code>on_error.py</code> у data/hooks/</p></div>`;
+  } catch (e) { showErr(e.message); el.innerHTML = ""; }
+}
+
 const RENDER = { overview: renderOverview, workbench: renderWorkbench, memory: renderMemory,
-  projects: renderProjects, logs: renderLogs, settings: renderSettings, users: renderUsers, models: renderModels };
+  projects: renderProjects, jobs: renderJobs, planning: renderPlanning, research: renderResearch,
+  mcp: renderMcp, connectors: renderConnectors, skills: renderSkills, subagents: renderSubagents,
+  teams: renderTeams, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers, models: renderModels };
 
 renderOverview();
 </script>

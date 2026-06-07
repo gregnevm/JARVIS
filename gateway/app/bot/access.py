@@ -9,6 +9,7 @@ from ..access_store import AccessStore, UserRecord, format_user_label, record_fr
 from ..auth import is_admin
 from ..config import settings
 from ..telegram import TelegramClient
+from ._helpers import require_admin_or_reply
 from .dashboard import esc
 from .keyboards import access_decision_keyboard
 
@@ -271,8 +272,7 @@ async def handle_access_callback(
     store: AccessStore,
 ) -> bool:
     if data.strip() == "acc:list":
-        if not is_admin(user_id):
-            await tg.send_message(chat_id, "⛔ Admin only.")
+        if await require_admin_or_reply(tg, chat_id, user_id):
             return True
         await _send_pending_list(chat_id, tg, store)
         return True
@@ -280,8 +280,7 @@ async def handle_access_callback(
     m = _ACC_RE.match(data.strip())
     if not m:
         return False
-    if not is_admin(user_id):
-        await tg.send_message(chat_id, "⛔ Admin only.")
+    if await require_admin_or_reply(tg, chat_id, user_id):
         return True
 
     verb, uid_s = m.group(1).lower(), m.group(2)

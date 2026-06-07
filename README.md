@@ -4,7 +4,7 @@ Self-hosted Telegram-бот на мікросервісах. Усе працює
 агент-луп у **Tools** (Python), пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**,
 синхронізація Edge↔Twin через **twin** (SyncServer + ModelRegistry). Жодних зовнішніх AI API.
 Запуск — один `docker compose up`. Цільова архітектура PortableAI — `docs/DESIGN.md`.
-Продуктовий roadmap (фази 0–7) — `docs/PRODUCT_ROADMAP.md`; Platform (консоль, 12 можливостей) — `docs/PLATFORM_ROADMAP.md`; ops-backlog — `ROADMAP.md`.
+Продуктовий roadmap (фази 0–7) — `docs/PRODUCT_ROADMAP.md`; Platform (консоль, 13 можливостей) — `docs/PLATFORM_ROADMAP.md`; ops-backlog — `ROADMAP.md`.
 Бекапи — `docs/BACKUP.md`; перевірка стеку — `scripts/verify_stack.ps1`.
 
 > Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
@@ -91,6 +91,39 @@ $env:OLLAMA_VULKAN=1; $env:OLLAMA_HOST="0.0.0.0:11434"; ollama serve
 ---
 
 ## Швидкий старт
+
+### FirstSetup (рекомендовано, Windows)
+
+#### Повністю автономно (один клік, без питань)
+
+```powershell
+# 1) Секрети (один раз):
+copy setup.local.env.example setup.local.env
+#    → TELEGRAM_BOT_TOKEN, ALLOWED_USER_IDS
+
+# 2) Запуск:
+.\FirstSetup-Auto.bat
+```
+
+`-Auto` робить усе сам: **winget** (Docker, Ollama, Python) → GPU-профіль → `.env` →
+`ollama pull` → host-agent → `docker compose up -d --build` → `verify_stack` →
+`install_autostart.ps1`. Якщо Docker щойно встановився — реєструє resume-задачу на логін.
+
+Альтернатива секретам: змінні `JARVIS_TELEGRAM_BOT_TOKEN`, `JARVIS_ALLOWED_USER_IDS`.
+
+#### Інтерактивно (з питаннями)
+
+```powershell
+.\FirstSetup.bat
+# або:
+powershell -ExecutionPolicy Bypass -File scripts\FirstSetup.ps1
+```
+
+Профіль заліза: `data/hardware_profile.json`. Лог: `data/firstsetup.log`, статус: `data/firstsetup.status.json`.
+
+Параметри: `-Auto`, `-InstallMissing`, `-NonInteractive`, `-TelegramToken`, `-AllowedUserIds`, `-SkipCompose`, `-SkipModels`.
+
+### Вручну
 
 ```bash
 # 1. Конфіг

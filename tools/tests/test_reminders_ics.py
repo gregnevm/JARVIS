@@ -25,7 +25,7 @@ class FakeRedis:
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch):
     fr = FakeRedis()
-    monkeypatch.setattr(reminders, "_redis", fr)
+    monkeypatch.setattr(reminders, "get_redis", lambda: fr)
     return fr
 
 

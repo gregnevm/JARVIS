@@ -23,6 +23,8 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
         "ollama_host": settings.ollama_host,
         "chat_model": settings.ollama_model_chat,
         "agent_model": settings.ollama_model_agent,
+        "llm_backend": settings.llm_backend,
+        "kobold_host": settings.kobold_host,
         "vision_model": settings.ollama_model_vision or None,
         "code_exec": settings.enable_code_exec,
         "agent_mode": get_agent_mode(),
@@ -78,14 +80,25 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
     return out
 
 
+async def _on_inference_stats(stats: dict[str, Any]) -> None:
+    from .metrics import record_inference
+
+    await record_inference(
+        str(stats.get("model") or ""),
+        int(stats["eval_count"]),
+        int(stats["eval_duration_ns"]),
+    )
+
+
 def build_jarvis(memory: MemoryClient, twin_url: str = "") -> tuple[JARVIS, AgentRunner, CompositeChatBackend]:
     log_path = Path(settings.data_dir) / "logs" / "llm.jsonl"
     # LLMInterface обслуговує CHAT-шлях (відповіді без інструментів) → chat-модель.
     # Агентський tool-loop окремо передає ollama_model_agent у OllamaChatBackend.chat().
     llm = build_llm_stack(
-        backend="ollama",
+        backend=settings.llm_backend,
         ollama_host=settings.ollama_host,
         ollama_model=settings.ollama_model_chat,
+        kobold_host=settings.kobold_host,
         timeout=settings.ollama_timeout,
         log_path=str(log_path),
     )
@@ -94,6 +107,7 @@ def build_jarvis(memory: MemoryClient, twin_url: str = "") -> tuple[JARVIS, Agen
         timeout=settings.ollama_timeout,
         fail_threshold=settings.ollama_fail_threshold,
         cooldown=settings.ollama_cooldown,
+        on_inference_stats=_on_inference_stats,
     )
     chat_backend = CompositeChatBackend(ollama_chat, llm)
     runner = AgentRunner(chat_backend, memory)

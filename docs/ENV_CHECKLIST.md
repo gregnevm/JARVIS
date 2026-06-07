@@ -55,7 +55,9 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 | `scripts/autostart.ps1` | Ollama → Docker → compose → SD Forge → host-agent |
 | `scripts/verify_stack.ps1` | Після autostart або вручну — exit 1 при fail |
 | `scripts/verify_stack.ps1 -StrictProd` | Прод: `WEBAPP_DEV_OPEN=true` → fail |
-| `scripts/Install-JARVIS.ps1` | Перший setup (compose + verify) |
+| `FirstSetup-Auto.bat` + `setup.local.env` | Повністю автономний setup (winget, compose, autostart) |
+| `scripts/FirstSetup.ps1` / `FirstSetup.bat` | Інтерактивний setup |
+| `scripts/Install-JARVIS.ps1` | Alias → `FirstSetup.ps1` |
 
 ## Бекапи
 

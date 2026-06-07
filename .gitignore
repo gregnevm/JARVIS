@@ -1,5 +1,6 @@
 # Секрети
 .env
+setup.local.env
 
 # Python
 __pycache__/

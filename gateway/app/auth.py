@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from jarvis_core.auth_ids import resolve_computer_owner_ids
+
 from .config import settings
 
 if TYPE_CHECKING:
@@ -39,30 +41,14 @@ def is_allowed(user_id: int | None) -> bool:
     return False
 
 
-def _parse_owner_ids(raw: str) -> set[int]:
-    ids: set[int] = set()
-    for part in (raw or "").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        try:
-            ids.add(int(part))
-        except ValueError:
-            continue
-    return ids
-
-
 def computer_owner_ids() -> set[int]:
     """Власник ПК: COMPUTER_OWNER_USER_IDS, інакше адміни, інакше ALLOWED з .env (не /allow)."""
-    owners = _parse_owner_ids(settings.computer_owner_user_ids)
-    if owners:
-        return owners
-    if settings.computer_mode_admins_only:
-        return settings.admin_ids
-    admins = settings.admin_ids
-    if settings.admin_user_ids.strip():
-        return admins
-    return settings.allowed_ids
+    return resolve_computer_owner_ids(
+        computer_owner_user_ids=settings.computer_owner_user_ids,
+        admin_user_ids=settings.admin_user_ids,
+        allowed_user_ids=settings.allowed_user_ids,
+        computer_mode_admins_only=settings.computer_mode_admins_only,
+    )
 
 
 def can_use_computer(user_id: int | None) -> bool:

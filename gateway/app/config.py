@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     # Макс. розмір файлу для /file pull (байти, Telegram cap ~50MB).
     remote_file_max_bytes: int = 48 * 1024 * 1024
 
+    # P11 OpenAI-compatible API (opt-in)
+    enable_openai_api: bool = False
+    openai_api_key: str = ""
+    openai_default_user_id: int = 0
+
     @property
     def allowed_ids(self) -> set[int]:
         """ALLOWED_USER_IDS ('1,2,3') → set[int]. Порожньо = нікого не пускаємо."""

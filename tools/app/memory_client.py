@@ -46,10 +46,15 @@ class MemoryClient:
         except httpx.HTTPError as exc:
             logger.warning("memory store failed: %s", exc)
 
-    async def get_project(self, user_id: int, project_id: int) -> dict[str, Any] | None:
+    async def get_project(
+        self, user_id: int, project_id: int, *, include_content: bool = False
+    ) -> dict[str, Any] | None:
         try:
+            params: dict[str, Any] = {"user_id": user_id}
+            if include_content:
+                params["include_content"] = "true"
             resp = await self._client.get(
-                f"{self._base}/projects/{int(project_id)}", params={"user_id": user_id}
+                f"{self._base}/projects/{int(project_id)}", params=params
             )
             if resp.status_code == 404:
                 return None

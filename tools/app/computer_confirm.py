@@ -6,13 +6,12 @@ import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import redis.asyncio as aioredis
-
 from .computer_audit import log_action
 from .computer_learned import is_cli_trusted, is_ps_trusted, learn_from_action
 from .ps_whitelist import check_ps_whitelist, extract_ps_cmdlets
 from .computer_access import computer_denied_message
 from .config import settings
+from .redis_util import get_redis
 
 _PENDING_PREFIX = "jarvis:computer:pending:"
 _ORIGIN_PREFIX = "jarvis:computer:origin:"
@@ -58,27 +57,11 @@ _TIER = {
     "screen_click": "T4",
 }
 
-_redis: aioredis.Redis | None = None
-
 
 def _redis_str(raw: bytes | str | None) -> str:
     if raw is None:
         return ""
     return raw.decode() if isinstance(raw, bytes) else str(raw)
-
-
-def _client() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
-
-
-async def aclose_redis() -> None:
-    global _redis
-    if _redis is not None:
-        await _redis.aclose()
-        _redis = None
 
 
 def _pending_key(user_id: int) -> str:
@@ -199,12 +182,12 @@ async def save_pending(
         },
         ensure_ascii=False,
     )
-    await _client().setex(_pending_key(user_id), _PENDING_TTL, f"{code}:{payload}")
+    await get_redis().setex(_pending_key(user_id), _PENDING_TTL, f"{code}:{payload}")
     return code
 
 
 async def load_pending(user_id: int, code: str) -> dict[str, Any] | None:
-    raw = await _client().get(_pending_key(user_id))
+    raw = await get_redis().get(_pending_key(user_id))
     if not raw:
         return None
     stored_code, _, payload = _redis_str(raw).partition(":")
@@ -218,7 +201,7 @@ async def load_pending(user_id: int, code: str) -> dict[str, Any] | None:
 
 
 async def clear_pending(user_id: int) -> None:
-    await _client().delete(_pending_key(user_id))
+    await get_redis().delete(_pending_key(user_id))
     await clear_origin(user_id)
 
 
@@ -227,21 +210,21 @@ async def save_origin(user_id: int, text: str) -> None:
     t = (text or "").strip()
     if not t or int(user_id) <= 0:
         return
-    await _client().setex(_origin_key(user_id), _PENDING_TTL, t[:4000])
+    await get_redis().setex(_origin_key(user_id), _PENDING_TTL, t[:4000])
 
 
 async def load_origin(user_id: int) -> str:
-    raw = await _client().get(_origin_key(user_id))
+    raw = await get_redis().get(_origin_key(user_id))
     return _redis_str(raw).strip()
 
 
 async def clear_origin(user_id: int) -> None:
-    await _client().delete(_origin_key(user_id))
+    await get_redis().delete(_origin_key(user_id))
 
 
 async def load_pending_raw(user_id: int) -> dict[str, Any]:
     """Для Mini App — поточний pending з повним описом дії."""
-    raw = await _client().get(_pending_key(user_id))
+    raw = await get_redis().get(_pending_key(user_id))
     if not raw:
         return {"pending": False}
     stored_code, _, payload = _redis_str(raw).partition(":")

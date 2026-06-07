@@ -6,20 +6,9 @@ import time
 import uuid
 from typing import Any
 
-import redis.asyncio as aioredis
-
-from .config import settings
+from .redis_util import get_redis
 
 _JOBS_KEY = "jarvis:jobs"
-
-_redis: aioredis.Redis | None = None
-
-
-def _client() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
 
 
 async def schedule_job(user_id: int, run_at: int, macro: str, note: str = "") -> str:
@@ -33,13 +22,13 @@ async def schedule_job(user_id: int, run_at: int, macro: str, note: str = "") ->
         },
         ensure_ascii=False,
     )
-    await _client().zadd(_JOBS_KEY, {payload: float(run_at)})
+    await get_redis().zadd(_JOBS_KEY, {payload: float(run_at)})
     return job_id
 
 
 async def due_jobs(now: int | None = None) -> list[dict[str, Any]]:
     cutoff = int(time.time()) if now is None else now
-    raw = await _client().zrangebyscore(_JOBS_KEY, "-inf", cutoff, start=0, num=20)
+    raw = await get_redis().zrangebyscore(_JOBS_KEY, "-inf", cutoff, start=0, num=20)
     out: list[dict[str, Any]] = []
     for member in raw:
         member_s = str(member)
@@ -49,12 +38,12 @@ async def due_jobs(now: int | None = None) -> list[dict[str, Any]]:
                 out.append(rec)
         except json.JSONDecodeError:
             continue
-        await _client().zrem(_JOBS_KEY, member_s)
+        await get_redis().zrem(_JOBS_KEY, member_s)
     return out
 
 
 async def list_jobs(user_id: int) -> str:
-    raw = await _client().zrange(_JOBS_KEY, 0, -1, withscores=True)
+    raw = await get_redis().zrange(_JOBS_KEY, 0, -1, withscores=True)
     lines: list[str] = []
     for item in raw:
         if not isinstance(item, tuple) or len(item) != 2:

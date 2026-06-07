@@ -74,9 +74,13 @@ async def test_record_and_summary(monkeypatch: pytest.MonkeyPatch):
     await metrics.record_tool("calc", 50)
     await metrics.record_rag(2)
     await metrics.record_rag(0)
+    await metrics.record_inference("qwen2.5:7b", 100, 2_000_000_000)
+    await metrics.record_inference("qwen2.5:7b", 50, 1_000_000_000)
 
     s = await metrics.summary()
     assert s["turn_ms"]["count"] == 2
+    assert s["tok_s"]["count"] == 2
+    assert s["tok_s"]["p50"] > 0
     assert s["rag_queries"] == 2
     assert s["rag_hit_rate"] == 0.5
     assert "calc" in s["tools"]

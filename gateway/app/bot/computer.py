@@ -9,6 +9,7 @@ from ..agent_turn import resume_after_computer
 from ..outbound import deliver
 from ..tools_client import ToolsClient
 from ..telegram import TelegramClient
+from ._helpers import send_denial
 from .dashboard import esc
 from .keyboards import admin_ps_confirm_keyboard, computer_confirm_keyboard
 
@@ -96,8 +97,7 @@ async def handle_computer_callback(
     from ..auth import computer_denied_message
 
     denied = computer_denied_message(user_id)
-    if denied:
-        await tg.send_message(chat_id, denied)
+    if await send_denial(tg, chat_id, denied):
         return True
     if data.startswith("cmpA:"):
         parts = data.split(":")

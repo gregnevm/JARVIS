@@ -1,0 +1,22 @@
+﻿{
+    "whisper_model":  "small",
+    "ollama_model_agent":  "qwen2.5:7b-instruct",
+    "profile":  "amd",
+    "detected_at":  "2026-06-05T17:24:54.3238615+03:00",
+    "vram_mb":  4095,
+    "gpu_vendor":  "amd",
+    "vision_on_demand":  true,
+    "gpu_name":  "AMD Radeon RX 5700 XT",
+    "ollama_vulkan":  true,
+    "notes":  [
+                  "VRAM \u003c= 8 GB — OLLAMA_VISION_ON_DEMAND=true",
+                  "AMD на Windows: OLLAMA_VULKAN=1 (Vulkan backend)"
+              ],
+    "models":  [
+                   "gemma3:4b",
+                   "qwen2.5:7b-instruct",
+                   "nomic-embed-text"
+               ],
+    "embed_model":  "nomic-embed-text",
+    "ollama_model_chat":  "gemma3:4b"
+}

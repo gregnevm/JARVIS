@@ -21,8 +21,9 @@ python training/eval/run_eval.py --dataset data/twin/export/sharegpt_holdout.jso
 
 ## LoRA (майбутнє D.1)
 
-- RunPod + Unsloth скрипт — `training/runpod/` (TODO)
-- Після train: `POST twin:8765/registry/lora` → promote у Mini App
+- RunPod + Unsloth: `training/runpod/train_lora.sh` + `train_unsloth.py`
+- Валідація даних без GPU: `python training/runpod/train_unsloth.py --dry-run --data-dir ...`
+- Після train: `POST twin:8765/registry/lora` → promote у Mini App / Platform
 
 ## Twin registry
 

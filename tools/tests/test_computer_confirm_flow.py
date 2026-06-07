@@ -53,8 +53,8 @@ class FakeRedis:
 @pytest.fixture
 def redis_env(monkeypatch: pytest.MonkeyPatch):
     fr = FakeRedis()
-    monkeypatch.setattr("app.computer_confirm._redis", fr)
-    monkeypatch.setattr("app.computer_rate_limit._redis", fr)
+    monkeypatch.setattr("app.computer_confirm.get_redis", lambda: fr)
+    monkeypatch.setattr("app.computer_rate_limit.get_redis", lambda: fr)
     monkeypatch.setattr(settings, "enable_computer_use", True)
     monkeypatch.setattr(settings, "computer_owner_user_ids", "1")
     monkeypatch.setattr(settings, "computer_require_confirm", True)

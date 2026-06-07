@@ -36,7 +36,7 @@ class FakePipe:
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch):
     fr = FakeRedis()
-    monkeypatch.setattr("app.computer_rate_limit._redis", fr)
+    monkeypatch.setattr("app.computer_rate_limit.get_redis", lambda: fr)
     monkeypatch.setattr(settings, "computer_rate_limit_per_hour", 2)
     return fr
 

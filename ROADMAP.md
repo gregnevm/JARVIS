@@ -28,7 +28,7 @@
 - ⏸️ **M2b** Webhook-режим для прода — named tunnel / домен + reverse proxy,
   `TELEGRAM_INGEST_MODE=webhook` + одноразовий setWebhook. За потреби.
 - ✅ **M3** Webhook secret_token — `/webhook` перевіряє `X-Telegram-Bot-Api-Secret-Token` (403/200).
-- ⏸️ **M4** Ротація токена — за користувачем (@BotFather).
+- ✅ **M4** Ротація токена — новий бот @BotFather, `.env` + recreate gateway (2026-06-05).
 - ✅ **N4** Кеш ембедингів у Redis — зроблено, verified (кеш-хіт 0.01с).
 - ✅ **N5** Log rotation — зроблено (≤50 МБ/контейнер).
 - ✅ **E3** Multi-user — підтверджено (ізоляція по user_id у БД + per-user rate limit).

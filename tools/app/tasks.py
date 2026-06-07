@@ -5,22 +5,11 @@ import json
 import time
 from typing import Any
 
-import redis.asyncio as aioredis
-
-from .config import settings
+from .redis_util import get_redis
 
 _QUEUE_PREFIX = "jarvis:tasks:"
 _ACTIVE_PREFIX = "jarvis:tasks:active:"
 _TTL = 86400
-
-_redis: aioredis.Redis | None = None
-
-
-def _client() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
 
 
 def _qkey(user_id: int) -> str:
@@ -39,14 +28,14 @@ async def enqueue(user_id: int, goal: str, steps: list[str] | None = None) -> di
         "created": int(time.time()),
         "status": "active",
     }
-    await _client().setex(_akey(user_id), _TTL, json.dumps(task, ensure_ascii=False))
-    await _client().rpush(_qkey(user_id), goal.strip()[:500])
-    await _client().expire(_qkey(user_id), _TTL)
+    await get_redis().setex(_akey(user_id), _TTL, json.dumps(task, ensure_ascii=False))
+    await get_redis().rpush(_qkey(user_id), goal.strip()[:500])
+    await get_redis().expire(_qkey(user_id), _TTL)
     return task
 
 
 async def get_active(user_id: int) -> dict[str, Any] | None:
-    raw = await _client().get(_akey(user_id))
+    raw = await get_redis().get(_akey(user_id))
     if not raw:
         return None
     try:
@@ -64,12 +53,12 @@ async def mark_step_done(user_id: int, step: str) -> dict[str, Any] | None:
     done: list[str] = [str(x) for x in raw_done] if isinstance(raw_done, list) else []
     done.append(step[:200])
     task["done"] = done
-    await _client().setex(_akey(user_id), _TTL, json.dumps(task, ensure_ascii=False))
+    await get_redis().setex(_akey(user_id), _TTL, json.dumps(task, ensure_ascii=False))
     return task
 
 
 async def cancel(user_id: int) -> bool:
-    await _client().delete(_akey(user_id), _qkey(user_id))
+    await get_redis().delete(_akey(user_id), _qkey(user_id))
     return True
 
 

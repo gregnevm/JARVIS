@@ -7,10 +7,12 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
+from .._helpers import AGENT_MODES
 from ..auth import is_admin
 from ..services import ServicesClient
 from ..telegram import TelegramClient
 from ..telegram_webapp_auth import admin_app_url
+from ._helpers import require_admin_or_reply
 from .dashboard import esc
 from .keyboards import admin_confirm_keyboard, admin_menu_keyboard
 
@@ -163,7 +165,7 @@ async def handle_admin_command(
     action = None
     if len(parts) >= 2 and parts[1] == "reset":
         action = "mode:reset"
-    elif len(parts) >= 3 and parts[1] == "mode" and parts[2] in ("chat", "agent", "hybrid", "computer"):
+    elif len(parts) >= 3 and parts[1] == "mode" and parts[2] in AGENT_MODES:
         action = f"mode:{parts[2]}"
     elif len(parts) >= 2 and parts[1] == "mode" and len(parts) == 2:
         await tg.send_message(
@@ -199,8 +201,7 @@ async def handle_admin_callback(
     """Обробляє adm:Y / adm:N. Повертає True якщо спожито."""
     if not data.startswith("adm:"):
         return False
-    if not is_admin(user_id):
-        await tg.send_message(chat_id, "⛔ Admin only.")
+    if await require_admin_or_reply(tg, chat_id, user_id):
         return True
 
     parts = data.split(":")

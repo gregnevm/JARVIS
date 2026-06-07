@@ -1,0 +1,18 @@
+# JARVIS Edge USB — config (copy → config.yaml)
+edge_id: usb_01
+
+# Twin SyncServer (LAN/VPN)
+twin_url: http://192.168.1.10:8765
+# vpn_hosts:
+#   - 10.8.0.1
+
+kobold_host: http://127.0.0.1:5001
+
+# Optional: Memory service для semantic RAG (LAN only)
+# memory_url: http://192.168.1.10:8100
+
+context_log: data/context_log.jsonl
+lora_dir: lora/versioned
+lora_active_link: lora/active/jarvis.gguf
+sync_state: data/sync_state.json
+sync_interval_sec: 300

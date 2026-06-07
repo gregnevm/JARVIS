@@ -25,7 +25,7 @@ class FakeRedis:
 @pytest.mark.asyncio
 async def test_trust_session(monkeypatch):
     fake = FakeRedis()
-    monkeypatch.setattr("app.computer_trust._client", lambda: fake)
+    monkeypatch.setattr("app.computer_trust.get_redis", lambda: fake)
     uid = 999001
     await revoke_trust(uid)
     assert not await is_trusted(uid)
