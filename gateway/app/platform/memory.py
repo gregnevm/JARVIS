@@ -37,6 +37,20 @@ def _notes_path(user_id: int) -> Path:
     return Path(settings.data_dir) / "notes" / f"{int(user_id)}.jsonl"
 
 
+async def _post_memory(endpoint: str, payload: dict[str, Any]) -> Any:
+    """POST `payload` на `{memory_url}/{endpoint}`, повернути розпарсений JSON.
+
+    Узагальнює побайтово ідентичний (з різним лише endpoint/payload) патерн
+    `async with httpx.AsyncClient(timeout=12.0) as cli: r = await cli.post(...);
+    r.raise_for_status(); data = r.json()`, повторений у `memory_search` та
+    `memory_history`. Кидає `httpx.HTTPError` — виклик сам вирішує, як
+    логувати/якою заглушкою відповідати (формати fallback-відповідей різні)."""
+    async with httpx.AsyncClient(timeout=12.0) as cli:
+        r = await cli.post(f"{settings.memory_url.rstrip('/')}/{endpoint}", json=payload)
+        r.raise_for_status()
+        return r.json()
+
+
 def register(router: APIRouter) -> None:
     @router.post("/platform/api/memory/search")
     async def memory_search(
@@ -49,13 +63,7 @@ def register(router: APIRouter) -> None:
         if body.project_id is not None:
             payload["project_id"] = int(body.project_id)
         try:
-            async with httpx.AsyncClient(timeout=12.0) as cli:
-                r = await cli.post(
-                    f"{settings.memory_url.rstrip('/')}/search",
-                    json=payload,
-                )
-                r.raise_for_status()
-                data = r.json()
+            data = await _post_memory("search", payload)
         except httpx.HTTPError as exc:
             logger.warning("memory search failed: %s", exc)
             return {
@@ -107,13 +115,7 @@ def register(router: APIRouter) -> None:
         uid = resolve_uid(auth, user_id)
         lim = max(1, min(limit, 100))
         try:
-            async with httpx.AsyncClient(timeout=12.0) as cli:
-                r = await cli.post(
-                    f"{settings.memory_url.rstrip('/')}/history",
-                    json={"user_id": uid, "limit": lim},
-                )
-                r.raise_for_status()
-                data = r.json()
+            data = await _post_memory("history", {"user_id": uid, "limit": lim})
         except httpx.HTTPError as exc:
             logger.warning("memory history failed: %s", exc)
             return {"messages": [], "user_id": uid, "error": str(exc)}

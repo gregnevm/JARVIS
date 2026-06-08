@@ -3,7 +3,7 @@
 > Генерується/оновлюється циклом `/loop покращуй всі фічі згідно roadmap…`.
 > Кожен прохід: перевірка (mypy/tests) → архітектурний огляд → нові пропозиції → позначення закритих.
 
-**Останній прохід:** 2026-06-07
+**Останній прохід:** 2026-06-08
 
 ---
 
@@ -11,18 +11,24 @@
 
 | Перевірка | Результат |
 |-----------|-----------|
-| `mypy --strict` (5 сервісів) | ✅ gateway 69, tools 77, twin 8, jarvis_core 20, memory 6 — 0 помилок |
-| `pytest gateway/tests` | ✅ 227/227 |
-| `pytest tools/tests` | ✅ green (100%) |
-| `pytest memory/tests` | ✅ 17/17 |
-| `grep TODO/FIXME/XXX/HACK` у `app/` усіх сервісів | ✅ 0 знайдено |
+| `mypy gateway/app` (strict) | ✅ 71 файл, 0 помилок |
+| `mypy memory/app` (strict) | ✅ 6 файлів, 0 помилок |
+| `pytest gateway/tests` | ✅ 266/266 |
+| `pytest memory/tests` | ✅ 46/46 (17 попередніх + 29 нових із проходу 37) |
+| `pytest gateway/tests -k "access or admin"` (цільовий, прохід 36) | ✅ 27/27 |
+| `grep TODO/FIXME/XXX/HACK` у `app/` усіх сервісів | ✅ 0 знайдено (підтверджено раніше) |
 
-Виправлено в цьому проході (mypy strict, no-issues-found):
-- `tools/app/{teams,orchestrator}.py`, `tools/app/connectors/{slack,notion}.py`,
-  `tools/app/toolkit/dispatch.py`, `gateway/app/{bg_job_runner,bot/cursor_flow,bot/commands}.py`,
-  `gateway/app/platform/proxy.py` (генерик `TypeVar(bound=BaseModel)` — закрив одразу 5 помилок
-  у `teams/subagents/skills/research/orchestrator.py`), `memory/app/migrate.py`
-  (`TYPE_CHECKING`-guard імпорт `DB`, без circular import).
+Виправлено в цьому проході:
+- **прохід 37** — `memory/tests/test_main_routes.py`: 0%→прямі ASGI-тести
+  для всього route-шару `memory/app/main.py` (29 нових тестів, новий
+  патерн `httpx.ASGITransport` для FastAPI без запуску `lifespan`);
+- **прохід 36** — `gateway/app/bot/access.py`: два мовчазні
+  `except Exception: pass` переписані за зразком сусіднього патерну
+  `except Exception as exc: # noqa: BLE001 — <причина>` + `logger.warning(...)`
+  — без зміни поведінки, лише видимість у логах.
+
+Деталі — нижче, у відповідних пропозиціях "Прохід 2026-06-08
+(тридцять шостий/сьомий)".
 
 ---
 
@@ -94,29 +100,349 @@ memory, tools, twin, hostagent]` (усі 6 сервісів, не 5), що дл�
 доступу до Mini App ззовні LAN), не блокер. Можна лишити в backlog без дій, поки немає
 конкретного запиту "хочу відкрити /app з телефону поза домашньою мережею".
 
-### G. Великий некомічений WIP (151 файлів) — ризик дрейфу
-**Спостереження:** робоче дерево на `main` має 151 змінених/нових файлів — це ціла
-платформа P0–P12 (Projects, Jobs, Planning, Research, MCP, Connectors, Skills, Subagents,
-Hooks, Teams, OpenAI API, Cursor tasks) + Alembic migrations + routes/toolkit рефактор
-tools/app, усе вже **протестовано (100% green) і mypy-strict чисто**. Це означає:
-готово до комітів, але чим довше лежить незакомічене — тим вищий ризик конфліктів/втрати.
-**Рекомендація:** закомітити фазовано (окремими PR або комітами на feature-гілці):
-1. `jarvis_core` додатки (`auth_ids`, `bg_jobs`) + Alembic foundation (`memory/`)
-2. `tools/app` routes/toolkit рефактор + нові feature-модулі (orchestrator, plans,
-   research, skills, subagents, teams, connectors, hooks, self_improve, cursor_tasks,
-   lora_deploy, mcp_gateway)
-3. `gateway/app` platform-модулі (P0–P12) + bot додатки (cursor_flow, plans, bg_job_runner,
-   openai_api, computer_resume)
-4. docs/scripts/training/misc
-
-Я **не комічу це самостійно** без явного запиту — це суттєвий обсяг роботи користувача,
-а рішення "коли і як це лендиться в `main`" належить йому. Якщо хочеш — скажи "закомічуй
-фазами" і я виконаю план вище послідовно зі звітом після кожної фази (per
-"Phased execution" у пам'яті).
+### G. Великий некомічений WIP (151 файлів) — ризик дрейфу · ✅ закрито (PR #6, 2026-06-07)
+**Було:** робоче дерево на `main` мало 151+ змінених/нових файлів (платформа P0-P12 +
+Alembic + routes/toolkit рефактор), усе протестовано й mypy-чисто, але незакомічене —
+ризик дрейфу/конфліктів зростав з кожним проходом цього циклу (151 → 165 → 183 → 226).
+**Як закрито:** на запит користувача через `/create-pr` виник конфлікт area: 226 файлів
+(WIP + edits проходів 26-28) технічно не розділялись на "лише сесійні зміни" без
+розпотрошення цілого рефактору (нові файли типу `_helpers.py`/`plans.py` були ОДНОЧАСНО
+і частиною WIP, і відредаговані в цій сесії). Через `AskUserQuestion` користувач
+ОБРАВ "Закомітити все одним PR" замість раніше задокументованого фазованого плану —
+свідома відмова від обережності на користь швидкого landing. Створено гілку
+`feat/platform-p0-p12-and-refactor`, закомічено 226 файлів (14567 insertions, 2311
+deletions), відкрито **PR #6** (https://github.com/gregnevm/JARVIS/pull/6),
+усі 7 CI-перевірок ✅ green, `mergeable: MERGEABLE`. Очікує рішення користувача про merge.
+**Урок:** план "комітити фазами" був правильним, ПОКИ обсяг лишався малим — але WIP
+ріс швидше, ніж цикл встигав його розділити (рефактор проходів 27-28 сам додавав нові
+файли в ту саму незакомічену купу). Коли розділення стало технічно неможливим без
+розпотрошення робочого коду — правильний хід був ескалювати рішення користувачу
+(`AskUserQuestion`), а не продовжувати відкладати чи форсувати власний план.
 
 ---
 
 ## Закриті пропозиції (історія)
+
+### Прохід 2026-06-07 (тридцять четвертий) — test_redis_util.py: канонічний get_redis() (ціль консолідації проходу 28) сам без тесту
+- **Контекст:** переніс "module-vs-test-list" пошук (проходи 30-33,
+  завершені для `gateway/app`) на `tools/app`. Непокриті кандидати:
+  `bootstrap`, `config`, `image_gen_lock` (вже непрямо), `redis_store`
+  (непрямо), **`redis_util`**, `schemas` (непрямо). `bootstrap.py`
+  переважно app-wiring (`build_jarvis` створює реальні LLM-стеки — погано
+  тестувати ізольовано); `redis_util` — найцікавіше.
+- **Іронічна знахідка:** `redis_util.get_redis()`/`aclose_redis()` —
+  САМЕ ТОЙ канонічний lazy-singleton, до якого проход 28 звів 8 копій
+  дубльованого коду по `tools/app`. Від його lazy-create/cache/reset-
+  контракту тепер залежать `bg_jobs`, `metrics`, `confirm`, `reminders`,
+  `computer_{rate_limit,trust,confirm}`, `jobs`, `tasks`, `artifacts`,
+  `image_gen_lock` — а сам модуль не мав ЖОДНОГО прямого тесту. Усі 9
+  тестових файлів роблять `monkeypatch.setattr(<module>, "get_redis",
+  lambda: fake)` — що ПОВНІСТЮ обминає реальну singleton-логіку
+  (підміняє саму функцію, а не перевіряє її поведінку).
+- **Що покрив:** (1) lazy-створення — `aioredis.from_url` НЕ
+  викликається до першого `get_redis()`, викликається з правильним
+  `settings.redis_url`+`decode_responses=True`; (2) кешування — 3
+  послідовні виклики повертають ОДИН і той самий інстанс (singleton, не
+  factory); (3) `aclose_redis` закриває клієнт І скидає `_redis` у `None`,
+  тож наступний `get_redis()` створює СВІЖИЙ інстанс (а не повертає
+  закритий!); (4) `aclose_redis` на ще-не-створеному клієнті — no-op, не
+  падає і не створює зайвий інстанс.
+- **Виправлення:** `tools/tests/test_redis_util.py` (4 тести,
+  `_FakeAsyncRedis` сентинел + `monkeypatch` на `aioredis.from_url`,
+  autouse-фікстура скидає глобальний `_redis` між тестами для ізоляції).
+- **Верифікація:** `test_redis_util.py` ✅ 4/4 з першого запуску; `mypy
+  tools/app` ✅ 77 файлів; повний `pytest tools/tests` ✅ без падінь
+  (224 = 220 + 4 нових).
+- **Урок:** "ціль консолідації" — не синонім "перевірений код". Коли N
+  копій звели до 1 спільного хелпера, саме ця 1 точка тепер несе весь
+  ризик регресії для N викликачів — а якщо викликачі тестуються через
+  DI-підміну (що правильно для ІЗОЛЯЦІЇ їхньої логіки від Redis), нічого
+  не лишає прямого тесту для самого хелпера. Варто прямо запитати:
+  "чи хтось взагалі тестує ЦЮ функцію, а не підміняє її?"
+
+### Прохід 2026-06-08 (тридцять сьомий) — test_main_routes.py: route-шар memory/app/main.py (17 ендпоінтів, 0 ASGI-тестів)
+- **Контекст:** перевірив `tools_client.py` як можливу ціль "сусіднього
+  патерну" (45 `except httpx.HTTPError` сайтів) — але це виявилось
+  УЖЕ узгодженою практикою (45 толерантних fallback'ів + 2 логованих для
+  критичних шляхів `/agent` і reminders-ics; не інконсистентність, а
+  свідомий вибір "тихий fallback за замовчуванням, лог — для важливого").
+  Переключився на "module-vs-test-list" по інших сервісах (twin/memory/
+  hostagent) — у memory лишались непокритими тільки `__init__`/`main`
+  (типово). Але перевірка показала: у `memory/tests/*.py` (6 файлів,
+  раніше 17 тестів) — ЖОДЕН не використовує `TestClient`/`AsyncClient`/
+  `httpx` і не імпортує `app.main`. Увесь route-шар (259 рядків, ~17
+  ендпоінтів: embed/store/search/history/sessions + повний projects CRUD
+  + project files) тестувався ЛИШЕ опосередковано через DB/RAG-юніти —
+  валідація запитів, 404-guard'и, обрізання полів і толерантна-до-
+  часткових-помилок логіка `/store` не мали жодного прямого тесту.
+- **Технічний виклик:** `lifespan` створює РЕАЛЬНИЙ `DB(settings.dsn)` +
+  Redis-конект — `TestClient(app)` як контекстний менеджер це запустив
+  би. Розв'язання: підмінити `app.state.db`/`app.state.embedder` НАПРЯМУ
+  одразу після імпорту `app` (без `with TestClient`), і ходити через
+  `httpx.ASGITransport` — він НЕ викликає lifespan-події, лише ASGI
+  http-scope (аналог `httpx.MockTransport` із проходів 32-33, але для
+  ASGI-застосунку, а не зовнішнього HTTP-клієнта). Новий патерн для
+  кодової бази — задокументований у docstring файлу.
+- **Що покрив:** (1) `/health` — ok/degraded/`schema_warn` через
+  `embed_dim_mismatch` (із fake `db.pool.acquire()` за зразком
+  `test_sessions.py`); (2) `_embed_or_502` — 200 з dim+embedding, 502
+  з detail на помилці ембедера (`/embed`, `/search`); (3) `/store` —
+  створення сесії vs використання заданого `session_id`, і ГОЛОВНЕ:
+  задокументований у самому хелпері контраст — `/store` ПРОДОВЖУЄ при
+  падінні ембедингу одного chunk'а (`continue`+log), а `/embed`/`/search`
+  фейляться повністю (502) — тест з 2-чанковим текстом і
+  `side_effect=[RuntimeError, vec]` підтверджує `chunks_stored == 1`;
+  (4) `/history`/`/sessions` — дефолтний ліміт із `settings`, clamp
+  `[1, 30]`; (5) повний `/projects` CRUD — 400 на порожнє ім'я, обрізання
+  `name[:200]`/`system_prompt[:8000]`, 404 через `get_project is None`/
+  `update_project is None`/`delete_project is False`, `include_content`
+  прапорець, `PATCH` передає `None` для невказаних полів; (6) `_require_
+  project` — 404 на всіх трьох project-files ендпоінтах ДО виклику
+  DB-методу запису (перевірено через `assert_not_awaited`).
+- **Виправлення:** `memory/tests/test_main_routes.py` (29 тестів,
+  `FakeDB`/`FakeEmbedder` з per-method `AsyncMock`, `_FakePool/_FakeAcquire/
+  _FakeCon` сентинели для `db.pool.acquire()` за зразком `test_sessions.py`).
+- **Верифікація:** 29/29 з першого запуску; `mypy memory/app` ✅ 6 файлів,
+  0 помилок; повний `pytest memory/tests` ✅ 46/46 (17 існуючих + 29 нових),
+  без падінь.
+- **Урок:** "module-vs-test-list" пошук по basenames (`app/*.py` vs
+  `tests/test_*.py`) ловить відсутність ПРЯМОГО тесту МОДУЛЯ, але не
+  ловить відсутність тесту ШАРУ — `main.py` мав "індиректне" покриття за
+  назвою (бо `test_db.py`/`test_rag.py` фактично покривали залежності, що
+  `main.py` імпортує), та насправді сам ASGI-роутинг/валідація/HTTP-
+  контракт не торкались жодним тестом. Вартий запит: "чи хоч один тест
+  ходить ЧЕРЕЗ HTTP-шар цього сервісу, а не напряму в обхід нього?"
+
+### Прохід 2026-06-08 (тридцять шостий) — access.py: silent except → logger.warning (узгодження з сусіднім патерном у тому ж файлі)
+- **Контекст:** після завершення серії тестового покриття (проходи 30-34,
+  +48 нових тестів) і чистки застарілої пропозиції G (прохід 35) шукав
+  наступну ціль через "очищуй"/"перевіряй архітектуру". Перевірив
+  bare-except без анотацій, мутабельні дефолти, SQL-ін'єкції, subprocess
+  без list-форми аргументів — нічого не знайшов (усе вже виправлено в
+  попередніх проходах). Написав кастомний скрипт `/tmp/silent_except.py`
+  для пошуку `except ...: pass` патернів по всіх 5 сервісах — знайшов 11
+  кандидатів.
+- **Знахідка:** з 11 кандидатів обрав `gateway/app/bot/access.py` (рядки
+  ~214 і ~243) — два блоки `except Exception: pass` у потоках `/deny` і
+  `/revoke` (сповіщення користувача про відмову/відкликання доступу), що
+  МОВЧКИ ковтали помилки (типово: користувач заблокував бота). Вибрав
+  саме ці — НЕ через найбільший fan-in чи складність, а через
+  **внутрішньофайлову несумісність патернів**: цей самий файл уже має
+  встановлений сусідній патерн (рядок ~60-61, `notify_admins_new_request`):
+  `except Exception as exc:  # noqa: BLE001 — один адмін не блокує інших`
+  + `logger.warning("notify admin %s failed: %s", admin_id, exc)`. А також
+  `_notify_user_granted` (рядок ~115) логує так само. Два мовчазні блоки
+  лишались єдиними винятками з уже усталеної в ЦЬОМУ Ж файлі практики —
+  чиста несумісність "сусідніх патернів", що ускладнює діагностику
+  (неможливо побачити в логах, чи `/deny`/`/revoke` сповіщення взагалі
+  спрацьовують).
+- **Виправлення:** обидва блоки переписані за зразком сусіднього патерну
+  (без зміни поведінки — той самий `except Exception`, той самий
+  "не зривати адмін-флоу"):
+  ```python
+  # /deny (було: except Exception: pass)
+  except Exception as exc:  # noqa: BLE001 — користувач міг заблокувати бота, не зривати адмін-флоу
+      logger.warning("notify denied user %s failed: %s", target_id, exc)
+
+  # /revoke (було: except Exception: pass)
+  except Exception as exc:  # noqa: BLE001 — користувач міг заблокувати бота, не зривати адмін-флоу
+      logger.warning("notify revoked user %s failed: %s", target_id, exc)
+  ```
+  `logger = logging.getLogger("jarvis.gateway.access")` уже існував у файлі —
+  новий імпорт не знадобився.
+- **Верифікація:** `mypy gateway/app` ✅ 71 файл, 0 помилок; цільовий
+  `pytest gateway/tests -k "access or admin"` ✅ 27/27; повний
+  `pytest gateway/tests -q` ✅ 266/266, exit code 0 — без регресій.
+- **Урок:** "узгодженість сусідніх патернів" (sibling-pattern consistency)
+  — самостійний клас знахідок, відмінний від "є якийсь гап". Коли в
+  ОДНОМУ файлі співіснують і анотований `except ... as exc: # noqa: BLE001
+  + logger.warning(...)`, і голий `except: pass` для структурно
+  ідентичних випадків ("сповістити когось, не зривати флоу") — це сигнал,
+  що другий писався раніше або іншою рукою і просто не підтягнувся до
+  усталеної практики. Виправлення тривіальне (чиста косметика логування,
+  поведінка та сама), а виграш для діагностики — конкретний: тепер видно
+  в логах WARNING, коли сповіщення користувача провалюється, замість
+  тихого "нічого не сталося".
+
+### Прохід 2026-06-07 (тридцять третій) — test_tools_client_http.py: tools_request — єдина точка входу ToolsClient (~30 методів), 0 тестів
+- **Контекст:** завершив "module-vs-test-list" серію (проходи 30-32) у
+  `gateway/app`. Останні непокриті кандидати: `tools_client_http`,
+  `tts_client`, `whisper`. Обрав `tools_client_http::tools_request` —
+  не за розміром (39 рядків, одна функція), а за топологією: це ЄДИНА
+  точка входу, через яку `ToolsClient._request` (а отже й УСІ ~30 методів
+  `ToolsClient` — `process`, `create_plan`, `list_plans`, `dashboard`,
+  `set_mode`, …) проходять кожен HTTP-запит до tools-сервісу. `tts_client`/
+  `whisper` — листові, самодостатні обгортки з fan-in=1; регресія в
+  `tools_request` натомість тихо ламає весь gateway↔tools трафік одразу.
+- **Що покрив:** умовну побудову kwargs — `json`/`params`/`timeout`
+  додаються в `kwargs` ТІЛЬКИ якщо не `None` (а не передаються як
+  буквальний `None`, що для деяких httpx-шляхів важливо: порожнє тіло
+  запиту `b""` замість `b"null"`); нормалізацію URL (`base.rstrip("/")`+
+  `path`); приведення методу до верхнього регістру; толерантний `None`-
+  фолбек на `httpx.HTTPError` (мережева помилка, НЕ HTTP-статус); та
+  явний контракт "не викликає `raise_for_status` — повертає Response
+  навіть для 404, рішення про статус — за викликачем" (легко зламати
+  при рефакторингу, додавши `raise_for_status` "про всяк випадок").
+- **Виправлення:** додав `gateway/tests/test_tools_client_http.py`
+  (8 тестів) через `httpx.MockTransport` (той самий патерн проходів
+  31-32). Регресійний тест `test_omits_json_when_none` явно фіксує, що
+  тіло запиту порожнє (`b""`), а НЕ `b"null"` — найтонший і найлегше
+  ламаний нюанс цієї функції.
+- **Верифікація:** `test_tools_client_http.py` ✅ 8/8 з першого запуску;
+  `mypy gateway/app` ✅ 71 файл; повний `pytest gateway/tests` ✅ без
+  падінь (264 = 256 + 8 нових).
+- **Підсумок серії 30-33:** +44 нові юніт-тести (7+15+14+8) для 4 активних
+  модулів з нульовим/непрямим покриттям (`thread_context`, `_helpers`,
+  `services`, `tools_client_http`). Лишились непокриті лише
+  `tts_client`/`whisper` — обидва тонкі листові обгортки з fan-in=1 і
+  однією гілкою (запит → толерантний фолбек), де ROI прямого тесту
+  низький; "module-vs-test-list" напрямок вичерпано для цих 5 модулів.
+
+### Прохід 2026-06-07 (тридцять другий) — test_services.py: ServicesClient (ретраї, ланцюжок deploy, вилучення detail) — 0 тестів
+- **Контекст:** продовжив "module-vs-test-list" пошук (проходи 30-31) у
+  `gateway/app`. З решти кандидатів без ЖОДНОГО (ні прямого, ні непрямого)
+  покриття — `services`, `tools_client_http`, `tts_client`, `whisper` —
+  обрав `services.py::ServicesClient` як найскладніший і найвпливовіший
+  (fan-in 11 файлів: `bot/*`, `platform/{models,overview,settings_api}`,
+  `admin_panel`, `health_watch`, `main`, `router`).
+- **Чому саме він:** на відміну від `tts_client`/`whisper`/
+  `tools_client_http` (прості "запит → толерантний фолбек на помилку"),
+  `ServicesClient` має ТРИ шари нетривіальної логіки: (1) `dashboard()` —
+  ретраї до 3 спроб з `debug`-логуванням проміжних і `error` фінальної
+  невдачі; (2) `tools_deploy_lora()` — вкладене вилучення `detail` з
+  помилки: спершу пробує `exc.response.json().get("detail", ...)`, при
+  `ValueError` падає на `exc.response.text[:200]`; (3)
+  `twin_promote_lora`/`twin_rollback_lora` — успіх ланцюжком викликає
+  `tools_deploy_lora()` і докладає `out["ollama"]`, АЛЕ тільки якщо
+  `deploy=True` І promote/rollback сам не впав з помилкою.
+- **Виправлення:** додав `gateway/tests/test_services.py` (14 тестів) —
+  через `httpx.MockTransport` (встановлений патерн з `test_tools_client.py`,
+  підміна `._client`/`._dash_client`). Покрив: ретраї `dashboard` (рівно 3
+  спроби — лічильник у handler-і фіксує точну межу, не "хоча б 1"), усі три
+  гілки вилучення `detail` (success/JSON-detail/text-фолбек при не-JSON
+  тілі), і ланцюжок `promote/rollback→deploy` у ВСІХ комбінаціях
+  (`deploy=True` успіх / `deploy=False` пропуск / помилка-перериває-
+  ланцюжок — лічильник підтверджує, що `deploy` НЕ викликається після
+  невдалого promote).
+- **Верифікація:** `test_services.py` ✅ 14/14 (з першого запуску, без
+  ітерацій на форматі MockTransport-handler-ів); `mypy gateway/app` ✅ 71
+  файл; повний `pytest gateway/tests` ✅ без падінь (256 = 242 + 14 нових).
+- **Урок:** при виборі З КІЛЬКОХ непокритих кандидатів — пріоритизуй за
+  складністю логіки, а не лише за fan-in: `tts_client`/`whisper` мають
+  схожий fan-in, але є тонкими "проксі+толерантний фолбек" обгортками з
+  однією гілкою; `ServicesClient` — єдиний з трьома шарами розгалуженої логіки
+  (ретраї, вкладене вилучення помилки, умовний ланцюжок викликів), де
+  регресіятихо зламала б дашборд/promote-flow без жодного сигналу.
+
+### Прохід 2026-06-07 (тридцять перший) — test_helpers.py: прямі юніт-тести для _helpers.py (15 імпортерів, 0 прямих тестів)
+- **Контекст:** продовжив підхід проходу 30 (звірка модулів проти
+  тестів), цього разу для `gateway/app`. Кандидати без `test_<module>.py`:
+  `_helpers`, `agent_turn`, `projects`, `services`, `tools_client_http`,
+  `tts_client`, `whisper`, `request_id`, `main`. Греп підтвердив непряме
+  покриття для `agent_turn`/`projects`/`request_id`. Лишились без жодної
+  прямої ЧИ непрямої згадки в тестах: `_helpers`, `services`,
+  `tools_client_http`, `tts_client`, `whisper`.
+- **Чому саме `_helpers`:** найвищий "блаcт-радіус" — імпортується у
+  **15 файлах** (`platform/{jobs,plans,memory,models,settings_api,
+  workbench}.py`, `bot/{access,admin,commands,computer,quick_actions,
+  remote}.py`, `admin_panel.py`, `webapp.py`, `webapp_ps.py`) і є
+  узагальненням консолідацій з проходів 21-27 (`require_text`,
+  `require_mode`+`AGENT_MODES`, `require_found`). Кожна функція має
+  нетривіальні крайові випадки: `require_text` — strip+порожній рядок vs
+  None vs кастомне ім'я поля у `detail`; `require_mode` — нормалізація
+  регістру/пробілів ДО звірки (саме це проход 27 виправив для
+  `webapp.py::app_set_mode`!) + кастомна множина + кастомне ім'я поля;
+  `require_found` — generic `TypeVar`, falsy-але-не-None значення (`0`,
+  `""`, `[]`) НЕ мають трактуватись як "не знайдено". Жоден з цих нюансів
+  не мав ПРЯМОГО тесту — лише випадкове непряме покриття там, де route-тест
+  трапляється проходити через конкретну гілку.
+- **Виправлення:** додав `gateway/tests/test_helpers.py` (15 тестів) —
+  прямі юніт-тести без FastAPI-додатку (виклик функцій напряму +
+  `pytest.raises(HTTPException)` за зразком `test_telegram_webapp_auth.py`).
+  Покрив усі три хелпери + канонічність `AGENT_MODES`, включно з
+  регресійним тестом саме на той нюанс нормалізації, що проход 27 виправив
+  у `app_set_mode` (`require_mode("  Agent ", ...) == "agent"`), і на
+  falsy-значення в `require_found` (типова пастка "не None" vs "не falsy").
+- **Верифікація:** `test_helpers.py` ✅ 15/15; `mypy gateway/app` ✅ 71
+  файл; повний `pytest gateway/tests` ✅ без падінь (242 = 227 + 15 нових).
+- **Урок (продовження проходу 30):** хелпер-модулі з високим fan-in —
+  пріоритетні кандидати для прямих юніт-тестів: вони консолідують поведінку
+  багатьох місць виклику в ОДНУ точку, тож регресія там б'є по всіх 15
+  імпортерах одразу, а пряма (а не випадково-непряма) перевірка нюансів
+  (нормалізація, falsy-vs-None, custom field) дешевша й надійніша за
+  сподівання, що десь серед route-тестів трапиться потрібна гілка.
+
+### Прохід 2026-06-07 (тридцятий) — test_thread_context.py: 0% покриття для активного модуля C0-контексту
+- **Контекст:** змінив тип пошуку — після вичерпання guard-дублів (21-27),
+  Redis-singleton кластера (28) і внутрішньофайлового httpx-дублю (29)
+  пошукав репетативні чанки в `twin/memory/hostagent` (нічого вартого —
+  лише тривіальний `logging.basicConfig(...)`, ідентичний у трьох
+  незалежно деплойованих `main.py`, що НЕ варто виносити у спільну
+  бібліотеку). Перейшов на пошук прогалин у тестовому покритті: звірив
+  список модулів `tools/app/*.py` зі списком `test_*.py` у `tools/tests/`.
+  Кандидати без прямого `test_<module>.py`: `redis_util`, `thread_context`,
+  `runtime`, `image_gen_lock`, `computer_audit`, `tasks` — більшість мають
+  непряме покриття через інші тести (греп підтвердив). Та
+  `thread_context.py` мав **0 згадок** у будь-якому тестовому файлі.
+- **Чому це важливо:** `build_thread_context()` — не тривіальний форматер:
+  тегує ролі (`user`→`U`, `assistant`→`A`, інше→перша літера), обрізає
+  кожне повідомлення до `_MAX_MSG=280`, зупиняється за сумарним бюджетом
+  `_MAX_TOTAL=2000`, пропускає порожні репліки після `strip()`. Активно
+  використовується в `agent.py::_build_messages` (C0 chat-контекст —
+  гарячий шлях кожного запиту), тож регресія тут тихо псує контекст для
+  LLM без жодного тесту, що впіймав би це.
+- **Виправлення:** додав `tools/tests/test_thread_context.py` (7 тестів,
+  `FakeMemory` за зразком `test_agent.py::FakeMemory`) — покрив: порожню
+  історію, тегування ролей (включно з невідомою роллю), пропуск
+  порожніх/whitespace-реплік + `\n`→` `, обрізання за `_MAX_MSG`,
+  зупинку за `_MAX_TOTAL`, та повагу до аргументу `limit`.
+- **Верифікація:** `pytest tools/tests/test_thread_context.py` ✅ 7/7;
+  `mypy tools/app` ✅ 77 файлів (тести в проєкті типізуються НЕ суворо —
+  звірив з конвенцією `test_agent.py::FakeMemory`, що так само не
+  узгоджується з `MemoryClient` за прямим типом); повний `pytest
+  tools/tests` ✅ без падінь.
+- **Урок:** "перевір список тестів проти списку модулів" — дешевий і
+  швидкий спосіб знайти прогалини покриття, який не вимагає coverage-
+  тулінгу; знаходить саме "активний код без тестів", а не "мертвий код
+  без тестів" (що було б марною роботою).
+
+### Прохід 2026-06-07 (двадцять дев'ятий) — _post_memory: внутрішньофайловий дубль httpx-проксі в memory.py
+- **Контекст:** скрипт детекції повторюваних 5-рядкових чанків (запущений
+  на проході 28) повернув ОДНОГО нового кандидата — `auth: PlatformAuth =
+  Depends(require_platform_auth), user_id, limit=20, uid = resolve_uid(...)`,
+  що зустрічається 3× у `gateway/app/platform/{memory.py,proxy.py}`.
+  Перевірив гіпотезу "чи можна `memory_notes`/`memory_history`/
+  `memory_profile` переписати через `register_tools_list`" — **ні**:
+  `register_tools_list` проксіює виключно до generic `request.app.state.
+  tools.<attr>(uid, limit)` і повертає фіксовану форму `{wrap_key: items,
+  "user_id": uid}`. А `memory_notes`/`memory_profile` читають напряму з
+  файлової системи (`data/{notes,profiles}/{id}.{jsonl,json}`),
+  `memory_history` робить прямий `httpx`-запит до ОКРЕМОГО `memory`-сервісу
+  (не до `tools`), і всі три повертають структурно різні форми відповіді
+  (`{"notes": [...]}`, `{"messages": [...]}`, `{"profile": ..., "exists":
+  ...}`). Це підтверджує висновок Пропозиції B: "different call signature
+  to tools... форсувати у generic helper дало б більше складності, ніж
+  користі" — НЕ нова знахідка, а та сама вже задокументована межа.
+- **Та поки читав файл — знайшов СПРАВЖНІЙ внутрішньофайловий дубль**:
+  `memory_search` (рядки ~51-67) та `memory_history` (рядки ~109-119) мали
+  побайтово ідентичний (з різним лише endpoint/payload) 7-рядковий блок
+  `async with httpx.AsyncClient(timeout=12.0) as cli: r = await cli.post(
+  f"{settings.memory_url.rstrip('/')}/{endpoint}", json=payload);
+  r.raise_for_status(); data = r.json()`, обгорнутий у
+  `try/except httpx.HTTPError`.
+- **Виправлення:** виніс спільну частину (запит+парсинг, БЕЗ except — у
+  кожного виклику різна форма fallback-відповіді/ключів, тож except
+  лишився на місці) у приватний хелпер `_post_memory(endpoint, payload) ->
+  Any`, що кидає `httpx.HTTPError` назовні. `memory_search`/`memory_history`
+  тепер викликають `data = await _post_memory("search"|"history", payload)`
+  всередині свого `try`. Скоротив 14 рядків дублю до 2 викликів + 1 хелпер
+  з докстрінгом, що пояснює, чому except НЕ узагальнено.
+- **Урок:** негативний результат перевірки гіпотези (не консолідовувати
+  через generic proxy-helper) не означає "файл чистий" — варто прочитати
+  файл ПОВНІСТЮ під час перевірки гіпотези, а не лише ділянки навколо
+  кандидата. Справжній дубль знайшовся не в тому місці, де його шукали.
+- **Верифікація:** `mypy gateway/app` ✅ 71 файл; `pytest gateway/tests -k
+  memory` ✅ 6/6; повний `pytest gateway/tests` ✅ (без падінь).
 
 ### Прохід 2026-06-07 (двадцять восьмий) — Redis-singleton: 8 копій замість спільного get_redis()
 - **Контекст:** змінив тип пошуку — замість guard-блоків (вичерпано на

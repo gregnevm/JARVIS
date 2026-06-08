@@ -211,8 +211,8 @@ async def handle_access_command(
                     target_id,
                     "Доступ до бота не надано. Якщо це помилка — напиши власнику окремо.",
                 )
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — користувач міг заблокувати бота, не зривати адмін-флоу
+                logger.warning("notify denied user %s failed: %s", target_id, exc)
         else:
             await tg.send_message(chat_id, "Немає такого запиту в черзі.")
         return True
@@ -240,8 +240,8 @@ async def handle_access_command(
             )
             try:
                 await tg.send_message(target_id, "Доступ до JARVIS закрито.")
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — користувач міг заблокувати бота, не зривати адмін-флоу
+                logger.warning("notify revoked user %s failed: %s", target_id, exc)
         else:
             await tg.send_message(chat_id, "Користувач не був погоджений через бота.")
         return True
