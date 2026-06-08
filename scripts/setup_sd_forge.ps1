@@ -17,12 +17,20 @@ if (-not (Test-Path (Join-Path $forgeDir "webui.py"))) {
     git clone --depth 1 https://github.com/lllyasviel/stable-diffusion-webui-forge.git $forgeDir
 }
 
+$constraintsPath = Join-Path $forgeDir "pip-constraints.txt"
+@'
+setuptools>=69,<82
+'@ | Set-Content -Path $constraintsPath -Encoding ASCII
+
 $batPath = Join-Path $forgeDir "webui-user.bat"
 @'
 @echo off
 REM JARVIS local txt2img API. NVIDIA: remove --directml, add --xformers if needed.
+set PIP_CONSTRAINT=%~dp0pip-constraints.txt
 set COMMANDLINE_ARGS=--api --port 7860 --medvram --opt-sdp-attention --no-half-vae --directml --skip-torch-cuda-test
 '@ | Set-Content -Path $batPath -Encoding ASCII
+
+& (Join-Path $PSScriptRoot "ensure_sd_forge_deps.ps1") -ForgeDir $forgeDir
 
 Write-Host ""
 Write-Host "Done: $forgeDir" -ForegroundColor Green

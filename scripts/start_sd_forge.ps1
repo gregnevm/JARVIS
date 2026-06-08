@@ -25,6 +25,8 @@ if (-not (Test-Path (Join-Path $forgeDir "webui.py"))) {
     exit 1
 }
 
+& (Join-Path $PSScriptRoot "ensure_sd_forge_deps.ps1") -ForgeDir $forgeDir
+
 $webui = Join-Path $forgeDir "webui.bat"
 if (-not (Test-Path $webui)) {
     Write-Host "[FAIL] webui.bat missing in $forgeDir" -ForegroundColor Red
