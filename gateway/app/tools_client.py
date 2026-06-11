@@ -617,6 +617,16 @@ class ToolsClient:
         except httpx.HTTPError as exc:
             return {"error": str(exc)}
 
+    async def get_active_skill(self, user_id: int) -> dict[str, Any]:
+        resp = await self._request("GET", f"/skills/active/{int(user_id)}")
+        if resp is None:
+            return {"user_id": user_id, "skill_id": None}
+        try:
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError:
+            return {"user_id": user_id, "skill_id": None}
+
     async def get_skill(self, skill_id: str) -> dict[str, Any] | None:
         resp = await self._request("GET", f"/skills/{skill_id}")
         if resp is None or resp.status_code == 404:

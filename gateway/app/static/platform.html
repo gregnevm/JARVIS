@@ -14,42 +14,62 @@
   * { box-sizing: border-box; }
   body {
     margin: 0; font-family: system-ui, "Segoe UI", sans-serif; color: var(--txt);
+    -webkit-font-smoothing: antialiased;
     background: radial-gradient(1100px 540px at 100% 0%, rgba(232,93,117,.12), transparent 50%),
       radial-gradient(820px 420px at 0% 0%, rgba(255,140,66,.10), transparent 45%), var(--bg);
     min-height: 100vh;
+    padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
   }
   .app { display: flex; min-height: 100vh; }
+  .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 40; }
+  .sidebar-overlay.open { display: block; }
   .sidebar { width: 234px; flex-shrink: 0; border-right: 1px solid var(--brd);
-    padding: 18px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+    padding: 18px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    background: var(--bg); z-index: 41; }
   .brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 16px; }
   .logo { width: 40px; height: 40px; border-radius: 11px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     display: grid; place-items: center; font-size: 20px; }
   .brand h1 { margin: 0; font-size: 17px; }
   .brand .sub { color: var(--muted); font-size: 11px; }
-  nav.side { display: flex; flex-direction: column; gap: 3px; }
-  .navitem { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px;
-    color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+  nav.side { display: flex; flex-direction: column; gap: 2px; }
+  .nav-group { margin-bottom: 8px; }
+  .nav-group-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); padding: 6px 12px 4px; font-weight: 700; opacity: .85; }
+  .navitem { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px;
+    color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+    background: transparent; width: 100%; text-align: left; font-family: inherit; line-height: 1.3; }
   .navitem:hover { background: var(--card); color: var(--txt); }
   .navitem.active { color: #fff; background: linear-gradient(135deg, rgba(255,140,66,.22), rgba(232,93,117,.22));
     border-color: var(--brd); }
-  .navitem .ic { width: 20px; text-align: center; }
+  .navitem .ic { width: 20px; text-align: center; flex-shrink: 0; }
   .side-foot { margin-top: 16px; padding: 10px 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
-  .main { flex: 1; padding: 22px 26px 60px; max-width: 1180px; }
-  .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
-  .topbar h2 { margin: 0; font-size: 22px; }
+  .main { flex: 1; padding: 22px 26px 60px; max-width: 1180px; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
+    padding-top: env(safe-area-inset-top); position: sticky; top: 0; z-index: 10;
+    background: linear-gradient(var(--bg) 70%, transparent); }
+  .topbar h2 { margin: 0; font-size: 20px; line-height: 1.25; }
   .topbar .spacer { margin-left: auto; }
+  .btn-menu { display: none; padding: 8px 12px; }
   .pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
     background: var(--card); border: 1px solid var(--brd); color: var(--muted); }
   button { border: 1px solid var(--brd); background: var(--card); color: var(--txt);
     padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  button:active:not(:disabled) { transform: scale(.97); }
   button.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border: 0; color: #fff; }
   button.danger { color: #ffb4bc; border-color: rgba(255,93,108,.4); }
   button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, .navitem:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-refresh.spin { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .section { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
     color: var(--muted); margin: 20px 2px 9px; font-weight: 700; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 11px; }
-  .card { background: var(--card); border: 1px solid var(--brd); border-radius: var(--radius); padding: 14px; }
+  .card { background: var(--card); border: 1px solid var(--brd); border-radius: var(--radius); padding: 14px;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .card.skeleton { min-height: 72px; animation: skel-pulse 1.4s ease-in-out infinite; }
+  @keyframes skel-pulse { 0%,100%{opacity:.45} 50%{opacity:.9} }
   .card.wide { grid-column: 1 / -1; }
   .k { font-size: 11.5px; color: var(--muted); }
   .v { font-size: 17px; font-weight: 650; margin-top: 5px; word-break: break-word; }
@@ -77,11 +97,38 @@
   .err { display: none; background: rgba(255,93,108,.12); border: 1px solid rgba(255,93,108,.35);
     color: #ffd2d6; padding: 12px; border-radius: 12px; margin-bottom: 14px; font-size: 13px; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
-  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #1a2233;
-    border: 1px solid var(--brd); padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; z-index: 99; }
+  .toast { position: fixed; bottom: calc(18px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    background: #1a2233; border: 1px solid var(--brd); padding: 10px 18px; border-radius: 10px;
+    font-size: 13px; display: none; z-index: 99; max-width: 92vw; text-align: center; }
+  .toast.err { border-color: rgba(255,93,108,.5); background: rgba(40,12,18,.95); color: #ffd2d6; }
+  .toast .toast-link { color: var(--accent); cursor: pointer; text-decoration: underline; margin-left: 8px; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -2px; }
+  .err-inline { background: rgba(255,93,108,.1); border: 1px solid rgba(255,93,108,.3);
+    color: #ffd2d6; padding: 10px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 13px; }
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 60;
+    align-items: center; justify-content: center; padding: 16px; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--brd); border-radius: 16px; padding: 20px;
+    max-width: 420px; width: 100%; }
+  .modal h3 { margin: 0 0 8px; font-size: 17px; }
+  .modal p { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+  .drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 45; }
+  .drawer-backdrop.open { display: block; }
+  .drawer-right { position: fixed; top: 0; right: 0; width: min(480px, 100vw); height: 100vh;
+    background: var(--bg2); border-left: 1px solid var(--brd); z-index: 46; padding: 20px 18px;
+    overflow-y: auto; transform: translateX(100%); transition: transform .25s ease;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .drawer-right.open { transform: translateX(0); }
+  .drawer-right .drawer-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .drawer-right .drawer-head h3 { margin: 0; flex: 1; font-size: 16px; }
+  tr.job-highlight td { background: rgba(255,140,66,.12); }
   /* Workbench */
   .wb-out { background: rgba(0,0,0,.25); border: 1px solid var(--brd); border-radius: 12px;
-    padding: 14px; min-height: 120px; white-space: pre-wrap; line-height: 1.55; font-size: 14px; }
+    padding: 14px; min-height: 120px; line-height: 1.55; font-size: 14px; word-break: break-word; }
+  .wb-out pre { background: rgba(0,0,0,.35); padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; }
+  .wb-out code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px;
+    background: rgba(0,0,0,.3); padding: 2px 5px; border-radius: 4px; }
   .trace { margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
   .trace .tool { background: rgba(255,140,66,.08); border: 1px solid rgba(255,140,66,.25);
     border-radius: 9px; padding: 8px 11px; font-size: 12.5px; }
@@ -107,40 +154,57 @@
   .empty { color: var(--muted); font-size: 13px; padding: 16px 4px; }
   a.link { color: var(--accent); text-decoration: none; }
   @media (max-width: 760px) {
-    .app { flex-direction: column; }
-    .sidebar { width: 100%; height: auto; position: static; border-right: 0; border-bottom: 1px solid var(--brd); }
-    nav.side { flex-direction: row; flex-wrap: wrap; }
-    .navitem { font-size: 12.5px; padding: 8px 10px; }
-    .side-foot { display: none; }
-    .main { padding: 16px 14px 50px; }
+    .btn-menu { display: inline-block; }
+    .sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); transition: transform .25s ease;
+      width: min(280px, 88vw); height: 100vh; border-right: 1px solid var(--brd); }
+    .sidebar.open { transform: translateX(0); }
+    .main { padding: 12px 14px calc(50px + env(safe-area-inset-bottom)); width: 100%; }
+    .topbar h2 { font-size: 17px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
   }
 </style>
 </head>
 <body>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
 <div class="app">
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="logo">🧭</div>
       <div><h1>Platform</h1><div class="sub" id="brandSub">JARVIS console</div></div>
     </div>
-    <nav class="side" id="nav">
-      <div class="navitem active" data-tab="overview"><span class="ic">📊</span> Огляд</div>
-      <div class="navitem" data-tab="workbench"><span class="ic">⚡</span> Workbench</div>
-      <div class="navitem" data-tab="memory"><span class="ic">🧠</span> Памʼять</div>
-      <div class="navitem" data-tab="projects"><span class="ic">📁</span> Проєкти</div>
-      <div class="navitem" data-tab="jobs"><span class="ic">⏳</span> Jobs</div>
-      <div class="navitem" data-tab="planning"><span class="ic">📋</span> Planning</div>
-      <div class="navitem" data-tab="research"><span class="ic">🔬</span> Research</div>
-      <div class="navitem" data-tab="mcp"><span class="ic">🔌</span> MCP</div>
-      <div class="navitem" data-tab="connectors"><span class="ic">🔗</span> Connectors</div>
-      <div class="navitem" data-tab="skills"><span class="ic">🎯</span> Skills</div>
-      <div class="navitem" data-tab="subagents"><span class="ic">🤖</span> Subagents</div>
-      <div class="navitem" data-tab="teams"><span class="ic">👥</span> Teams</div>
-      <div class="navitem" data-tab="hooks"><span class="ic">🪝</span> Hooks</div>
-      <div class="navitem" data-tab="logs"><span class="ic">📜</span> Логи</div>
-      <div class="navitem" data-tab="settings"><span class="ic">⚙️</span> Налаштування</div>
-      <div class="navitem" data-tab="users"><span class="ic">👥</span> Доступ</div>
-      <div class="navitem" data-tab="models"><span class="ic">🤖</span> Моделі</div>
+    <nav class="side" id="nav" role="tablist">
+      <div class="nav-group">
+        <div class="nav-group-label">Робочий стіл / Workspace</div>
+        <button type="button" class="navitem active" data-tab="overview" role="tab" aria-selected="true"><span class="ic">📊</span> Огляд / Overview</button>
+        <button type="button" class="navitem" data-tab="workbench" role="tab" aria-selected="false"><span class="ic">⚡</span> Workbench</button>
+        <button type="button" class="navitem" data-tab="memory" role="tab" aria-selected="false"><span class="ic">🧠</span> Памʼять / Memory</button>
+        <button type="button" class="navitem" data-tab="projects" role="tab" aria-selected="false"><span class="ic">📁</span> Проєкти / Projects</button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Автоматизація / Automation</div>
+        <button type="button" class="navitem" data-tab="jobs" role="tab" aria-selected="false"><span class="ic">⏳</span> Jobs / Завдання</button>
+        <button type="button" class="navitem" data-tab="planning" role="tab" aria-selected="false"><span class="ic">📋</span> Planning / Плани</button>
+        <button type="button" class="navitem" data-tab="research" role="tab" aria-selected="false"><span class="ic">🔬</span> Research</button>
+        <button type="button" class="navitem" data-tab="subagents" role="tab" aria-selected="false"><span class="ic">🤖</span> Subagents</button>
+        <button type="button" class="navitem" data-tab="teams" role="tab" aria-selected="false"><span class="ic">👥</span> Teams</button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Інтеграції / Integrations</div>
+        <button type="button" class="navitem" data-tab="mcp" role="tab" aria-selected="false"><span class="ic">🔌</span> MCP</button>
+        <button type="button" class="navitem" data-tab="connectors" role="tab" aria-selected="false"><span class="ic">🔗</span> Connectors</button>
+        <button type="button" class="navitem" data-tab="skills" role="tab" aria-selected="false"><span class="ic">🎯</span> Skills</button>
+        <button type="button" class="navitem" data-tab="hooks" role="tab" aria-selected="false"><span class="ic">🪝</span> Hooks</button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Система / System</div>
+        <button type="button" class="navitem" data-tab="logs" role="tab" aria-selected="false"><span class="ic">📜</span> Логи / Logs</button>
+        <button type="button" class="navitem" data-tab="settings" role="tab" aria-selected="false"><span class="ic">⚙️</span> Налаштування / Settings</button>
+        <button type="button" class="navitem" data-tab="users" role="tab" aria-selected="false"><span class="ic">🔐</span> Доступ / Access</button>
+        <button type="button" class="navitem" data-tab="models" role="tab" aria-selected="false"><span class="ic">📦</span> Моделі / Models</button>
+        <button type="button" class="navitem" data-tab="improve" role="tab" aria-selected="false"><span class="ic">✨</span> Покращення / Improve</button>
+      </div>
     </nav>
     <div class="side-foot">
       Self-hosted · без зовнішніх API.<br />
@@ -150,31 +214,45 @@
 
   <main class="main">
     <div class="topbar">
-      <h2 id="title">Огляд</h2>
+      <button type="button" class="btn-menu" id="btnMenu" aria-label="Меню / Menu">☰</button>
+      <h2 id="title">Огляд / Overview</h2>
       <div class="spacer"></div>
       <span class="pill" id="authPill">…</span>
-      <button type="button" id="btnRefresh">⟳ Оновити</button>
+      <button type="button" class="btn-refresh" id="btnRefresh">⟳ Оновити / Refresh</button>
     </div>
     <div class="err" id="err"></div>
 
-    <section class="panel active" id="panel-overview"></section>
-    <section class="panel" id="panel-workbench"></section>
-    <section class="panel" id="panel-memory"></section>
-    <section class="panel" id="panel-projects"></section>
-    <section class="panel" id="panel-jobs"></section>
-    <section class="panel" id="panel-planning"></section>
-    <section class="panel" id="panel-research"></section>
-    <section class="panel" id="panel-mcp"></section>
-    <section class="panel" id="panel-connectors"></section>
-    <section class="panel" id="panel-skills"></section>
-    <section class="panel" id="panel-subagents"></section>
-    <section class="panel" id="panel-teams"></section>
-    <section class="panel" id="panel-hooks"></section>
-    <section class="panel" id="panel-logs"></section>
-    <section class="panel" id="panel-settings"></section>
-    <section class="panel" id="panel-users"></section>
-    <section class="panel" id="panel-models"></section>
+    <section class="panel active" id="panel-overview" role="tabpanel"></section>
+    <section class="panel" id="panel-workbench" role="tabpanel"></section>
+    <section class="panel" id="panel-memory" role="tabpanel"></section>
+    <section class="panel" id="panel-projects" role="tabpanel"></section>
+    <section class="panel" id="panel-jobs" role="tabpanel"></section>
+    <section class="panel" id="panel-planning" role="tabpanel"></section>
+    <section class="panel" id="panel-research" role="tabpanel"></section>
+    <section class="panel" id="panel-mcp" role="tabpanel"></section>
+    <section class="panel" id="panel-connectors" role="tabpanel"></section>
+    <section class="panel" id="panel-skills" role="tabpanel"></section>
+    <section class="panel" id="panel-subagents" role="tabpanel"></section>
+    <section class="panel" id="panel-teams" role="tabpanel"></section>
+    <section class="panel" id="panel-hooks" role="tabpanel"></section>
+    <section class="panel" id="panel-logs" role="tabpanel"></section>
+    <section class="panel" id="panel-settings" role="tabpanel"></section>
+    <section class="panel" id="panel-users" role="tabpanel"></section>
+    <section class="panel" id="panel-models" role="tabpanel"></section>
+    <section class="panel" id="panel-improve" role="tabpanel"></section>
   </main>
+</div>
+<div class="drawer-backdrop" id="projDrawerBg"></div>
+<aside class="drawer-right" id="projDrawer" aria-hidden="true"></aside>
+<div class="modal-bg" id="modalBg">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="modalTitle">Підтвердження / Confirm</h3>
+    <p id="modalText"></p>
+    <div class="modal-btns">
+      <button type="button" id="modalCancel">Скасувати / Cancel</button>
+      <button type="button" class="primary" id="modalOk">Підтвердити / Confirm</button>
+    </div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -183,11 +261,22 @@ const tg = window.Telegram && window.Telegram.WebApp;
 if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
 const initData = (tg && tg.initData) || "";
 
-const TITLES = { overview:"Огляд", workbench:"Workbench", memory:"Памʼять",
-  projects:"Проєкти", jobs:"Background Jobs", planning:"Planning", research:"Deep Research",
-  mcp:"MCP", connectors:"Connectors", skills:"Skills", subagents:"Subagents", teams:"Agent Teams",
-  hooks:"Hooks",
-  logs:"Логи", settings:"Налаштування", users:"Доступ", models:"Моделі" };
+const lbl = (uk, en) => uk + " / " + en;
+const LOADING = lbl("Завантаження…", "Loading…");
+const TITLES = {
+  overview: lbl("Огляд", "Overview"), workbench: "Workbench", memory: lbl("Памʼять", "Memory"),
+  projects: lbl("Проєкти", "Projects"), jobs: lbl("Завдання", "Jobs"), planning: lbl("Планування", "Planning"),
+  research: lbl("Дослідження", "Research"), mcp: "MCP", connectors: "Connectors", skills: "Skills",
+  subagents: "Subagents", teams: lbl("Команди", "Teams"), hooks: "Hooks",
+  logs: lbl("Логи", "Logs"), settings: lbl("Налаштування", "Settings"), users: lbl("Доступ", "Access"),
+  models: lbl("Моделі", "Models"), improve: lbl("Покращення", "Improve"),
+};
+
+let pendingAction = null;
+let jobsTimer = null;
+let planPoll = null;
+let highlightJobId = null;
+let wbAbort = null;
 
 function headers(extra) {
   const h = Object.assign({ "Content-Type": "application/json" }, extra || {});
@@ -207,42 +296,128 @@ async function api(path, opts) {
 }
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
   ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
-function toast(msg) {
+function toast(msg, type, linkFn, linkText) {
   const t = document.getElementById("toast");
-  t.textContent = msg; t.style.display = "block";
-  clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = "none"), 2600);
+  t.className = "toast" + (type === "err" ? " err" : "");
+  t.textContent = "";
+  t.appendChild(document.createTextNode(msg));
+  if (linkFn) {
+    const a = document.createElement("span");
+    a.className = "toast-link";
+    a.textContent = linkText || lbl("відкрити", "open");
+    a.onclick = () => { t.style.display = "none"; linkFn(); };
+    t.appendChild(a);
+  }
+  t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = "none"), linkFn ? 5000 : 2800);
 }
 function showErr(msg) {
   const e = document.getElementById("err");
   if (!msg) { e.style.display = "none"; return; }
   e.textContent = "⚠ " + msg; e.style.display = "block";
+  toast(msg, "err");
 }
-const dot = (ok) => `<span class="dot ${ok ? "ok" : "bad"}"></span>`;
-const badge = (on) => `<span class="badge ${on ? "on" : "off"}">${on ? "увімкнено" : "вимкнено"}</span>`;
+function confirmModal(title, text, fn) {
+  document.getElementById("modalTitle").textContent = title;
+  document.getElementById("modalText").textContent = text;
+  pendingAction = fn;
+  document.getElementById("modalBg").classList.add("open");
+}
+document.getElementById("modalCancel").onclick = () => {
+  pendingAction = null; document.getElementById("modalBg").classList.remove("open");
+};
+document.getElementById("modalOk").onclick = async () => {
+  const fn = pendingAction; pendingAction = null;
+  document.getElementById("modalBg").classList.remove("open");
+  if (fn) await fn();
+};
+function tableWrap(inner) { return `<div class="table-wrap">${inner}</div>`; }
+function skeletonGrid(n) {
+  let h = '<div class="grid">';
+  for (let i = 0; i < (n || 4); i++) h += '<div class="card skeleton"></div>';
+  return h + "</div>";
+}
+function setAuthPill(v) {
+  const el = document.getElementById("authPill");
+  const m = { telegram: "Telegram ✓", basic: lbl("Basic Auth", "Basic Auth"), cookie: "Cookie" };
+  el.textContent = m[v] || (v || "?");
+}
+function mdSimple(text) {
+  let s = esc(text || "");
+  s = s.replace(/```([\s\S]*?)```/g, (_, c) => "<pre>" + c + "</pre>");
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\n/g, "<br>");
+  return s;
+}
+function closeSidebar() {
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("sidebarOverlay").classList.remove("open");
+}
+function openSidebar() {
+  document.getElementById("sidebar").classList.add("open");
+  document.getElementById("sidebarOverlay").classList.add("open");
+}
+const dot = (ok) => `<span class="dot ${ok ? "ok" : "bad"}"></span>` + (ok ? lbl("ок", "ok") : lbl("fail", "fail"));
+const badge = (on) => `<span class="badge ${on ? "on" : "off"}">${on ? lbl("увімкнено", "on") : lbl("вимкнено", "off")}</span>`;
 const card = (k, v, cls) => `<div class="card"><div class="k">${esc(k)}</div><div class="v ${cls||""}">${v}</div></div>`;
 const fmtBytes = (n) => !n ? "0" : n > 1e9 ? (n/1e9).toFixed(1)+" GB" : n > 1e6 ? (n/1e6).toFixed(1)+" MB" : (n/1e3).toFixed(0)+" KB";
 
 let current = "overview";
-function switchTab(tab) {
+function switchTab(tab, pushHash) {
+  if (pushHash !== false && TITLES[tab]) history.replaceState(null, "", "#" + tab);
+  if (tab !== "jobs") { clearInterval(jobsTimer); jobsTimer = null; }
+  if (tab !== "planning") { clearInterval(planPoll); planPoll = null; }
   current = tab;
-  document.querySelectorAll(".navitem").forEach((n) => n.classList.toggle("active", n.dataset.tab === tab));
+  document.querySelectorAll(".navitem").forEach((n) => {
+    const on = n.dataset.tab === tab;
+    n.classList.toggle("active", on);
+    n.setAttribute("aria-selected", on ? "true" : "false");
+  });
   document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === "panel-" + tab));
-  document.getElementById("title").textContent = TITLES[tab];
+  document.getElementById("title").textContent = TITLES[tab] || tab;
   showErr("");
+  closeSidebar();
   RENDER[tab] && RENDER[tab]();
 }
 document.getElementById("nav").addEventListener("click", (e) => {
-  const item = e.target.closest(".navitem"); if (item) switchTab(item.dataset.tab);
+  const item = e.target.closest(".navitem"); if (item && item.dataset.tab) switchTab(item.dataset.tab);
 });
-document.getElementById("btnRefresh").addEventListener("click", () => RENDER[current] && RENDER[current]());
+document.getElementById("btnMenu").addEventListener("click", openSidebar);
+document.getElementById("sidebarOverlay").addEventListener("click", closeSidebar);
+let refreshBusy = false;
+async function refreshCurrent() {
+  if (refreshBusy || !RENDER[current]) return;
+  refreshBusy = true;
+  const btn = document.getElementById("btnRefresh");
+  btn.disabled = true; btn.classList.add("spin");
+  try { await RENDER[current](); } finally {
+    refreshBusy = false; btn.disabled = false; btn.classList.remove("spin");
+  }
+}
+document.getElementById("btnRefresh").addEventListener("click", refreshCurrent);
+window.addEventListener("hashchange", () => {
+  const t = location.hash.slice(1);
+  if (TITLES[t]) switchTab(t, false);
+});
+document.getElementById("panel-users").addEventListener("click", usersClick);
+document.getElementById("projDrawerBg").addEventListener("click", closeProjDrawer);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { closeProjDrawer(); closeSidebar(); }
+});
+function closeProjDrawer() {
+  document.getElementById("projDrawer").classList.remove("open");
+  document.getElementById("projDrawerBg").classList.remove("open");
+  document.getElementById("projDrawer").setAttribute("aria-hidden", "true");
+}
 
 // ---------------- Overview ----------------
 async function renderOverview() {
   const el = document.getElementById("panel-overview");
-  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  el.innerHTML = skeletonGrid(6);
   let d;
   try { d = await api("/platform/api/overview"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
-  document.getElementById("authPill").textContent = "auth: " + (d.auth_via || "?");
+  setAuthPill(d.auth_via);
   const m = d.metrics || {}, t = m.turn_ms || {}, ts = m.tok_s || {};
   const models = d.models || {};
   let html = "";
@@ -270,11 +445,11 @@ async function renderOverview() {
   html += "</div>";
   const tools = m.tools || {};
   if (Object.keys(tools).length) {
-    html += '<div class="section">Латентність інструментів</div><div class="card wide"><table>';
-    html += "<tr><th>Tool</th><th>n</th><th>p50</th><th>p95</th></tr>";
+    html += '<div class="section">' + lbl("Латентність інструментів", "Tool latency") + '</div><div class="card wide">';
+    let tbl = "<table><tr><th>Tool</th><th>n</th><th>p50</th><th>p95</th></tr>";
     for (const [nm, s] of Object.entries(tools))
-      html += `<tr><td class="mono">${esc(nm)}</td><td>${s.count}</td><td>${s.p50_ms}ms</td><td>${s.p95_ms}ms</td></tr>`;
-    html += "</table></div>";
+      tbl += `<tr><td class="mono">${esc(nm)}</td><td>${s.count}</td><td>${s.p50_ms}ms</td><td>${s.p95_ms}ms</td></tr>`;
+    html += tableWrap(tbl + "</table>") + "</div>";
   }
   el.innerHTML = html;
 }
@@ -313,7 +488,7 @@ async function wbProcessStream(resp, ctx) {
       if (!line.startsWith("data:")) continue;
       let ev;
       try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
-      if (ev.delta) { acc += ev.delta; out.textContent = acc; }
+      if (ev.delta) { acc += ev.delta; out.dataset.raw = acc; out.innerHTML = mdSimple(acc); }
       else if (ev.status && !acc) st.textContent = ev.status;
       else if (ev.tool_start) {
         const nm = ev.tool_start.name;
@@ -326,17 +501,24 @@ async function wbProcessStream(resp, ctx) {
         const div = toolEls[ev.tool_done.name];
         if (div) div.innerHTML += `<pre>✓ ${esc(String(ev.tool_done.result || "").slice(0, 1200))}</pre>`;
       } else if (ev.confirm) {
-        wbShowConfirm(true, ev.confirm.desc || "Потрібне підтвердження", ev.confirm.code || null);
-        st.textContent = "⏸ очікує confirm";
+        wbShowConfirm(true, ev.confirm.desc || lbl("Потрібне підтвердження", "Confirmation required"), ev.confirm.code || null);
+        st.textContent = lbl("⏸ очікує підтвердження", "⏸ awaiting confirm");
         return { paused: true, acc };
       } else if (ev.done) {
-        if (ev.text) { acc = ev.text; out.textContent = acc; }
-        st.textContent = "готово · " + esc(ev.mode || "") + " · " + (ev.iters || 0) + " iters";
+        if (ev.text) { acc = ev.text; out.dataset.raw = acc; out.innerHTML = mdSimple(acc); }
+        st.textContent = lbl("готово", "done") + " · " + esc(ev.mode || "") + " · " + (ev.iters || 0) + " iters";
       }
     }
   }
   return { paused: false, acc };
 }
+const WB_MODE_TIPS = {
+  auto: lbl("Автовибір режиму", "Auto mode"),
+  chat: lbl("Лише чат", "Chat only"),
+  agent: lbl("Агент з інструментами", "Agent with tools"),
+  hybrid: lbl("Гібрид", "Hybrid"),
+  computer: lbl("Computer Use", "Computer Use"),
+};
 function renderWorkbench() {
   const el = document.getElementById("panel-workbench");
   if (el.dataset.init) return;
@@ -344,55 +526,81 @@ function renderWorkbench() {
   const modes = ["auto", "chat", "agent", "hybrid", "computer"];
   el.innerHTML =
     '<div class="seg" id="wbSeg">' + modes.map((m) =>
-      `<button data-m="${m}" class="${m === wbMode ? "active" : ""}">${m}</button>`).join("") + "</div>" +
-    '<textarea id="wbInput" placeholder="Запит до агента… (Ctrl+Enter — надіслати)"></textarea>' +
-    '<div class="toolbar" style="margin-top:10px"><button class="primary" id="wbSend">▶ Надіслати</button>' +
-    '<span class="pill" id="wbStatus">готово</span></div>' +
+      `<button type="button" data-m="${m}" class="${m === wbMode ? "active" : ""}" title="${esc(WB_MODE_TIPS[m])}">${m}</button>`).join("") + "</div>" +
+    '<textarea id="wbInput" placeholder="' + esc(lbl("Запит до агента… (Ctrl+Enter — надіслати)", "Agent prompt… (Ctrl+Enter to send)")) + '"></textarea>' +
+    '<div class="toolbar" style="margin-top:10px"><button type="button" class="primary" id="wbSend">▶ ' + lbl("Надіслати", "Send") + '</button>' +
+    '<button type="button" class="danger" id="wbStop" style="display:none">' + lbl("Зупинити", "Stop") + '</button>' +
+    '<span class="pill" id="wbStatus">' + lbl("готово", "ready") + '</span></div>' +
     '<div class="confirm-card" id="wbConfirm">' +
-    '<div class="k" style="color:var(--warn)">Потрібне підтвердження Computer Use</div>' +
+    '<div class="k" style="color:var(--warn)">' + lbl("Потрібне підтвердження Computer Use", "Computer Use confirmation required") + '</div>' +
     '<div id="wbConfirmDesc" class="mono" style="margin-top:8px;font-size:12px;white-space:pre-wrap"></div>' +
-    '<div class="confirm-actions"><button type="button" class="btn-ok" id="wbApprove">Approve</button>' +
-    '<button type="button" class="btn-no" id="wbDeny">Deny</button></div></div>' +
+    '<div class="confirm-actions"><button type="button" class="btn-ok" id="wbApprove">' + lbl("Підтвердити", "Approve") + '</button>' +
+    '<button type="button" class="btn-no" id="wbDeny">' + lbl("Відхилити", "Deny") + '</button></div></div>' +
     '<div class="trace" id="wbTrace"></div>' +
-    '<div class="section">Відповідь</div><div class="wb-out" id="wbOut"></div>';
+    '<div class="section">' + lbl("Відповідь", "Response") + '</div><div class="wb-out" id="wbOut"></div>';
   el.querySelector("#wbSeg").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;
     wbMode = b.dataset.m;
     el.querySelectorAll("#wbSeg button").forEach((x) => x.classList.toggle("active", x === b));
   });
   el.querySelector("#wbSend").addEventListener("click", wbSend);
+  el.querySelector("#wbStop").addEventListener("click", () => { if (wbAbort) wbAbort.abort(); });
   el.querySelector("#wbApprove").addEventListener("click", wbApprove);
   el.querySelector("#wbDeny").addEventListener("click", wbDeny);
   el.querySelector("#wbInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) wbSend();
   });
 }
+function wbStreamStart() {
+  const btn = document.getElementById("wbSend"), stop = document.getElementById("wbStop");
+  btn.disabled = true; stop.style.display = "";
+  if (wbAbort) wbAbort.abort();
+  wbAbort = new AbortController();
+  return wbAbort;
+}
+function wbStreamEnd() {
+  document.getElementById("wbSend").disabled = false;
+  const stop = document.getElementById("wbStop");
+  if (stop) stop.style.display = "none";
+  wbAbort = null;
+}
 async function wbSend() {
   const input = document.getElementById("wbInput");
   const text = input.value.trim(); if (!text) return;
   const out = document.getElementById("wbOut"), trace = document.getElementById("wbTrace");
-  const st = document.getElementById("wbStatus"), btn = document.getElementById("wbSend");
-  out.textContent = ""; trace.innerHTML = ""; wbShowConfirm(false); st.textContent = "стрім…"; btn.disabled = true;
+  const st = document.getElementById("wbStatus");
+  out.innerHTML = ""; trace.innerHTML = ""; wbShowConfirm(false);
+  st.textContent = lbl("стрім…", "streaming…");
+  const ac = wbStreamStart();
   try {
     const resp = await fetch("/platform/api/workbench/ask", { method: "POST",
-      headers: headers(), credentials: "same-origin", body: JSON.stringify({ text, mode: wbMode }) });
+      headers: headers(), credentials: "same-origin", signal: ac.signal,
+      body: JSON.stringify({ text, mode: wbMode }) });
     if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
     await wbProcessStream(resp, { out, trace, st, acc: "" });
-  } catch (e) { showErr(e.message); st.textContent = "помилка"; }
-  btn.disabled = false;
+  } catch (e) {
+    if (e.name === "AbortError") { st.textContent = lbl("зупинено", "stopped"); return; }
+    showErr(e.message); st.textContent = lbl("помилка", "error");
+  }
+  wbStreamEnd();
 }
 async function wbResume(result, origin) {
   const out = document.getElementById("wbOut"), trace = document.getElementById("wbTrace");
-  const st = document.getElementById("wbStatus"), btn = document.getElementById("wbSend");
-  st.textContent = "resume…"; btn.disabled = true;
+  const st = document.getElementById("wbStatus");
+  st.textContent = lbl("продовження…", "resuming…");
+  const acc = document.getElementById("wbOut").dataset.raw || "";
+  const ac = wbStreamStart();
   try {
     const resp = await fetch("/platform/api/workbench/resume", { method: "POST",
-      headers: headers(), credentials: "same-origin",
+      headers: headers(), credentials: "same-origin", signal: ac.signal,
       body: JSON.stringify({ result, origin: origin || "", mode: wbMode }) });
     if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
-    await wbProcessStream(resp, { out, trace, st, acc: out.textContent || "" });
-  } catch (e) { showErr(e.message); st.textContent = "помилка"; }
-  btn.disabled = false;
+    await wbProcessStream(resp, { out, trace, st, acc });
+  } catch (e) {
+    if (e.name === "AbortError") { st.textContent = lbl("зупинено", "stopped"); return; }
+    showErr(e.message); st.textContent = lbl("помилка", "error");
+  }
+  wbStreamEnd();
 }
 async function wbApprove() {
   if (!wbPendingCode) return;
@@ -413,7 +621,7 @@ async function wbDeny() {
   try {
     await api("/platform/api/workbench/cancel", { method: "POST", body: {} });
     wbShowConfirm(false);
-    document.getElementById("wbStatus").textContent = "скасовано";
+    document.getElementById("wbStatus").textContent = lbl("скасовано", "cancelled");
   } catch (e) { showErr(e.message); }
 }
 
@@ -423,11 +631,13 @@ function renderMemory() {
   if (el.dataset.init) return;
   el.dataset.init = "1";
   el.innerHTML =
-    '<div class="toolbar"><input id="memUser" type="number" placeholder="user_id (порожньо = я)" style="width:200px"/>' +
-    '<input id="memProject" type="number" placeholder="project_id (опц.)" style="width:160px"/>' +
-    '<input id="memQuery" placeholder="RAG-запит…" style="flex:1;min-width:200px"/>' +
-    '<button class="primary" id="memSearch">🔍 Пошук</button>' +
-    '<button id="memNotes">Нотатки</button><button id="memProfile">Профіль</button><button id="memHistory">Історія</button></div>' +
+    '<div class="toolbar"><input id="memUser" type="number" placeholder="user_id (' + lbl("порожньо = я", "empty = me") + ')" style="width:200px"/>' +
+    '<input id="memProject" type="number" placeholder="project_id (' + lbl("опц.", "opt.") + ')" style="width:160px"/>' +
+    '<input id="memQuery" placeholder="RAG ' + lbl("запит…", "query…") + '" style="flex:1;min-width:200px"/>' +
+    '<button type="button" class="primary" id="memSearch">🔍 ' + lbl("Пошук", "Search") + '</button>' +
+    '<button type="button" id="memNotes">' + lbl("Нотатки", "Notes") + '</button>' +
+    '<button type="button" id="memProfile">' + lbl("Профіль", "Profile") + '</button>' +
+    '<button type="button" id="memHistory">' + lbl("Історія", "History") + '</button></div>' +
     '<div id="memOut"></div>';
   el.querySelector("#memSearch").addEventListener("click", memSearch);
   el.querySelector("#memNotes").addEventListener("click", memNotes);
@@ -439,34 +649,35 @@ function memUid() { const v = document.getElementById("memUser").value.trim(); r
 function memPid() { const v = document.getElementById("memProject").value.trim(); return v ? parseInt(v, 10) : null; }
 async function memSearch() {
   const q = document.getElementById("memQuery").value.trim(); if (!q) return;
-  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">Пошук…</div>';
+  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">' + LOADING + '</div>';
   const body = { query: q, top_k: 8, user_id: memUid() };
   const pid = memPid(); if (pid) body.project_id = pid;
   try {
     const d = await api("/platform/api/memory/search", { method: "POST", body });
     const scope = d.project_id ? ("project " + d.project_id) : "загальний RAG";
     if (!d.results.length) { out.innerHTML = '<div class="empty">Нічого (' + scope + ', user ' + d.user_id + ').</div>'; return; }
-    let h = '<div class="section">Top-' + d.results.length + ' · ' + scope + ' · user ' + d.user_id + '</div><div class="card wide"><table><tr><th>Score</th><th>Контент</th></tr>';
+    let tbl = "<table><tr><th>Score</th><th>" + lbl("Контент", "Content") + "</th></tr>";
     for (const r of d.results)
-      h += `<tr><td>${(r.score || 0).toFixed(3)}</td><td>${esc(r.content)}</td></tr>`;
-    out.innerHTML = h + "</table></div>";
+      tbl += `<tr><td>${(r.score || 0).toFixed(3)}</td><td>${esc(r.content)}</td></tr>`;
+    out.innerHTML = '<div class="section">Top-' + d.results.length + ' · ' + scope + ' · user ' + d.user_id +
+      '</div><div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
   } catch (e) { showErr(e.message); out.innerHTML = ""; }
 }
 async function memNotes() {
-  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">…</div>';
+  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">' + LOADING + '</div>';
   try {
     const d = await api("/platform/api/memory/notes?limit=25" + (memUid() ? "&user_id=" + memUid() : ""));
-    if (!d.notes.length) { out.innerHTML = '<div class="empty">Нотаток немає (user ' + d.user_id + ').</div>'; return; }
-    let h = '<div class="section">Нотатки user ' + d.user_id + '</div><div class="card wide"><table><tr><th>Час</th><th>Текст</th></tr>';
+    if (!d.notes.length) { out.innerHTML = '<div class="empty">' + lbl("Нотаток немає", "No notes") + ' (user ' + d.user_id + ').</div>'; return; }
+    let tbl = "<table><tr><th>" + lbl("Час", "Time") + "</th><th>" + lbl("Текст", "Text") + "</th></tr>";
     for (const n of d.notes) {
       const ts = n.ts ? new Date(n.ts * 1000).toLocaleString("uk-UA") : "—";
-      h += `<tr><td class="mono">${esc(ts)}</td><td>${esc(n.text || "")}</td></tr>`;
+      tbl += `<tr><td class="mono">${esc(ts)}</td><td>${esc(n.text || "")}</td></tr>`;
     }
-    out.innerHTML = h + "</table></div>";
+    out.innerHTML = '<div class="section">' + lbl("Нотатки", "Notes") + ' user ' + d.user_id + '</div><div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
   } catch (e) { showErr(e.message); out.innerHTML = ""; }
 }
 async function memProfile() {
-  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">…</div>';
+  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">' + LOADING + '</div>';
   try {
     const d = await api("/platform/api/memory/profile" + (memUid() ? "?user_id=" + memUid() : ""));
     if (!d.exists) { out.innerHTML = '<div class="empty">Профіль для user ' + d.user_id + ' відсутній.</div>'; return; }
@@ -477,14 +688,14 @@ async function memProfile() {
   } catch (e) { showErr(e.message); out.innerHTML = ""; }
 }
 async function memHistory() {
-  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">…</div>';
+  const out = document.getElementById("memOut"); out.innerHTML = '<div class="empty">' + LOADING + '</div>';
   try {
     const d = await api("/platform/api/memory/history?limit=20" + (memUid() ? "&user_id=" + memUid() : ""));
-    if (!d.messages.length) { out.innerHTML = '<div class="empty">Порожньо (user ' + d.user_id + ').</div>'; return; }
-    let h = '<div class="section">Останні ' + d.messages.length + ' (user ' + d.user_id + ')</div><div class="card wide"><table><tr><th>Роль</th><th>Контент</th></tr>';
+    if (!d.messages.length) { out.innerHTML = '<div class="empty">' + lbl("Порожньо", "Empty") + ' (user ' + d.user_id + ').</div>'; return; }
+    let tbl = "<table><tr><th>" + lbl("Роль", "Role") + "</th><th>" + lbl("Контент", "Content") + "</th></tr>";
     for (const r of d.messages)
-      h += `<tr><td>${esc(r.role)}</td><td>${esc(r.content)}</td></tr>`;
-    out.innerHTML = h + "</table></div>";
+      tbl += `<tr><td>${esc(r.role)}</td><td>${esc(r.content)}</td></tr>`;
+    out.innerHTML = '<div class="section">' + lbl("Останні", "Last") + ' ' + d.messages.length + ' (user ' + d.user_id + ')</div><div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
   } catch (e) { showErr(e.message); out.innerHTML = ""; }
 }
 
@@ -492,14 +703,14 @@ async function memHistory() {
 let logUsers = [];
 async function renderLogs() {
   const el = document.getElementById("panel-logs");
-  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
   try { logUsers = (await api("/platform/api/logs/users")).users; } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
   const opts = logUsers.map((u) => `<option value="${u.user_id}">user ${u.user_id} · ${u.turns} turns · ${fmtBytes(u.bytes)}</option>`).join("");
   el.innerHTML =
-    '<div class="toolbar"><select id="logUser">' + (opts || '<option value="0">— немає логів —</option>') + "</select>" +
-    '<select id="logMode"><option value="">всі режими</option><option>chat</option><option>agent</option><option>hybrid</option><option>computer</option></select>' +
+    '<div class="toolbar"><select id="logUser">' + (opts || '<option value="0">— ' + lbl("немає логів", "no logs") + ' —</option>') + "</select>" +
+    '<select id="logMode"><option value="">' + lbl("всі режими", "all modes") + '</option><option>chat</option><option>agent</option><option>hybrid</option><option>computer</option></select>' +
     '<select id="logLimit"><option>30</option><option>60</option><option>120</option></select>' +
-    '<button class="primary" id="logLoad">Показати</button></div><div id="logOut"></div>';
+    '<button type="button" class="primary" id="logLoad">' + lbl("Показати", "Show") + '</button></div><div id="logOut"></div>';
   el.querySelector("#logLoad").addEventListener("click", logLoad);
   if (logUsers.length) logLoad();
 }
@@ -507,31 +718,31 @@ async function logLoad() {
   const uid = document.getElementById("logUser").value;
   const mode = document.getElementById("logMode").value;
   const limit = document.getElementById("logLimit").value;
-  const out = document.getElementById("logOut"); out.innerHTML = '<div class="empty">…</div>';
+  const out = document.getElementById("logOut"); out.innerHTML = '<div class="empty">' + LOADING + '</div>';
   try {
     const d = await api(`/platform/api/logs?user_id=${uid}&limit=${limit}` + (mode ? "&mode=" + mode : ""));
-    if (!d.turns.length) { out.innerHTML = '<div class="empty">Немає записів.</div>'; return; }
-    let h = '<div class="card wide"><table><tr><th>Час</th><th>Режим</th><th>Запит → відповідь</th></tr>';
+    if (!d.turns.length) { out.innerHTML = '<div class="empty">' + lbl("Немає записів", "No entries") + '.</div>'; return; }
+    let tbl = "<table><tr><th>" + lbl("Час", "Time") + "</th><th>" + lbl("Режим", "Mode") + "</th><th>" + lbl("Запит → відповідь", "Prompt → reply") + "</th></tr>";
     for (const t of d.turns) {
       const ts = t.ts ? new Date(t.ts * 1000).toLocaleString("uk-UA") : "";
-      h += `<tr><td class="mono">${esc(ts)}</td><td>${esc(t.mode)}·${t.iters || 0}</td>` +
+      tbl += `<tr><td class="mono">${esc(ts)}</td><td>${esc(t.mode)}·${t.iters || 0}</td>` +
         `<td><b>${esc(String(t.user || "").slice(0, 200))}</b><br/><span class="lbl" style="color:var(--muted)">${esc(String(t.assistant || "").slice(0, 400))}</span></td></tr>`;
     }
-    out.innerHTML = h + "</table></div>";
+    out.innerHTML = '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
   } catch (e) { showErr(e.message); out.innerHTML = ""; }
 }
 
 // ---------------- Settings ----------------
 async function renderSettings() {
   const el = document.getElementById("panel-settings");
-  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
   let d;
   try { d = await api("/platform/api/settings"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
   const f = d.flags || {};
   const modes = ["chat", "agent", "hybrid", "computer"];
   let h = '<div class="section">Runtime-прапори</div><div class="card wide">';
-  h += flagRow("streaming", "Стрім відповіді", f.streaming);
-  h += flagRow("voice_reply", "Голосова відповідь (TTS)", f.voice_reply);
+  h += flagRow("streaming", lbl("Стрім відповіді", "Response streaming"), f.streaming);
+  h += flagRow("voice_reply", lbl("Голосова відповідь (TTS)", "Voice reply (TTS)"), f.voice_reply);
   h += "</div>";
   h += '<div class="section">Режим агента (' + esc(d.agent_mode || "?") + ')</div><div class="seg" id="modeSeg">';
   h += modes.map((m) => `<button data-mode="${m}" class="${m === d.agent_mode ? "active" : ""}">${m}</button>`).join("");
@@ -561,63 +772,78 @@ const flagRow = (name, label, on) =>
   `<label class="switch"><input type="checkbox" data-flag="${name}" ${on ? "checked" : ""}/><span class="sl"></span></label></div>`;
 async function setFlag(name, enabled) {
   try { await api("/platform/api/settings/flag", { method: "POST", body: { name, enabled } });
-    toast(name + " → " + (enabled ? "on" : "off")); } catch (e) { showErr(e.message); }
+    toast(name + " → " + (enabled ? lbl("увімкнено", "on") : lbl("вимкнено", "off"))); } catch (e) { showErr(e.message); }
 }
 async function setMode(mode) {
   try { await api("/platform/api/settings/mode", { method: "POST", body: { mode } });
-    toast("режим → " + mode); renderSettings(); } catch (e) { showErr(e.message); }
+    toast(lbl("режим", "mode") + " → " + mode); renderSettings(); } catch (e) { showErr(e.message); }
 }
 async function resetMode() {
-  try { await api("/platform/api/settings/mode", { method: "DELETE" }); toast("режим скинуто"); renderSettings(); }
+  try { await api("/platform/api/settings/mode", { method: "DELETE" }); toast(lbl("режим скинуто", "mode reset")); renderSettings(); }
   catch (e) { showErr(e.message); }
 }
 
 // ---------------- Users ----------------
 async function renderUsers() {
   const el = document.getElementById("panel-users");
-  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
   let d;
   try { d = await api("/platform/api/users"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
-  let h = '<div class="section">Очікують підтвердження (' + d.pending.length + ")</div>";
-  if (!d.pending.length) h += '<div class="empty">Немає заявок.</div>';
-  else { h += '<div class="card wide"><table>';
+  let h = '<div class="section">' + lbl("Очікують підтвердження", "Pending approval") + ' (' + d.pending.length + ")</div>";
+  if (!d.pending.length) h += '<div class="empty">' + lbl("Немає заявок", "No requests") + '.</div>';
+  else {
+    let tbl = "<table>";
     for (const u of d.pending)
-      h += `<tr><td>${esc(u.label)}<br/><span class="mono lbl">${u.user_id}</span></td>` +
-        `<td style="text-align:right"><button class="primary" data-approve="${u.user_id}">✓</button> ` +
-        `<button class="danger" data-deny="${u.user_id}">✕</button></td></tr>`;
-    h += "</table></div>"; }
-  h += '<div class="section">Погоджені (' + d.approved.length + ")</div>";
-  if (!d.approved.length) h += '<div class="empty">Порожньо.</div>';
-  else { h += '<div class="card wide"><table>';
+      tbl += `<tr><td>${esc(u.label)}<br/><span class="mono lbl">${u.user_id}</span></td>` +
+        `<td style="text-align:right"><button type="button" class="primary" data-approve="${u.user_id}" title="${lbl("Схвалити", "Approve")}">✓</button> ` +
+        `<button type="button" class="danger" data-deny="${u.user_id}" title="${lbl("Відхилити", "Deny")}">✕</button></td></tr>`;
+    h += '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+  }
+  h += '<div class="section">' + lbl("Погоджені", "Approved") + ' (' + d.approved.length + ")</div>";
+  if (!d.approved.length) h += '<div class="empty">' + lbl("Порожньо", "Empty") + '.</div>';
+  else {
+    let tbl2 = "<table>";
     for (const u of d.approved)
-      h += `<tr><td>${esc(u.label)}<br/><span class="mono lbl">${u.user_id}</span></td>` +
-        `<td style="text-align:right"><button data-rl="${u.user_id}">reset RL</button> ` +
-        `<button class="danger" data-revoke="${u.user_id}">revoke</button></td></tr>`;
-    h += "</table></div>"; }
+      tbl2 += `<tr><td>${esc(u.label)}<br/><span class="mono lbl">${u.user_id}</span></td>` +
+        `<td style="text-align:right"><button type="button" data-rl="${u.user_id}">` + lbl("скинути RL", "reset RL") + `</button> ` +
+        `<button type="button" class="danger" data-revoke="${u.user_id}">` + lbl("відкликати", "revoke") + `</button></td></tr>`;
+    h += '<div class="card wide">' + tableWrap(tbl2 + "</table>") + "</div>";
+  }
   h += '<div class="section">Whitelist (.env)</div><div class="grid">';
   h += card("ALLOWED (env)", esc((d.env_whitelist || []).join(", ") || "—"), "sm mono");
-  h += card("Адміни", esc((d.admin_ids || []).join(", ") || "—"), "sm mono");
+  h += card(lbl("Адміни", "Admins"), esc((d.admin_ids || []).join(", ") || "—"), "sm mono");
   h += "</div>";
   el.innerHTML = h;
-  el.addEventListener("click", usersClick);
 }
 async function usersClick(e) {
   const b = e.target.closest("button"); if (!b) return;
   const act = (k) => b.dataset[k];
+  const uid = (k) => +act(k);
   try {
-    if (act("approve")) { await api("/platform/api/users/approve", { method: "POST", body: { user_id: +act("approve") } }); toast("approved"); }
-    else if (act("deny")) { await api("/platform/api/users/deny", { method: "POST", body: { user_id: +act("deny") } }); toast("denied"); }
-    else if (act("revoke")) { await api("/platform/api/users/revoke", { method: "POST", body: { user_id: +act("revoke") } }); toast("revoked"); }
-    else if (act("rl")) { const r = await api("/platform/api/users/ratelimit/reset", { method: "POST", body: { user_id: +act("rl") } }); toast(r.message || "reset"); return; }
-    else return;
-    renderUsers();
+    if (act("approve")) {
+      await api("/platform/api/users/approve", { method: "POST", body: { user_id: uid("approve") } });
+      toast(lbl("схвалено", "approved")); renderUsers();
+    } else if (act("deny")) {
+      confirmModal(lbl("Відхилити заявку?", "Deny request?"), "user " + uid("deny"), async () => {
+        await api("/platform/api/users/deny", { method: "POST", body: { user_id: uid("deny") } });
+        toast(lbl("відхилено", "denied")); renderUsers();
+      });
+    } else if (act("revoke")) {
+      confirmModal(lbl("Відкликати доступ?", "Revoke access?"), "user " + uid("revoke"), async () => {
+        await api("/platform/api/users/revoke", { method: "POST", body: { user_id: uid("revoke") } });
+        toast(lbl("відкликано", "revoked")); renderUsers();
+      });
+    } else if (act("rl")) {
+      const r = await api("/platform/api/users/ratelimit/reset", { method: "POST", body: { user_id: uid("rl") } });
+      toast(r.message || lbl("скинуто", "reset"));
+    }
   } catch (err) { showErr(err.message); }
 }
 
 // ---------------- Models ----------------
 async function renderModels() {
   const el = document.getElementById("panel-models");
-  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
   let d, lora;
   try { d = await api("/platform/api/models"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
   try { lora = await api("/platform/api/models/lora"); } catch (e) { lora = { versions: [] }; }
@@ -630,21 +856,26 @@ async function renderModels() {
   h += "</div>";
   h += '<div class="section">Ollama models (' + (d.tags || []).length + " на " + esc(d.ollama_host) + ")</div>";
   if (!(d.tags || []).length) h += '<div class="empty">Список недоступний (Ollama down?).</div>';
-  else { h += '<div class="card wide"><table><tr><th>Назва</th><th>Параметри</th><th>Quant</th><th>Розмір</th></tr>';
+  else {
+    let tbl = "<table><tr><th>" + lbl("Назва", "Name") + "</th><th>" + lbl("Параметри", "Params") + "</th><th>Quant</th><th>" + lbl("Розмір", "Size") + "</th></tr>";
     for (const m of d.tags)
-      h += `<tr><td class="mono">${esc(m.name)}</td><td>${esc(m.param_size || "—")}</td><td>${esc(m.quant || "—")}</td><td>${fmtBytes(m.size)}</td></tr>`;
-    h += "</table></div>"; }
+      tbl += `<tr><td class="mono">${esc(m.name)}</td><td>${esc(m.param_size || "—")}</td><td>${esc(m.quant || "—")}</td><td>${fmtBytes(m.size)}</td></tr>`;
+    h += '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+  }
   const versions = (lora && lora.versions) || [];
   h += '<div class="section">LoRA registry (' + versions.length + ")</div>";
   if (!versions.length) h += '<div class="empty">Немає LoRA-версій.</div>';
-  else { h += '<div class="card wide"><table><tr><th>Версія</th><th></th></tr>';
+  else {
+    let tbl = "<table><tr><th>" + lbl("Версія", "Version") + "</th><th></th></tr>";
     for (const v of versions) {
       const id = typeof v === "string" ? v : (v.version || v.id || JSON.stringify(v));
       const active = typeof v === "object" && v.active;
-      h += `<tr><td class="mono">${esc(id)} ${active ? '<span class="badge on">active</span>' : ""}</td>` +
-        `<td style="text-align:right"><button data-promote="${esc(id)}">promote</button></td></tr>`;
+      tbl += `<tr><td class="mono">${esc(id)} ${active ? '<span class="badge on">' + lbl("активний", "active") + '</span>' : ""}</td>` +
+        `<td style="text-align:right"><button type="button" data-promote="${esc(id)}">` + lbl("просунути", "promote") + `</button></td></tr>`;
     }
-    h += "</table></div><div class='toolbar' style='margin-top:10px'><button id='loraRollback'>↺ rollback -1</button></div>"; }
+    h += '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+    h += "<div class='toolbar' style='margin-top:10px'><button type='button' id='loraRollback'>↺ " + lbl("відкат -1", "rollback -1") + "</button></div>";
+  }
   el.innerHTML = h;
   el.querySelectorAll("[data-promote]").forEach((b) =>
     b.addEventListener("click", () => loraPromote(b.dataset.promote)));
@@ -655,47 +886,51 @@ async function loraPromote(version) {
   try {
     const r = await api("/platform/api/models/lora/promote", { method: "POST", body: { version } });
     const o = r.ollama;
-    toast(o && o.ok ? "promoted " + version + " → ollama " + o.model : "promoted " + version);
+    toast(o && o.ok ? lbl("просунуто", "promoted") + " " + version + " → ollama " + o.model : lbl("просунуто", "promoted") + " " + version);
     renderModels();
   } catch (e) { showErr(e.message); }
 }
 async function loraRollback() {
-  try {
-    const r = await api("/platform/api/models/lora/rollback?n=1", { method: "POST" });
-    const o = r.ollama;
-    toast(o && o.ok ? "rolled back → ollama " + o.model : "rolled back");
-    renderModels();
-  } catch (e) { showErr(e.message); }
+  confirmModal(lbl("Відкатити LoRA на 1 версію?", "Rollback LoRA by 1?"), lbl("Цю дію не скасувати", "This cannot be undone"), async () => {
+    try {
+      const r = await api("/platform/api/models/lora/rollback?n=1", { method: "POST" });
+      const o = r.ollama;
+      toast(o && o.ok ? lbl("відкат", "rolled back") + " → ollama " + o.model : lbl("відкат виконано", "rolled back"));
+      renderModels();
+    } catch (e) { showErr(e.message); }
+  });
 }
 
 // ---------------- Projects ----------------
 let projActive = null;
 async function renderProjects() {
   const el = document.getElementById("panel-projects");
-  el.innerHTML = '<div class="empty">Завантаження…</div>';
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
   let d;
   try { d = await api("/platform/api/projects?include_archived=true"); } catch (e) { showErr(e.message); el.innerHTML = ""; return; }
   projActive = d.active_id;
-  let h = '<div class="toolbar"><input id="projName" placeholder="Новий проєкт…" style="flex:1;min-width:180px"/>' +
-    '<button class="primary" id="projCreate">+ Створити</button>';
-  if (projActive) h += '<button id="projClear">⨯ Вийти з проєкту</button>';
+  let h = '<div class="toolbar"><input id="projName" placeholder="' + lbl("Новий проєкт…", "New project…") + '" style="flex:1;min-width:180px"/>' +
+    '<button type="button" class="primary" id="projCreate">+ ' + lbl("Створити", "Create") + '</button>';
+  if (projActive) h += '<button type="button" id="projClear">⨯ ' + lbl("Вийти з проєкту", "Clear project") + '</button>';
   h += "</div>";
   const active = (d.projects || []).find((p) => p.id === projActive);
   h += '<div class="card wide" style="margin-bottom:14px"><div class="k">Активний проєкт (впливає на RAG + system prompt агента)</div>' +
     '<div class="v sm">' + (active ? "📁 " + esc(active.name) : "— загальний контекст —") + "</div></div>";
   if (!(d.projects || []).length) h += '<div class="empty">Ще немає проєктів.</div>';
-  else { h += '<div class="card wide"><table><tr><th></th><th>Назва</th><th>System prompt</th><th></th></tr>';
+  else {
+    let tbl = "<table><tr><th></th><th>" + lbl("Назва", "Name") + "</th><th>System prompt</th><th></th></tr>";
     for (const p of d.projects) {
       const isA = p.id === projActive;
-      h += `<tr><td>${isA ? '<span class="badge on">active</span>' : ""}${p.archived ? '<span class="badge off">archived</span>' : ""}</td>` +
+      tbl += `<tr><td>${isA ? '<span class="badge on">' + lbl("активний", "active") + '</span>' : ""}${p.archived ? '<span class="badge off">' + lbl("архів", "archived") + '</span>' : ""}</td>` +
         `<td><b>${esc(p.name)}</b> <span class="mono lbl">#${p.id}</span></td>` +
         `<td class="lbl" style="color:var(--muted)">${esc(String(p.system_prompt || "").slice(0, 80)) || "—"}</td>` +
         `<td style="text-align:right;white-space:nowrap">` +
-        (isA ? "" : `<button data-switch="${p.id}">activate</button> `) +
-        `<button data-open="${p.id}">edit</button> <button class="danger" data-del="${p.id}">✕</button></td></tr>`;
+        (isA ? "" : `<button type="button" data-switch="${p.id}">` + lbl("активувати", "activate") + `</button> `) +
+        `<button type="button" data-open="${p.id}">` + lbl("редагувати", "edit") + `</button> ` +
+        `<button type="button" class="danger" data-del="${p.id}">✕</button></td></tr>`;
     }
-    h += "</table></div>"; }
-  h += '<div id="projDetail" style="margin-top:16px"></div>';
+    h += '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+  }
   el.innerHTML = h;
   el.querySelector("#projCreate").addEventListener("click", projCreate);
   const clr = el.querySelector("#projClear");
@@ -706,63 +941,74 @@ async function renderProjects() {
 }
 async function projCreate() {
   const inp = document.getElementById("projName"); const name = inp.value.trim(); if (!name) return;
-  try { await api("/platform/api/projects", { method: "POST", body: { name } }); inp.value = ""; toast("створено"); renderProjects(); }
+  try { await api("/platform/api/projects", { method: "POST", body: { name } }); inp.value = ""; toast(lbl("створено", "created")); renderProjects(); }
   catch (e) { showErr(e.message); }
 }
 async function projSetActive(id) {
   try { await api("/platform/api/projects/active", { method: "POST", body: { project_id: id } });
-    toast(id ? "активний проєкт #" + id : "загальний контекст"); renderProjects(); } catch (e) { showErr(e.message); }
+    toast(id ? lbl("активний проєкт", "active project") + " #" + id : lbl("загальний контекст", "global context")); renderProjects(); } catch (e) { showErr(e.message); }
 }
 async function projDelete(id) {
-  try { await api("/platform/api/projects/" + id, { method: "DELETE" }); toast("видалено"); renderProjects(); } catch (e) { showErr(e.message); }
+  confirmModal(lbl("Видалити проєкт?", "Delete project?"), "#" + id, async () => {
+    try { await api("/platform/api/projects/" + id, { method: "DELETE" }); toast(lbl("видалено", "deleted")); closeProjDrawer(); renderProjects(); }
+    catch (e) { showErr(e.message); }
+  });
 }
 async function projOpen(id) {
-  const det = document.getElementById("projDetail"); det.innerHTML = '<div class="empty">…</div>';
+  const drawer = document.getElementById("projDrawer");
+  drawer.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  drawer.classList.add("open");
+  document.getElementById("projDrawerBg").classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
   let p;
-  try { p = await api("/platform/api/projects/" + id); } catch (e) { showErr(e.message); return; }
-  let h = '<div class="section">Проєкт «' + esc(p.name) + '» #' + p.id + '</div><div class="card wide">';
-  h += '<div class="k">Назва</div><input id="pdName" value="' + esc(p.name) + '" style="width:100%;margin:5px 0 10px"/>';
-  h += '<div class="k">System prompt (інструкції для агента в цьому проєкті)</div>';
+  try { p = await api("/platform/api/projects/" + id); } catch (e) { showErr(e.message); closeProjDrawer(); return; }
+  let h = '<div class="drawer-head"><h3>' + lbl("Проєкт", "Project") + ' «' + esc(p.name) + '» #' + p.id + '</h3>' +
+    '<button type="button" id="pdClose">✕</button></div><div class="card wide">';
+  h += '<div class="k">' + lbl("Назва", "Name") + '</div><input id="pdName" value="' + esc(p.name) + '" style="width:100%;margin:5px 0 10px"/>';
+  h += '<div class="k">System prompt</div>';
   h += '<textarea id="pdPrompt" style="min-height:90px">' + esc(p.system_prompt || "") + '</textarea>';
   h += '<label class="chk" style="display:flex;gap:8px;margin:10px 0;color:var(--muted);font-size:13px">' +
-    '<input type="checkbox" id="pdArch" ' + (p.archived ? "checked" : "") + '/> архівувати</label>';
-  h += '<div class="toolbar"><button class="primary" id="pdSave">💾 Зберегти</button></div></div>';
-  h += '<div class="section">Файли (' + (p.files || []).length + ")</div>";
-  h += '<div class="card wide"><div class="toolbar"><input id="pfName" placeholder="назва.md" style="width:160px"/>' +
-    '<input id="pfContent" placeholder="вміст…" style="flex:1;min-width:160px"/><button id="pfAdd">+ файл</button></div>';
-  if ((p.files || []).length) { h += "<table>";
+    '<input type="checkbox" id="pdArch" ' + (p.archived ? "checked" : "") + '/> ' + lbl("архівувати", "archive") + '</label>';
+  h += '<div class="toolbar"><button type="button" class="primary" id="pdSave">💾 ' + lbl("Зберегти", "Save") + '</button></div></div>';
+  h += '<div class="section">' + lbl("Файли", "Files") + ' (' + (p.files || []).length + ")</div>";
+  h += '<div class="card wide"><div class="toolbar"><input id="pfName" placeholder="name.md" style="width:160px"/>' +
+    '<input id="pfContent" placeholder="' + lbl("вміст…", "content…") + '" style="flex:1;min-width:160px"/>' +
+    '<button type="button" id="pfAdd">+ ' + lbl("файл", "file") + '</button></div>';
+  if ((p.files || []).length) {
+    let ftbl = "<table>";
     for (const f of p.files)
-      h += `<tr><td class="mono">${esc(f.name)}</td><td class="lbl">${fmtBytes(f.size)}</td>` +
-        `<td style="text-align:right"><button class="danger" data-fdel="${f.id}">✕</button></td></tr>`;
-    h += "</table>"; }
-  else h += '<div class="empty">Немає файлів.</div>';
+      ftbl += `<tr><td class="mono">${esc(f.name)}</td><td class="lbl">${fmtBytes(f.size)}</td>` +
+        `<td style="text-align:right"><button type="button" class="danger" data-fdel="${f.id}">✕</button></td></tr>`;
+    h += tableWrap(ftbl + "</table>");
+  } else h += '<div class="empty">' + lbl("Немає файлів", "No files") + '.</div>';
   h += "</div>";
-  det.innerHTML = h;
-  det.querySelector("#pdSave").addEventListener("click", () => projSave(id));
-  det.querySelector("#pfAdd").addEventListener("click", () => projAddFile(id));
-  det.querySelectorAll("[data-fdel]").forEach((b) => b.addEventListener("click", () => projDelFile(id, +b.dataset.fdel)));
+  drawer.innerHTML = h;
+  drawer.querySelector("#pdClose").addEventListener("click", closeProjDrawer);
+  drawer.querySelector("#pdSave").addEventListener("click", () => projSave(id));
+  drawer.querySelector("#pfAdd").addEventListener("click", () => projAddFile(id));
+  drawer.querySelectorAll("[data-fdel]").forEach((b) => b.addEventListener("click", () => projDelFile(id, +b.dataset.fdel)));
+  const nm = drawer.querySelector("#pdName"); if (nm) nm.focus();
 }
 async function projSave(id) {
   const body = { name: document.getElementById("pdName").value.trim(),
     system_prompt: document.getElementById("pdPrompt").value,
     archived: document.getElementById("pdArch").checked };
-  try { await api("/platform/api/projects/" + id, { method: "PATCH", body }); toast("збережено"); renderProjects(); }
+  try { await api("/platform/api/projects/" + id, { method: "PATCH", body }); toast(lbl("збережено", "saved")); renderProjects(); projOpen(id); }
   catch (e) { showErr(e.message); }
 }
 async function projAddFile(id) {
   const name = document.getElementById("pfName").value.trim();
   const content = document.getElementById("pfContent").value;
   if (!name || !content) return;
-  try { await api("/platform/api/projects/" + id + "/files", { method: "POST", body: { name, content } }); toast("файл додано"); projOpen(id); }
+  try { await api("/platform/api/projects/" + id + "/files", { method: "POST", body: { name, content } }); toast(lbl("файл додано", "file added")); projOpen(id); }
   catch (e) { showErr(e.message); }
 }
 async function projDelFile(id, fid) {
-  try { await api("/platform/api/projects/" + id + "/files/" + fid, { method: "DELETE" }); toast("видалено"); projOpen(id); }
+  try { await api("/platform/api/projects/" + id + "/files/" + fid, { method: "DELETE" }); toast(lbl("видалено", "deleted")); projOpen(id); }
   catch (e) { showErr(e.message); }
 }
 
 // ---------------- Jobs (P2) ----------------
-let jobsTimer = null;
 function jobStatusBadge(st) {
   const s = String(st || "?");
   const cls = s === "done" ? "on" : (s === "failed" ? "off" : "on");
@@ -773,12 +1019,12 @@ function renderJobs() {
   if (!el.dataset.init) {
     el.dataset.init = "1";
     el.innerHTML =
-      '<div class="toolbar"><textarea id="jobText" placeholder="Запит для background agent…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
+      '<div class="toolbar"><textarea id="jobText" placeholder="' + lbl("Запит для background agent…", "Background agent prompt…") + '" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
       '<select id="jobType"><option value="agent_turn">agent_turn</option><option value="deep_research">deep_research</option><option value="subagent">subagent</option><option value="agent_team">agent_team</option></select>' +
       '<select id="jobMode"><option value="auto">auto</option><option value="chat">chat</option>' +
       '<option value="agent">agent</option><option value="hybrid">hybrid</option></select>' +
-      '<button class="primary" id="jobCreate">+ Створити job</button>' +
-      '<label class="chk" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="jobAuto" checked /> авто 5с</label></div>' +
+      '<button type="button" class="primary" id="jobCreate">+ ' + lbl("Створити job", "Create job") + '</button>' +
+      '<label class="chk" style="font-size:12px;color:var(--muted)"><input type="checkbox" id="jobAuto" checked /> ' + lbl("авто 5с", "auto 5s") + '</label></div>' +
       '<div id="jobsOut"></div>';
     el.querySelector("#jobCreate").addEventListener("click", jobCreate);
     el.querySelector("#jobAuto").addEventListener("change", (ev) => {
@@ -793,7 +1039,7 @@ function renderJobs() {
 }
 async function jobCreate() {
   const text = document.getElementById("jobText").value.trim();
-  if (!text) return toast("вкажи текст");
+  if (!text) return toast(lbl("вкажи текст", "enter text"));
   try {
     const mode = document.getElementById("jobMode").value;
     const job_type = document.getElementById("jobType").value;
@@ -805,30 +1051,33 @@ async function loadJobs() {
   const out = document.getElementById("jobsOut"); if (!out) return;
   try {
     const d = await api("/platform/api/jobs?limit=25");
-    if (!d.jobs.length) { out.innerHTML = '<div class="empty">Немає jobs.</div>'; return; }
-    let h = '<div class="card wide"><table><tr><th>ID</th><th>Status</th><th>Progress</th><th>Створено</th><th>Payload</th><th></th></tr>';
+    if (!d.jobs.length) { out.innerHTML = '<div class="empty">' + lbl("Немає jobs", "No jobs") + '.</div>'; return; }
+    let tbl = "<table><tr><th>ID</th><th>Status</th><th>" + lbl("Прогрес", "Progress") + "</th><th>" + lbl("Створено", "Created") + "</th><th>Payload</th><th></th></tr>";
     for (const j of d.jobs) {
       const ts = j.created_at ? new Date(j.created_at * 1000).toLocaleString("uk-UA") : "—";
       const pl = esc(JSON.stringify(j.payload || {}).slice(0, 80));
+      const hl = highlightJobId && String(j.id) === String(highlightJobId) ? " job-highlight" : "";
       const cancel = j.status === "queued"
-        ? `<button class="danger" data-jcancel="${esc(j.id)}">cancel</button>` : "";
-      h += `<tr><td class="mono">${esc(j.id)}</td><td>${jobStatusBadge(j.status)}</td><td>${j.progress||0}%</td>` +
+        ? `<button type="button" class="danger" data-jcancel="${esc(j.id)}">` + lbl("скасувати", "cancel") + `</button>` : "";
+      tbl += `<tr class="${hl}"><td class="mono">${esc(j.id)}</td><td>${jobStatusBadge(j.status)}</td><td>${j.progress||0}%</td>` +
         `<td class="mono">${ts}</td><td class="mono">${esc(j.type||"agent_turn")}: ${pl}</td><td>${cancel}</td></tr>`;
-      if (j.result) h += `<tr><td colspan="6" class="lbl">→ ${esc(String(j.result).slice(0,300))}</td></tr>`;
-      if (j.error) h += `<tr><td colspan="6" class="lbl" style="color:var(--bad)">✗ ${esc(j.error)}</td></tr>`;
+      if (j.result) tbl += `<tr class="${hl}"><td colspan="6" class="lbl">→ ${esc(String(j.result).slice(0,300))}</td></tr>`;
+      if (j.error) tbl += `<tr class="${hl}"><td colspan="6" class="lbl" style="color:var(--bad)">✗ ${esc(j.error)}</td></tr>`;
     }
-    out.innerHTML = h + "</table></div>";
+    if (highlightJobId) highlightJobId = null;
+    out.innerHTML = '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
     out.querySelectorAll("[data-jcancel]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        try { await api("/platform/api/jobs/" + btn.dataset.jcancel, { method: "DELETE" }); toast("cancelled"); loadJobs(); }
-        catch (e) { showErr(e.message); }
+      btn.addEventListener("click", () => {
+        confirmModal(lbl("Скасувати job?", "Cancel job?"), btn.dataset.jcancel, async () => {
+          try { await api("/platform/api/jobs/" + btn.dataset.jcancel, { method: "DELETE" }); toast(lbl("скасовано", "cancelled")); loadJobs(); }
+          catch (e) { showErr(e.message); }
+        });
       });
     });
   } catch (e) { showErr(e.message); out.innerHTML = ""; }
 }
 
 // ---------------- Planning (P3) ----------------
-let planPoll = null;
 let activePlanId = null;
 function planBadge(st) {
   const s = String(st || "?");
@@ -839,8 +1088,8 @@ function renderPlanning() {
   if (!el.dataset.init) {
     el.dataset.init = "1";
     el.innerHTML =
-      '<div class="toolbar"><textarea id="planText" placeholder="Опиши задачу для плану…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
-      '<button class="primary" id="planCreate">Створити план</button></div>' +
+      '<div class="toolbar"><textarea id="planText" placeholder="' + lbl("Опиши задачу для плану…", "Describe the task…") + '" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
+      '<button type="button" class="primary" id="planCreate">' + lbl("Створити план", "Create plan") + '</button></div>' +
       '<div id="planViewer"></div><div id="plansList"></div>';
     el.querySelector("#planCreate").addEventListener("click", planCreate);
   }
@@ -848,7 +1097,7 @@ function renderPlanning() {
 }
 async function planCreate() {
   const text = document.getElementById("planText").value.trim();
-  if (!text) return toast("вкажи задачу");
+  if (!text) return toast(lbl("вкажи задачу", "enter task"));
   try {
     const p = await api("/platform/api/plans", { method: "POST", body: { text } });
     activePlanId = p.id; toast("plan " + p.id); planShow(p); loadPlansList();
@@ -867,10 +1116,10 @@ function planShow(p) {
     `<div class="card wide"><h3>${esc(p.summary||"")} ${planBadge(p.status)}</h3>` +
     `<p class="mono">ID: ${esc(p.id)}</p>` +
     (risks ? `<ul>${risks}</ul>` : "") +
-    `<table><tr><th>#</th><th>Крок</th><th>Status</th><th>Detail</th></tr>${steps}</table>` +
+    tableWrap("<table><tr><th>#</th><th>" + lbl("Крок", "Step") + "</th><th>Status</th><th>Detail</th></tr>" + steps + "</table>") +
     `<div class="toolbar">` +
-    (canApprove ? '<button class="primary" id="planApprove">Approve</button><button class="danger" id="planDeny">Deny</button>' : "") +
-    (canExec ? '<button class="primary" id="planExec">Execute</button>' : "") +
+    (canApprove ? '<button type="button" class="primary" id="planApprove">' + lbl("Підтвердити", "Approve") + '</button><button type="button" class="danger" id="planDeny">' + lbl("Відхилити", "Deny") + '</button>' : "") +
+    (canExec ? '<button type="button" class="primary" id="planExec">' + lbl("Виконати", "Execute") + '</button>' : "") +
     `</div>` +
     (p.result ? `<pre class="mono">${esc(String(p.result).slice(0,4000))}</pre>` : "") +
     `</div>`;
@@ -887,7 +1136,7 @@ async function planAction(action) {
   if (!activePlanId) return;
   try {
     if (action === "execute") {
-      toast("executing…");
+      toast(lbl("виконується…", "executing…"));
       const r = await api("/platform/api/plans/" + activePlanId + "/execute", { method: "POST", body: {} });
       planShow(r.plan || r);
     } else {
@@ -911,12 +1160,12 @@ async function loadPlansList() {
   const out = document.getElementById("plansList"); if (!out) return;
   try {
     const d = await api("/platform/api/plans?limit=15");
-    if (!d.plans.length) { out.innerHTML = '<div class="empty">Планів ще немає.</div>'; return; }
-    let h = '<div class="card wide"><table><tr><th>ID</th><th>Status</th><th>Summary</th></tr>';
+    if (!d.plans.length) { out.innerHTML = '<div class="empty">' + lbl("Планів ще немає", "No plans yet") + '.</div>'; return; }
+    let tbl = "<table><tr><th>ID</th><th>Status</th><th>Summary</th></tr>";
     for (const p of d.plans) {
-      h += `<tr style="cursor:pointer" data-pid="${esc(p.id)}"><td class="mono">${esc(p.id)}</td><td>${planBadge(p.status)}</td><td>${esc((p.summary||"").slice(0,80))}</td></tr>`;
+      tbl += `<tr style="cursor:pointer" data-pid="${esc(p.id)}"><td class="mono">${esc(p.id)}</td><td>${planBadge(p.status)}</td><td>${esc((p.summary||"").slice(0,80))}</td></tr>`;
     }
-    out.innerHTML = h + "</table></div>";
+    out.innerHTML = '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
     out.querySelectorAll("[data-pid]").forEach((row) => {
       row.addEventListener("click", async () => {
         const p = await api("/platform/api/plans/" + row.dataset.pid);
@@ -932,20 +1181,22 @@ function renderResearch() {
   if (!el.dataset.init) {
     el.dataset.init = "1";
     el.innerHTML =
-      '<div class="toolbar"><textarea id="researchQuery" placeholder="Тема deep research…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
+      '<div class="toolbar"><textarea id="researchQuery" placeholder="' + lbl("Тема deep research…", "Deep research topic…") + '" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
       '<input type="number" id="researchHops" value="3" min="1" max="5" style="width:60px" title="max hops" />' +
-      '<button class="primary" id="researchGo">Запустити</button></div>' +
-      '<p class="lbl">Створює background job type=deep_research. Результат — у Jobs або Telegram.</p>';
+      '<button type="button" class="primary" id="researchGo">' + lbl("Запустити", "Run") + '</button></div>' +
+      '<p class="lbl">' + lbl("Створює background job deep_research. Результат — у Jobs або Telegram.", "Creates deep_research job. Result in Jobs or Telegram.") + '</p>';
     el.querySelector("#researchGo").addEventListener("click", researchGo);
   }
 }
 async function researchGo() {
   const query = document.getElementById("researchQuery").value.trim();
-  if (!query) return toast("query?");
+  if (!query) return toast(lbl("вкажи запит", "enter query"));
   const max_hops = parseInt(document.getElementById("researchHops").value, 10) || 3;
   try {
     const j = await api("/platform/api/research", { method: "POST", body: { query, max_hops } });
-    toast("research job " + j.id);
+    highlightJobId = j.id;
+    toast(lbl("research job", "research job") + " " + j.id, "ok", () => switchTab("jobs"), lbl("→ Jobs", "→ Jobs"));
+    setTimeout(() => switchTab("jobs"), 800);
   } catch (e) { showErr(e.message); }
 }
 
@@ -961,17 +1212,17 @@ async function loadMcp() {
     const d = await api("/platform/api/mcp/servers");
     const srv = d.servers || [];
     if (!srv.length) {
-      el.innerHTML = '<div class="empty">MCP servers не налаштовано (MCP_SERVERS_JSON у .env).</div>';
+      el.innerHTML = '<div class="empty">' + lbl("MCP servers не налаштовано (MCP_SERVERS_JSON у .env)", "MCP servers not configured") + '.</div>';
       return;
     }
-    let h = '<div class="card wide"><table><tr><th>Name</th><th>Command</th><th>Status</th><th>Tools</th></tr>';
+    let tbl = "<table><tr><th>Name</th><th>Command</th><th>Status</th><th>Tools</th></tr>";
     for (const s of srv) {
       const ok = s.connected ? "on" : "off";
-      h += `<tr><td>${esc(s.name)}</td><td class="mono">${esc(s.command||"")}</td>` +
-        `<td><span class="badge ${ok}">${s.connected?"connected":"down"}</span></td><td>${s.tools||0}</td></tr>`;
-      if (s.error) h += `<tr><td colspan="4" class="lbl">${esc(s.error)}</td></tr>`;
+      tbl += `<tr><td>${esc(s.name)}</td><td class="mono">${esc(s.command||"")}</td>` +
+        `<td><span class="badge ${ok}">${s.connected ? lbl("підключено", "connected") : lbl("недоступно", "down")}</span></td><td>${s.tools||0}</td></tr>`;
+      if (s.error) tbl += `<tr><td colspan="4" class="lbl">${esc(s.error)}</td></tr>`;
     }
-    el.innerHTML = h + "</table></div>";
+    el.innerHTML = '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
   } catch (e) { showErr(e.message); el.innerHTML = ""; }
 }
 
@@ -990,7 +1241,7 @@ async function loadConnectors() {
     for (const k of keys) {
       const c = d[k] || {};
       const ok = c.configured ? "on" : "off";
-      h += `<div class="card"><h3>${esc(k)}</h3><span class="badge ${ok}">${c.configured?"configured":"not set"}</span>` +
+      h += `<div class="card"><h3>${esc(k)}</h3><span class="badge ${ok}">${c.configured ? lbl("налаштовано", "configured") : lbl("не задано", "not set")}</span>` +
         `<p class="lbl">Env: ${esc(k.toUpperCase())}_TOKEN / CALENDAR_ICS_URL</p></div>`;
     }
     el.innerHTML = h + "</div>";
@@ -1005,25 +1256,37 @@ function renderSkills() {
 }
 async function loadSkills() {
   const el = document.getElementById("panel-skills");
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
   try {
     const d = await api("/platform/api/skills");
     const skills = d.skills || [];
-    let h = '<p class="lbl">Skills з <code>data/skills/*/SKILL.md</code>. Активний skill → system prompt.</p>';
+    let activeId = null, activeName = null;
+    try {
+      const a = await api("/platform/api/skills/active");
+      activeId = a.skill_id; activeName = a.skill && a.skill.name ? a.skill.name : activeId;
+    } catch (e) {}
+    let h = '<p class="lbl">' + lbl("Skills з data/skills/*/SKILL.md. Активний skill → system prompt.", "Skills from data/skills. Active skill → system prompt.") + '</p>';
+    if (activeId) {
+      h += '<div class="card wide" style="margin-bottom:12px"><div class="k">' + lbl("Поточний skill", "Current skill") + '</div>' +
+        '<div class="v sm">' + esc(activeName || activeId) + ' <span class="badge on">' + lbl("активний", "active") + '</span></div></div>';
+    }
     if (!skills.length) {
-      el.innerHTML = h + '<div class="empty">Немає skills. Додай папку з SKILL.md у data/skills/</div>';
+      el.innerHTML = h + '<div class="empty">' + lbl("Немає skills. Додай SKILL.md у data/skills/", "No skills. Add SKILL.md to data/skills/") + '</div>';
       return;
     }
-    h += '<div class="card wide"><table><tr><th>ID</th><th>Name</th><th>Description</th><th></th></tr>';
+    let tbl = "<table><tr><th>ID</th><th>Name</th><th>Description</th><th></th></tr>";
     for (const s of skills) {
-      h += `<tr><td class="mono">${esc(s.id)}</td><td>${esc(s.name)}</td><td>${esc(s.description||"")}</td>` +
-        `<td><button class="primary" data-skill="${esc(s.id)}">Activate</button></td></tr>`;
+      const isA = s.id === activeId;
+      tbl += `<tr><td class="mono">${esc(s.id)}${isA ? ' <span class="badge on">' + lbl("активний", "active") + '</span>' : ""}</td><td>${esc(s.name)}</td><td>${esc(s.description||"")}</td>` +
+        `<td><button type="button" class="primary" data-skill="${esc(s.id)}">` + lbl("Активувати", "Activate") + `</button></td></tr>`;
     }
-    el.innerHTML = h + "</table></div>";
+    el.innerHTML = h + '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
     el.querySelectorAll("[data-skill]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         try {
           await api("/platform/api/skills/active", { method: "POST", body: { skill_id: btn.dataset.skill } });
-          toast("skill " + btn.dataset.skill);
+          toast(lbl("skill", "skill") + " " + btn.dataset.skill);
+          loadSkills();
         } catch (e) { showErr(e.message); }
       });
     });
@@ -1038,14 +1301,14 @@ function renderSubagents() {
     el.innerHTML =
       '<div class="toolbar"><textarea id="subTask" placeholder="Підзадача для subagent…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
       '<input type="number" id="subBudget" value="3" min="1" max="8" style="width:50px" />' +
-      '<button class="primary" id="subSpawn">Spawn</button></div><div id="subOut"></div>';
+      '<button type="button" class="primary" id="subSpawn">' + lbl("Запустити", "Spawn") + '</button></div><div id="subOut"></div>';
     el.querySelector("#subSpawn").addEventListener("click", subSpawn);
   }
   loadSubagents();
 }
 async function subSpawn() {
   const task = document.getElementById("subTask").value.trim();
-  if (!task) return toast("task?");
+  if (!task) return toast(lbl("вкажи задачу", "enter task"));
   const budget_iters = parseInt(document.getElementById("subBudget").value, 10) || 3;
   try {
     const r = await api("/platform/api/subagents", { method: "POST", body: { task, budget_iters } });
@@ -1056,13 +1319,13 @@ async function loadSubagents() {
   const out = document.getElementById("subOut"); if (!out) return;
   try {
     const d = await api("/platform/api/subagents?limit=20");
-    if (!d.runs.length) { out.innerHTML = '<div class="empty">Subagent runs порожні.</div>'; return; }
-    let h = '<div class="card wide"><table><tr><th>ID</th><th>Status</th><th>Task</th><th>Result</th></tr>';
+    if (!d.runs.length) { out.innerHTML = '<div class="empty">' + lbl("Subagent runs порожні", "No subagent runs") + '.</div>'; return; }
+    let tbl = "<table><tr><th>ID</th><th>Status</th><th>Task</th><th>Result</th></tr>";
     for (const r of d.runs) {
-      h += `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.status)}</td><td>${esc((r.task||"").slice(0,60))}</td>` +
+      tbl += `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.status)}</td><td>${esc((r.task||"").slice(0,60))}</td>` +
         `<td class="mono">${esc((r.result||r.error||"").slice(0,80))}</td></tr>`;
     }
-    out.innerHTML = h + "</table></div>";
+    out.innerHTML = '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
   } catch (e) { showErr(e.message); }
 }
 
@@ -1075,14 +1338,14 @@ function renderTeams() {
       '<p class="lbl">Researcher → Coder → Reviewer pipeline (async bg job).</p>' +
       '<div class="toolbar"><textarea id="teamTask" placeholder="Задача для команди…" style="flex:1;min-width:200px;min-height:56px"></textarea>' +
       '<input type="number" id="teamBudget" value="3" min="1" max="8" style="width:50px" title="budget per role" />' +
-      '<button class="primary" id="teamSpawn">Run team</button></div><div id="teamOut"></div>';
+      '<button type="button" class="primary" id="teamSpawn">' + lbl("Запустити команду", "Run team") + '</button></div><div id="teamOut"></div>';
     el.querySelector("#teamSpawn").addEventListener("click", teamSpawn);
   }
   loadTeams();
 }
 async function teamSpawn() {
   const task = document.getElementById("teamTask").value.trim();
-  if (!task) return toast("task?");
+  if (!task) return toast(lbl("вкажи задачу", "enter task"));
   const budget_per_role = parseInt(document.getElementById("teamBudget").value, 10) || 3;
   try {
     const r = await api("/platform/api/teams", { method: "POST", body: { task, budget_per_role } });
@@ -1093,14 +1356,14 @@ async function loadTeams() {
   const out = document.getElementById("teamOut"); if (!out) return;
   try {
     const d = await api("/platform/api/teams?limit=15");
-    if (!d.teams.length) { out.innerHTML = '<div class="empty">Team runs порожні.</div>'; return; }
-    let h = '<div class="card wide"><table><tr><th>ID</th><th>Status</th><th>Task</th><th>Steps</th></tr>';
+    if (!d.teams.length) { out.innerHTML = '<div class="empty">' + lbl("Team runs порожні", "No team runs") + '.</div>'; return; }
+    let tbl = "<table><tr><th>ID</th><th>Status</th><th>Task</th><th>Steps</th></tr>";
     for (const t of d.teams) {
       const steps = (t.steps || []).map((s) => s.role).join(", ");
-      h += `<tr><td class="mono">${esc(t.id)}</td><td>${esc(t.status)}</td><td>${esc((t.task||"").slice(0,50))}</td><td>${esc(steps)}</td></tr>`;
-      if (t.result) h += `<tr><td colspan="4" class="lbl mono">${esc(String(t.result).slice(0,200))}</td></tr>`;
+      tbl += `<tr><td class="mono">${esc(t.id)}</td><td>${esc(t.status)}</td><td>${esc((t.task||"").slice(0,50))}</td><td>${esc(steps)}</td></tr>`;
+      if (t.result) tbl += `<tr><td colspan="4" class="lbl mono">${esc(String(t.result).slice(0,200))}</td></tr>`;
     }
-    out.innerHTML = h + "</table></div>";
+    out.innerHTML = '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
   } catch (e) { showErr(e.message); }
 }
 
@@ -1116,19 +1379,82 @@ async function loadHooks() {
     const d = await api("/platform/api/hooks");
     el.innerHTML =
       `<div class="card wide"><h3>Hooks</h3>` +
-      `<p>Enabled: <span class="badge ${d.enabled?"on":"off"}">${d.enabled}</span></p>` +
+      `<p>${lbl("Увімкнено", "Enabled")}: <span class="badge ${d.enabled?"on":"off"}">${d.enabled ? lbl("так", "yes") : lbl("ні", "no")}</span></p>` +
       `<p class="mono">Dir: ${esc(d.dir||"")}</p>` +
       `<ul><li>pre_turn: ${d.pre_turn||0}</li><li>post_tool: ${d.post_tool||0}</li><li>on_error: ${d.on_error||0}</li></ul>` +
       `<p class="lbl">Поклади <code>pre_turn.py</code>, <code>post_tool.py</code>, <code>on_error.py</code> у data/hooks/</p></div>`;
   } catch (e) { showErr(e.message); el.innerHTML = ""; }
 }
 
+// ---------------- Improve ----------------
+let improveSelected = new Set();
+async function renderImprove() {
+  const el = document.getElementById("panel-improve");
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  try {
+    const st = await api("/platform/api/improve/status");
+    const last = st.last_scan_ts ? new Date(st.last_scan_ts * 1000).toLocaleString("uk-UA") : "—";
+    let h = '<div class="toolbar"><button type="button" class="primary" id="improveScan">' + lbl("Сканувати", "Scan") + '</button>' +
+      '<button type="button" id="improveReload">' + lbl("Оновити", "Refresh") + '</button></div>';
+    h += '<div class="grid">';
+    h += card(lbl("Увімкнено", "Enabled"), badge(!!st.enabled), "sm");
+    h += card(lbl("Очікує", "Pending"), String(st.pending || 0), "sm");
+    h += card(lbl("Схвалено", "Approved"), String(st.approved_total || 0), "sm");
+    h += card(lbl("Останній скан", "Last scan"), esc(last), "sm mono");
+    h += "</div>";
+    const pending = (await api("/platform/api/improve/pending")).pending || [];
+    improveSelected = new Set();
+    h += '<div class="section">' + lbl("Черга на перевірку", "Review queue") + ' (' + pending.length + ")</div>";
+    if (!pending.length) {
+      h += '<div class="empty">' + lbl("Черга порожня", "Queue empty") + '.</div>';
+    } else {
+      h += '<div class="toolbar"><button type="button" class="primary" id="improveApprove">' + lbl("Схвалити", "Approve") + '</button>' +
+        '<button type="button" class="danger" id="improveReject">' + lbl("Відхилити", "Reject") + '</button></div>';
+      let tbl = "<table><tr><th></th><th>ID</th><th>user</th><th>mode</th><th>preview</th></tr>";
+      for (const item of pending) {
+        tbl += `<tr><td><input type="checkbox" class="improve-chk" data-iid="${esc(item.id)}"/></td>` +
+          `<td class="mono">${esc(item.id)}</td><td>${esc(String(item.user_id||""))}</td><td>${esc(item.mode||"")}</td>` +
+          `<td class="lbl">${esc(String(item.user||"").slice(0,60))} → ${esc(String(item.assistant||"").slice(0,80))}</td></tr>`;
+      }
+      h += '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+    }
+    el.innerHTML = h;
+    const scan = el.querySelector("#improveScan");
+    if (scan) scan.addEventListener("click", async () => {
+      try { const r = await api("/platform/api/improve/scan", { method: "POST" }); toast(lbl("скан", "scan") + ": +" + (r.queued || 0)); renderImprove(); }
+      catch (e) { showErr(e.message); }
+    });
+    const rel = el.querySelector("#improveReload");
+    if (rel) rel.addEventListener("click", renderImprove);
+    el.querySelectorAll(".improve-chk").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        if (cb.checked) improveSelected.add(cb.dataset.iid); else improveSelected.delete(cb.dataset.iid);
+      });
+    });
+    const ap = el.querySelector("#improveApprove");
+    if (ap) ap.addEventListener("click", () => improveReview("approve"));
+    const rj = el.querySelector("#improveReject");
+    if (rj) rj.addEventListener("click", () => improveReview("reject"));
+  } catch (e) { showErr(e.message); el.innerHTML = ""; }
+}
+async function improveReview(action) {
+  const ids = [...improveSelected];
+  if (!ids.length) return toast(lbl("обери записи", "select items"));
+  try {
+    await api("/platform/api/improve/review", { method: "POST", body: { item_ids: ids, action } });
+    toast(action === "approve" ? lbl("схвалено", "approved") : lbl("відхилено", "rejected"));
+    renderImprove();
+  } catch (e) { showErr(e.message); }
+}
+
 const RENDER = { overview: renderOverview, workbench: renderWorkbench, memory: renderMemory,
   projects: renderProjects, jobs: renderJobs, planning: renderPlanning, research: renderResearch,
   mcp: renderMcp, connectors: renderConnectors, skills: renderSkills, subagents: renderSubagents,
-  teams: renderTeams, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers, models: renderModels };
+  teams: renderTeams, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers,
+  models: renderModels, improve: renderImprove };
 
-renderOverview();
+const initTab = (location.hash || "#overview").slice(1);
+switchTab(TITLES[initTab] ? initTab : "overview", false);
 </script>
 </body>
 </html>

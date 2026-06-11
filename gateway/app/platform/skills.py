@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from .auth import PlatformAuth, resolve_uid
+from .auth import PlatformAuth, require_platform_auth, resolve_uid
 from .proxy import register_tools_get, register_tools_get_by_id, register_tools_post_call
 
 
@@ -36,3 +36,11 @@ def register(router: APIRouter) -> None:
         tools_attr="set_active_skill",
         call=_set_active_skill,
     )
+
+    @router.get("/platform/api/skills/active")
+    async def skills_active_get(
+        request: Request,
+        auth: PlatformAuth = Depends(require_platform_auth),
+    ) -> dict[str, Any]:
+        uid = resolve_uid(auth, None)
+        return await request.app.state.tools.get_active_skill(uid)
