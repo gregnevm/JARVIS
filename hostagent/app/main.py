@@ -86,6 +86,21 @@ class ScreenClickRequest(BaseModel):
     y: int
 
 
+class ScreenTypeRequest(BaseModel):
+    text: str
+    interval_ms: int = 0
+
+
+class ScreenHotkeyRequest(BaseModel):
+    keys: list[str] = Field(default_factory=list)
+
+
+class ScreenScrollRequest(BaseModel):
+    clicks: int = 0
+    x: int | None = None
+    y: int | None = None
+
+
 def _timeout(req_timeout: float | None) -> float:
     return req_timeout if req_timeout is not None else settings.exec_timeout
 
@@ -373,6 +388,71 @@ async def screen_capture(
     """Знімок основного екрана (read-only, Windows)."""
     data = _capture_screen_png()
     return {"format": "png", "data_b64": base64.b64encode(data).decode("ascii")}
+
+
+@app.post("/screen/type")
+async def screen_type(
+    req: ScreenTypeRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    """T4 — введення тексту з клавіатури."""
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="windows only")
+    from .screen_input import build_type_ps
+
+    text = req.text or ""
+    if len(text.encode("utf-8")) > settings.max_bytes:
+        raise HTTPException(status_code=400, detail="text too large")
+    ps = build_type_ps(text, req.interval_ms)
+    result = _run_powershell(ps, False, 15.0)
+    if int(result.get("code", -1)) != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=(result.get("stderr") or "type failed")[:200],
+        )
+    return {"status": "ok", "chars": str(len(text))}
+
+
+@app.post("/screen/hotkey")
+async def screen_hotkey(
+    req: ScreenHotkeyRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    """T4 — комбінація клавіш (ctrl+s, alt+tab тощо)."""
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="windows only")
+    if not req.keys:
+        raise HTTPException(status_code=400, detail="keys required")
+    from .screen_input import build_hotkey_ps
+
+    ps = build_hotkey_ps(req.keys)
+    result = _run_powershell(ps, False, 10.0)
+    if int(result.get("code", -1)) != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=(result.get("stderr") or "hotkey failed")[:200],
+        )
+    return {"status": "ok", "keys": "+".join(req.keys)}
+
+
+@app.post("/screen/scroll")
+async def screen_scroll(
+    req: ScreenScrollRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, str]:
+    """T4 — прокрутка колеса миші (+ вгору, - вниз)."""
+    if sys.platform != "win32":
+        raise HTTPException(status_code=501, detail="windows only")
+    from .screen_input import build_scroll_ps
+
+    ps = build_scroll_ps(req.clicks, req.x, req.y)
+    result = _run_powershell(ps, False, 10.0)
+    if int(result.get("code", -1)) != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=(result.get("stderr") or "scroll failed")[:200],
+        )
+    return {"status": "ok", "clicks": str(req.clicks)}
 
 
 @app.get("/fs/download")
