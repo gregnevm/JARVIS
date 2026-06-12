@@ -32,6 +32,8 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
         "max_agent_iters": settings.max_agent_iters,
         "computer_max_iters": settings.computer_max_iters,
         "enable_browser": settings.enable_browser,
+        "computer_profile": settings.computer_profile,
+        "computer_session_trust_minutes": settings.computer_session_trust_minutes,
         "computer_require_confirm": settings.computer_require_confirm,
         "computer_auto_vision": settings.computer_auto_vision,
         "computer_allow_power": settings.computer_allow_power,

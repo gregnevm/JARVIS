@@ -118,10 +118,15 @@ def register(router: APIRouter) -> None:
 
     @router.post("/computer/trust")
     async def computer_trust_ep(req: TrustRequest) -> dict[str, str]:
-        from ..computer_trust import grant_trust
+        from ..computer_trust import grant_trust, trust_remaining, trust_ttl_seconds
 
-        await grant_trust(req.user_id)
-        return {"status": "trusted", "ttl_seconds": "1800"}
+        await grant_trust(req.user_id, full=req.full)
+        ttl = await trust_remaining(req.user_id) or trust_ttl_seconds(full=req.full)
+        return {
+            "status": "trusted",
+            "mode": "full" if req.full else "session",
+            "ttl_seconds": str(ttl),
+        }
 
     @router.delete("/computer/trust")
     async def computer_revoke_trust_ep(req: TrustRequest) -> dict[str, str]:

@@ -130,6 +130,14 @@ _SCREENSHOT_SCHEMA = _schema(
     [],
 )
 
+_SEE_SCREEN_SCHEMA = _schema(
+    "see_screen",
+    "T0 read-only — зняти екран і описати vision-моделлю (screenshot + describe одним кроком). "
+    "Краще за окремі capture_screenshot + describe_image для «що на екрані?».",
+    {"question": {**_STR, "description": "що саме спитати про екран (необов'язково)"}},
+    [],
+)
+
 _CLIPBOARD_READ_SCHEMA = _schema(
     "clipboard_read",
     "T0 — прочитати буфер обміну Windows (read-only).",
@@ -149,6 +157,40 @@ _SCREEN_CLICK_SCHEMA = _schema(
     "T4 — клік по координатах екрана (останній резерв, потребує confirm).",
     {"x": {"type": "integer", "description": "X"}, "y": {"type": "integer", "description": "Y"}},
     ["x", "y"],
+)
+
+_SCREEN_TYPE_SCHEMA = _schema(
+    "screen_type",
+    "T4 — введення тексту з клавіатури (останній резерв).",
+    {
+        "text": {**_STR, "description": "текст для вводу"},
+        "interval_ms": {"type": "integer", "description": "затримка між символами (необов'язково)"},
+    },
+    ["text"],
+)
+
+_SCREEN_HOTKEY_SCHEMA = _schema(
+    "screen_hotkey",
+    "T4 — комбінація клавіш (ctrl, alt, shift + key). Приклад: ['ctrl','s'].",
+    {
+        "keys": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "модифікатори і клавіша",
+        }
+    },
+    ["keys"],
+)
+
+_SCREEN_SCROLL_SCHEMA = _schema(
+    "screen_scroll",
+    "T4 — прокрутка колеса (+ вгору, - вниз).",
+    {
+        "clicks": {"type": "integer", "description": "кроки колеса (+/-)"},
+        "x": {"type": "integer", "description": "X (необов'язково)"},
+        "y": {"type": "integer", "description": "Y (необов'язково)"},
+    },
+    ["clicks"],
 )
 
 _UIA_SCHEMAS: list[dict[str, Any]] = [
@@ -232,6 +274,22 @@ _CURSOR_TASK_SCHEMA = _schema(
     ["task"],
 )
 
+_CONTINUE_DEV_SCHEMA = _schema(
+    "continue_dev",
+    "Interact with Continue.dev coding agent. Can open files in VS Code and send "
+    "coding prompts to Continue agent loop.",
+    {
+        "action": {
+            "type": "string",
+            "enum": ["open_file", "send_prompt", "get_status"],
+            "description": "open_file | send_prompt | get_status",
+        },
+        "path": {**_STR, "description": "file or directory path to open (open_file)"},
+        "prompt": {**_STR, "description": "prompt for Continue agent (send_prompt)"},
+    },
+    ["action"],
+)
+
 _MCP_CALL_SCHEMA = _schema(
     "mcp_call",
     "Виклик інструменту зовнішнього MCP-сервера (allowlist у .env).",
@@ -296,17 +354,40 @@ def agent_tool_schemas(*, computer: bool = False, allow_computer: bool = True) -
     if settings.enable_code_exec:
         schemas.append(_CODE_SCHEMA)
     if settings.enable_computer_use and allow_computer:
+        from ..computer_profile import (
+            allows_browser,
+            allows_screen_input,
+            allows_see_screen,
+            allows_uia,
+        )
+
         schemas.append(_SCREENSHOT_SCHEMA)
         if computer:
             if settings.cursor_tasks_enabled:
                 schemas.append(_CURSOR_TASK_SCHEMA)
+            if settings.enable_continue_dev:
+                schemas.append(_CONTINUE_DEV_SCHEMA)
             schemas.extend(_COMPUTER_SCHEMAS)
             schemas.append(_CLIPBOARD_READ_SCHEMA)
             schemas.append(_CLIPBOARD_WRITE_SCHEMA)
-            schemas.extend(_UIA_SCHEMAS)
-            schemas.append(_SCREEN_CLICK_SCHEMA)
-    if settings.enable_browser and computer:
-        schemas.extend(_BROWSER_SCHEMAS)
+            if allows_see_screen():
+                schemas.append(_SEE_SCREEN_SCHEMA)
+            if allows_uia():
+                schemas.extend(_UIA_SCHEMAS)
+            if allows_screen_input():
+                schemas.extend(
+                    [
+                        _SCREEN_CLICK_SCHEMA,
+                        _SCREEN_TYPE_SCHEMA,
+                        _SCREEN_HOTKEY_SCHEMA,
+                        _SCREEN_SCROLL_SCHEMA,
+                    ]
+                )
+    if computer and settings.enable_computer_use and allow_computer:
+        from ..computer_profile import allows_browser
+
+        if allows_browser():
+            schemas.extend(_BROWSER_SCHEMAS)
     schemas.extend(_connector_schemas())
     if _mcp_enabled():
         schemas.append(_MCP_CALL_SCHEMA)
@@ -314,6 +395,12 @@ def agent_tool_schemas(*, computer: bool = False, allow_computer: bool = True) -
     if settings.cursor_tasks_enabled and not computer:
         schemas.append(_CURSOR_TASK_SCHEMA)
     return schemas
+
+
+def computer_tool_names_frozen() -> frozenset[str]:
+    from ..computer_profile import computer_tool_names
+
+    return frozenset(computer_tool_names(computer=True))
 
 
 COMPUTER_TOOL_NAMES = frozenset(
@@ -324,6 +411,7 @@ COMPUTER_TOOL_NAMES = frozenset(
         "fs_read",
         "fs_write",
         "capture_screenshot",
+        "see_screen",
         "clipboard_read",
         "clipboard_write",
         "browser_open",
@@ -335,5 +423,10 @@ COMPUTER_TOOL_NAMES = frozenset(
         "window_focus",
         "uia_invoke",
         "screen_click",
+        "screen_type",
+        "screen_hotkey",
+        "screen_scroll",
+        "cursor_task",
+        "continue_dev",
     }
 )

@@ -271,11 +271,17 @@ async def generate_image(prompt: str) -> str:
                 )
             if backend == "ollama":
                 err = detail or str(exc)
-                if "only work on macOS" in err or "mlx" in err.lower() or "GiB" in err:
+                if (
+                    exc.response.status_code == 500
+                    or "only work on macOS" in err
+                    or "mlx" in err.lower()
+                    or "image generation not available" in err.lower()
+                    or "GiB" in err
+                ):
                     return (
-                        "Ollama image gen на Windows ще нестабільна. У .env постав "
-                        "IMAGE_GEN_URL=pollinations (хмара) або IMAGE_GEN_URL=http://host.docker.internal:7860 "
-                        "(Forge/A1111 локально)."
+                        "Ollama image gen на Windows ще не працює (потрібен Forge). "
+                        "На хості: .\\scripts\\setup_sd_forge.ps1 → .\\scripts\\start_sd_forge.ps1. "
+                        "У .env: IMAGE_GEN_URL=http://host.docker.internal:7860"
                     )
             return f"Не вдалося згенерувати зображення: {exc} {detail}".strip()
         except httpx.ConnectError:

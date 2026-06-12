@@ -55,6 +55,10 @@ _TIER = {
     "window_focus": "T3",
     "uia_invoke": "T3",
     "screen_click": "T4",
+    "screen_type": "T4",
+    "screen_hotkey": "T4",
+    "screen_scroll": "T4",
+    "see_screen": "T0",
 }
 
 
@@ -96,6 +100,7 @@ def is_mutating(tool: str, args: dict[str, Any]) -> bool:
         "fs_list",
         "fs_read",
         "capture_screenshot",
+        "see_screen",
         "clipboard_read",
         "browser_open",
         "browser_read",
@@ -108,6 +113,9 @@ def is_mutating(tool: str, args: dict[str, Any]) -> bool:
         "window_focus",
         "uia_invoke",
         "screen_click",
+        "screen_type",
+        "screen_hotkey",
+        "screen_scroll",
     ):
         return True
     if tool == "fs_write" or tool == "fs_write_bytes":
@@ -249,13 +257,30 @@ async def load_pending_raw(user_id: int) -> dict[str, Any]:
     }
 
 
-def _is_effectively_mutating(tool: str, args: dict[str, Any], *, trusted: bool) -> bool:
+def _trust_skips_confirm(tool: str, args: dict[str, Any], level: str | None) -> bool:
+    if not level or bool(args.get("as_admin")):
+        return False
+    if not is_mutating(tool, args):
+        return False
+    if level == "full":
+        return True
+    return tier_for(tool) in ("T0", "T1")
+
+
+async def _is_effectively_mutating(
+    tool: str, args: dict[str, Any], *, user_id: int
+) -> bool:
+    from .computer_trust import trust_level
+
     mutating = is_mutating(tool, args)
     if bool(args.get("as_admin")):
         return True
-    if mutating and trusted:
+    if not mutating:
         return False
-    return mutating
+    level = await trust_level(user_id)
+    if _trust_skips_confirm(tool, args, level):
+        return False
+    return True
 
 
 async def _check_mutating_quota(user_id: int, tool: str, args: dict[str, Any]) -> str | None:
@@ -280,14 +305,11 @@ async def wrap_execute(
     executor: Callable[[], Awaitable[str]],
 ) -> str:
     """Виконує дію або повертає маркер підтвердження для gateway."""
-    from .computer_trust import is_trusted
-
     denied = computer_denied_message(user_id)
     if denied:
         return denied
     tier = audit_tier(tool, args)
-    trusted = await is_trusted(user_id)
-    mutating = _is_effectively_mutating(tool, args, trusted=trusted)
+    mutating = await _is_effectively_mutating(tool, args, user_id=user_id)
     if mutating:
         blocked = await _check_mutating_quota(user_id, tool, args)
         if blocked:
@@ -350,4 +372,8 @@ async def execute_confirmed(user_id: int, code: str) -> tuple[str, str]:
     await _touch_mutating_quota(user_id, tool, args)
     learn_from_action(tool, args)
     log_action(user_id, tool, tier, args, result, confirmed=True)
+    from .computer_trust import grant_trust, trust_ttl_seconds
+
+    if trust_ttl_seconds() > 0:
+        await grant_trust(user_id)
     return result, origin

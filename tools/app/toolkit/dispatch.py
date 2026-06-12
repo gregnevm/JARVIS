@@ -143,6 +143,12 @@ async def _h_capture_screenshot(_args: dict[str, Any], uid: int) -> str:
     return await computer.capture_screenshot(user_id=uid)
 
 
+async def _h_see_screen(args: dict[str, Any], uid: int) -> str:
+    from .. import computer
+
+    return await computer.see_screen(str(args.get("question", "")), user_id=uid)
+
+
 async def _h_clipboard_read(_args: dict[str, Any], uid: int) -> str:
     from .. import computer
 
@@ -226,6 +232,41 @@ async def _h_screen_click(args: dict[str, Any], uid: int) -> str:
     return await computer.screen_click(x, y, user_id=uid)
 
 
+async def _h_screen_type(args: dict[str, Any], uid: int) -> str:
+    from .. import computer
+
+    try:
+        interval = int(args.get("interval_ms", 0) or 0)
+    except (TypeError, ValueError):
+        interval = 0
+    return await computer.screen_type(str(args.get("text", "")), interval, user_id=uid)
+
+
+async def _h_screen_hotkey(args: dict[str, Any], uid: int) -> str:
+    from .. import computer
+
+    raw = args.get("keys", [])
+    keys = [str(k) for k in raw] if isinstance(raw, list) else []
+    return await computer.screen_hotkey(keys, user_id=uid)
+
+
+async def _h_screen_scroll(args: dict[str, Any], uid: int) -> str:
+    from .. import computer
+
+    try:
+        clicks = int(args.get("clicks", 0))
+    except (TypeError, ValueError):
+        return "invalid clicks"
+    x = args.get("x")
+    y = args.get("y")
+    try:
+        xi = int(x) if x is not None else None
+        yi = int(y) if y is not None else None
+    except (TypeError, ValueError):
+        xi, yi = None, None
+    return await computer.screen_scroll(clicks, xi, yi, user_id=uid)
+
+
 async def _h_schedule_job(args: dict[str, Any], uid: int) -> str:
     from ..jobs import schedule_job
 
@@ -307,6 +348,17 @@ async def _h_cursor_task(args: dict[str, Any], uid: int) -> str:
     return cursor_tasks.format_result(result)
 
 
+async def _h_continue_dev(args: dict[str, Any], uid: int) -> str:
+    from ..tools.continue_tool import run
+
+    return await run(
+        str(args.get("action") or ""),
+        path=str(args.get("path") or ""),
+        prompt=str(args.get("prompt") or ""),
+        user_id=uid,
+    )
+
+
 _HANDLERS: dict[str, Handler] = {
     "calc": _h_calc,
     "web_search": _h_web_search,
@@ -328,6 +380,7 @@ _HANDLERS: dict[str, Handler] = {
     "fs_read": _h_fs_read,
     "fs_write": _h_fs_write,
     "capture_screenshot": _h_capture_screenshot,
+    "see_screen": _h_see_screen,
     "clipboard_read": _h_clipboard_read,
     "clipboard_write": _h_clipboard_write,
     "browser_open": _h_browser_open,
@@ -339,6 +392,9 @@ _HANDLERS: dict[str, Handler] = {
     "window_focus": _h_window_focus,
     "uia_invoke": _h_uia_invoke,
     "screen_click": _h_screen_click,
+    "screen_type": _h_screen_type,
+    "screen_hotkey": _h_screen_hotkey,
+    "screen_scroll": _h_screen_scroll,
     "schedule_job": _h_schedule_job,
     "mcp_call": _h_mcp_call,
     "notion_search": _h_notion_search,
@@ -348,7 +404,10 @@ _HANDLERS: dict[str, Handler] = {
     "calendar_upcoming": _h_calendar_upcoming,
     "spawn_subagent": _h_spawn_subagent,
     "cursor_task": _h_cursor_task,
+    "continue_dev": _h_continue_dev,
 }
+
+_CONTINUE_DEV_TOOLS = frozenset({"continue_dev"})
 
 
 async def dispatch(
@@ -359,14 +418,23 @@ async def dispatch(
     allow_computer: bool = True,
 ) -> str:
     """Викликає інструмент за іменем. Помилки повертаються текстом (модель їх читає)."""
-    if name in COMPUTER_TOOL_NAMES:
+    if name in COMPUTER_TOOL_NAMES or name in _CONTINUE_DEV_TOOLS:
         from ..computer_access import computer_denied_message
+        from ..computer_profile import computer_tool_names
 
         denied = computer_denied_message(user_id)
         if denied or not allow_computer:
             return denied or (
                 "Керування цим комп'ютером доступне лише власнику "
                 "(COMPUTER_OWNER_USER_IDS у .env)."
+            )
+        allowed = computer_tool_names(computer=True) | {"capture_screenshot"}
+        if name in COMPUTER_TOOL_NAMES and name not in allowed:
+            from ..config import settings
+
+            return (
+                f"Інструмент {name} недоступний у COMPUTER_PROFILE="
+                f"{settings.computer_profile!r}. Див. docs/AGENT_MODE_ROADMAP.md."
             )
     handler = _HANDLERS.get(name)
     if handler is None:

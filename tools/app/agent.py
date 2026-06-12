@@ -29,6 +29,35 @@ FALLBACK = "Не зміг сформувати відповідь. Спробу�
 
 PLAN_MARKER = "[[PLAN_CONFIRM:{id}]]"
 _PLAN_MAX_STEPS = 8
+_TOOL_MEDIA_RE = re.compile(
+    r"\[\[\s*(?:photo|image|document|file)\s*:\s*[^\]]+\]\]",
+    re.IGNORECASE,
+)
+
+
+def _collect_tool_media(messages: list[dict[str, Any]]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in messages:
+        if m.get("role") != "tool":
+            continue
+        for directive in _TOOL_MEDIA_RE.findall(str(m.get("content") or "")):
+            if directive not in seen:
+                seen.add(directive)
+                out.append(directive)
+    return out
+
+
+def _ensure_tool_media(answer: str, messages: list[dict[str, Any]]) -> str:
+    """Додає [[photo:…]] з результатів інструментів, якщо модель їх пропустила."""
+    directives = _collect_tool_media(messages)
+    if not directives:
+        return answer
+    answer = (answer or "").strip()
+    missing = [d for d in directives if d not in answer]
+    if not missing:
+        return answer
+    return answer + "\n\n" + "\n".join(missing)
 
 
 def media_hint() -> str:
@@ -84,26 +113,34 @@ def system_agent() -> str:
 
 
 def system_computer() -> str:
-    vision = ""
+    from .computer_profile import format_tools_prompt_block
+
+    tools_block = format_tools_prompt_block(computer=True)
+    vision_hint = ""
     if settings.ollama_model_vision:
-        vision = (
-            " Для «що на екрані?» — спочатку capture_screenshot, потім describe_image "
-            "з шляхом з відповіді та питанням користувача."
-        )
+        if "see_screen" in tools_block:
+            vision_hint = (
+                " Для «що на екрані?» — see_screen(question=…); "
+                "або capture_screenshot + describe_image."
+            )
+        else:
+            vision_hint = (
+                " Для «що на екрані?» — capture_screenshot, потім describe_image."
+            )
     return (
-        "Ти JARVIS — агент керування комп'ютером Windows. Дотримуйся «драбини швидкодії»: "
-        "T0 cursor_task — зміни в коді репозиторію JARVIS (Cursor IDE); "
-        "T0 PowerShell (whitelist) і fs_* — OS/файли; T1 CLI — git, winget, curl; "
-        "capture_screenshot — зняти екран. "
+        "Ти JARVIS — агент керування комп'ютером Windows. Дотримуйся «драбини швидкодії» "
+        "(T0→T1→T2→T3→T4): спочатку PowerShell/CLI/FS, потім браузер по DOM, потім UIA, "
+        "і лише в крайньому випадку піксельний клік. "
+        f"{tools_block} "
+        "Використовуй ЛИШЕ інструменти зі списку — не вигадуй інших. "
         "Якщо користувач пише cursor: … — одразу cursor_task(async_mode=true), не run_powershell. "
         "PowerShell: без пайпів |, &&, ||, $( ) — лише прості cmdlet з PS_WHITELIST; "
         "список процесів — Get-Process або Get-Process -Name ollama,python. "
         "CLI fallback: run_cli python + O:\\JARVIS\\scripts\\cursor_run_task.py. "
-        "Браузер (Playwright), UI Automation і піксельний клік НЕ доступні — не вигадуй їх. "
         "Команда /app — Mini App дашборд, не шлях у ФС. "
         "Не вигадуй результатів — перевіряй інструментами. "
-        "У фінальній відповіді коротко вкажи tier (T0/T1), яким діяв."
-        + vision
+        "У фінальній відповіді коротко вкажи tier, яким діяв."
+        + vision_hint
         + " Фінальну відповідь українською, стисло. "
         + media_hint()
     )
@@ -137,6 +174,7 @@ _TOOL_STATUS = {
     "fs_read": "📄 читаю файл…",
     "fs_write": "✍️ записую файл…",
     "capture_screenshot": "📸 знімаю екран…",
+    "see_screen": "👁 дивлюся на екран…",
     "browser_open": "🌐 браузер…",
     "browser_read": "🌐 читаю сторінку…",
     "browser_click": "🌐 клік…",
@@ -145,6 +183,10 @@ _TOOL_STATUS = {
     "window_list": "🪟 вікна…",
     "window_focus": "🪟 фокус…",
     "uia_invoke": "🪟 UIA…",
+    "screen_click": "🖱 клік…",
+    "screen_type": "⌨️ ввід…",
+    "screen_hotkey": "⌨️ hotkey…",
+    "screen_scroll": "🖱 scroll…",
     "cursor_task": "🧠 Cursor IDE…",
     "spawn_subagent": "🤖 subagent…",
 }
@@ -454,7 +496,7 @@ class AgentRunner:
                 calls = _parse_inline_tool_calls(content)
             if not calls:
                 if content.strip():
-                    yield {"delta": content.strip()}
+                    yield {"delta": _ensure_tool_media(content.strip(), messages)}
                 yield {"iters": i}
                 return
             for call in calls:
@@ -532,7 +574,7 @@ class AgentRunner:
                 # Фолбек: модель могла віддати tool call текстом (inline XML/JSON).
                 calls = _parse_inline_tool_calls(content)
             if not calls:
-                return content.strip(), i
+                return _ensure_tool_media(content.strip(), messages), i
             for call in calls:
                 fn = call.get("function") or {}
                 name = str(fn.get("name", ""))
@@ -566,7 +608,7 @@ class AgentRunner:
             {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
         )
         final = await self._llm.chat(settings.ollama_model_agent, messages)
-        return (final.get("content") or "").strip(), limit
+        return _ensure_tool_media((final.get("content") or "").strip(), messages), limit
 
     async def plan(self, user_id: int, text: str) -> dict[str, Any]:
         """Structured plan JSON → Redis (status pending) + marker для Telegram."""

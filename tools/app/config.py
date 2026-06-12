@@ -75,7 +75,11 @@ class Settings(BaseSettings):
     http_timeout: float = 20.0          # web_fetch / web_search
     ollama_timeout: float = 180.0       # CPU-інференс може бути повільним
     max_agent_iters: int = 5            # стеля ітерацій тул-лупа
-    computer_max_iters: int = 8         # окремо для AGENT_MODE=computer (багатокрокові задачі)
+    computer_max_iters: int = 12        # окремо для AGENT_MODE=computer (багатокрокові задачі)
+    # safe | standard | full — які tier computer-tools доступні (див. computer_profile.py).
+    computer_profile: str = "safe"
+    # Після ✅ — session trust: без confirm для T0/T1 (хв; 0 = вимкнено). cmp:YT = full trust.
+    computer_session_trust_minutes: int = 10
     fetch_max_chars: int = 6000         # обрізаємо сторінку, щоб не рознести контекст
     code_exec_timeout: float = 8.0
     # Circuit breaker Ollama: N підряд помилок → пауза cooldown секунд (fail-fast).
@@ -139,6 +143,12 @@ class Settings(BaseSettings):
     cursor_python_exe: str = "python"
     cursor_timeout: float = 900.0
     cursor_fallback_inbox: bool = True
+
+    # Continue.dev — VS Code + local agent API (tool continue_dev, Computer Use mode)
+    enable_continue_dev: bool = False
+    continue_dev_url: str = "http://host.docker.internal:65432"
+    continue_dev_timeout: float = 300.0
+    continue_vscode_cli: str = "code"
 
 
 settings = Settings()

@@ -85,6 +85,7 @@ class SeeRequest(BaseModel):
 
 class TrustRequest(BaseModel):
     user_id: int
+    full: bool = False
 
 
 class BgJobCreate(BaseModel):
