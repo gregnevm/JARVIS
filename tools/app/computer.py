@@ -262,6 +262,25 @@ async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = F
         except (TypeError, ValueError):
             return "invalid coordinates"
         return await _screen_click_impl(x, y)
+    if tool == "screen_type":
+        return await _screen_type_impl(
+            str(args.get("text", "")),
+            int(args.get("interval_ms", 0) or 0),
+        )
+    if tool == "screen_hotkey":
+        raw = args.get("keys", [])
+        keys = [str(k) for k in raw] if isinstance(raw, list) else []
+        return await _screen_hotkey_impl(keys)
+    if tool == "screen_scroll":
+        try:
+            clicks = int(args.get("clicks", 0))
+        except (TypeError, ValueError):
+            return "invalid clicks"
+        xv = args.get("x")
+        yv = args.get("y")
+        xi = int(xv) if xv is not None else None
+        yi = int(yv) if yv is not None else None
+        return await _screen_scroll_impl(clicks, xi, yi)
     if tool == "fs_write_bytes":
         raw = args.get("data_b64", "")
         try:
@@ -472,6 +491,67 @@ async def screen_click(x: int, y: int, *, user_id: int = 0) -> str:
     args = {"x": x, "y": y}
     return await wrap_execute(
         user_id, "screen_click", args, lambda: _screen_click_impl(x, y)
+    )
+
+
+async def _screen_type_impl(text: str, interval_ms: int = 0) -> str:
+    data = await _request(
+        "POST",
+        "/screen/type",
+        json={"text": text, "interval_ms": interval_ms},
+    )
+    if "error" in data:
+        return str(data["error"])
+    return f"Введено {data.get('chars', len(text))} символів ✅"
+
+
+async def screen_type(text: str, interval_ms: int = 0, *, user_id: int = 0) -> str:
+    args = {"text": text[:4000], "interval_ms": interval_ms}
+    return await wrap_execute(
+        user_id,
+        "screen_type",
+        args,
+        lambda: _screen_type_impl(text[:4000], interval_ms),
+    )
+
+
+async def _screen_hotkey_impl(keys: list[str]) -> str:
+    data = await _request("POST", "/screen/hotkey", json={"keys": keys})
+    if "error" in data:
+        return str(data["error"])
+    return f"Hotkey {data.get('keys', '+'.join(keys))} ✅"
+
+
+async def screen_hotkey(keys: list[str], *, user_id: int = 0) -> str:
+    args = {"keys": keys}
+    return await wrap_execute(
+        user_id, "screen_hotkey", args, lambda: _screen_hotkey_impl(keys)
+    )
+
+
+async def _screen_scroll_impl(clicks: int, x: int | None, y: int | None) -> str:
+    body: dict[str, Any] = {"clicks": clicks}
+    if x is not None and y is not None:
+        body["x"] = x
+        body["y"] = y
+    data = await _request("POST", "/screen/scroll", json=body)
+    if "error" in data:
+        return str(data["error"])
+    return f"Scroll {clicks} ✅"
+
+
+async def screen_scroll(
+    clicks: int, x: int | None = None, y: int | None = None, *, user_id: int = 0
+) -> str:
+    args: dict[str, Any] = {"clicks": clicks}
+    if x is not None and y is not None:
+        args["x"] = x
+        args["y"] = y
+    return await wrap_execute(
+        user_id,
+        "screen_scroll",
+        args,
+        lambda: _screen_scroll_impl(clicks, x, y),
     )
 
 
