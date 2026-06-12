@@ -25,6 +25,8 @@ _PATH_NORMALIZE = {
 
 
 def _normalize_client_path(path: str) -> str:
+    # f-string casts like {int(user_id)} → {user_id}
+    path = re.sub(r"\{int\((\w+)\)\}", r"{\1}", path)
     for var, template in _PATH_NORMALIZE.items():
         path = path.replace(f"{{{var}}}", template)
     return path

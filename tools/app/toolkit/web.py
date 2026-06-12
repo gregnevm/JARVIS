@@ -39,7 +39,7 @@ def _html_to_text(raw: str) -> str:
         main = (
             soup.find("article")
             or soup.find("main")
-            or soup.find(attrs={"role": "main"})
+            or soup.find(None, attrs={"role": "main"})
             or soup.find(id="content")
         )
         root = main if main is not None else soup.body or soup

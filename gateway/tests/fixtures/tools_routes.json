@@ -22,6 +22,7 @@
   "GET /orchestrator",
   "GET /reminders/ics",
   "GET /skills",
+  "GET /skills/active/{user_id}",
   "GET /skills/{skill_id}",
   "GET /subagents",
   "GET /tasks",
