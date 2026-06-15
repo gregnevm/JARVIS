@@ -177,6 +177,7 @@ _TOOL_STATUS = {
     "repo_tree": "🌳 дерево репо…",
     "repo_grep": "🔎 шукаю в коді…",
     "code_read": "📄 читаю рядки…",
+    "repo_symbols": "🧭 символи файлу…",
     "capture_screenshot": "📸 знімаю екран…",
     "see_screen": "👁 дивлюся на екран…",
     "browser_open": "🌐 браузер…",

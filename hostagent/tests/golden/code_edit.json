@@ -1,0 +1,32 @@
+[
+  {
+    "id": "add_docstring",
+    "mode": "search_replace",
+    "before": "def add(a, b):\n    return a + b\n",
+    "old_string": "def add(a, b):\n    return a + b",
+    "new_string": "def add(a, b):\n    \"\"\"Sum two numbers.\"\"\"\n    return a + b",
+    "after": "def add(a, b):\n    \"\"\"Sum two numbers.\"\"\"\n    return a + b\n"
+  },
+  {
+    "id": "rename_unique",
+    "mode": "search_replace",
+    "before": "x = 1\ny = 2\nz = x + y\n",
+    "old_string": "y = 2",
+    "new_string": "y = 20",
+    "after": "x = 1\ny = 20\nz = x + y\n"
+  },
+  {
+    "id": "diff_single_line",
+    "mode": "diff",
+    "before": "alpha\nbeta\ngamma\n",
+    "diff": "@@ -2 +2 @@\n alpha\n-beta\n+BETA\n gamma\n",
+    "after": "alpha\nBETA\ngamma\n"
+  },
+  {
+    "id": "diff_multi_hunk_repeated_context",
+    "mode": "diff",
+    "before": "alpha\nbeta\ngamma\n",
+    "diff": "@@ -1 +1 @@\n-alpha\n+beta\n@@ -2 +2 @@\n-beta\n+BETA\n",
+    "after": "beta\nBETA\ngamma\n"
+  }
+]

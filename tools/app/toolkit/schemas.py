@@ -346,7 +346,23 @@ _CODE_EDIT_SCHEMA = _schema(
     ["path"],
 )
 
-_CODING_SCHEMAS = [_REPO_TREE_SCHEMA, _REPO_GREP_SCHEMA, _CODE_READ_SCHEMA]
+_REPO_SYMBOLS_SCHEMA = _schema(
+    "repo_symbols",
+    "Outline визначень файлу (класи/функції/імпорти з номерами рядків, без тіл). "
+    "Python — точний ast; інші мови — regex-евристика. Дешевше за читання всього файлу.",
+    {
+        "path": {**_STR, "description": "абсолютний шлях до файлу на хості"},
+        "pattern": {**_STR, "description": "regex-фільтр за іменем символу (необов'язково)"},
+    },
+    ["path"],
+)
+
+_CODING_SCHEMAS = [
+    _REPO_TREE_SCHEMA,
+    _REPO_GREP_SCHEMA,
+    _CODE_READ_SCHEMA,
+    _REPO_SYMBOLS_SCHEMA,
+]
 
 _MCP_CALL_SCHEMA = _schema(
     "mcp_call",

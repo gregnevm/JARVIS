@@ -2,9 +2,10 @@
 
 Read-only інтелект про репозиторій поверх host-agent FS — НЕ мутує код:
 
-* ``repo_tree``  (CA-2.1) — gitignore-aware дерево файлів (через ``rg --files``).
-* ``repo_grep``  (CA-2.2) — ripgrep по workspace з лімітом результатів.
-* ``code_read``  (CA-1.4) — читання файлу з line-range (економія токенів vs весь файл).
+* ``repo_tree``    (CA-2.1) — gitignore-aware дерево файлів (через ``rg --files``).
+* ``repo_grep``    (CA-2.2) — ripgrep по workspace з лімітом результатів.
+* ``code_read``    (CA-1.4) — читання файлу з line-range (економія токенів vs весь файл).
+* ``repo_symbols`` (CA-2.3) — outline символів файлу (Python ``ast``; regex-фолбек для решти).
 
 **Безпека.** Усі три рідуть на тому самому trust-кордоні, що `run_cli`/`fs_read`:
 owner-gate (`COMPUTER_OWNER_USER_IDS`) + `ENABLE_COMPUTER_USE` — перевіряється у
@@ -18,6 +19,7 @@ hidden/.gitignore, АЛЕ `rg -g '.env'` РЕ-ВКЛЮЧАЄ ignored-файл �
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from ..config import settings
@@ -225,3 +227,108 @@ async def code_read(
     trunc = " [обрізано host-agent]" if data.get("truncated") else ""
     header = f"Файл {data.get('path', target)} рядки {start}–{end} з {n}{trunc}"
     return _clip(f"{header}\n" + "\n".join(numbered))
+
+
+# --- repo_symbols (CA-2.3) ---------------------------------------------------
+
+def _py_symbols(content: str) -> list[str]:
+    """Outline .py-файлу через stdlib ``ast`` (точно: сигнатури, вкладеність, рядки)."""
+    import ast
+
+    tree = ast.parse(content)
+    out: list[str] = []
+    imports: list[str] = []
+
+    def sig(node: ast.AST, depth: int) -> None:
+        pad = "  " * depth
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            kw = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
+            try:
+                argstr = ast.unparse(node.args)
+            except Exception:
+                argstr = "…"
+            ret = ""
+            if node.returns is not None:
+                try:
+                    ret = f" -> {ast.unparse(node.returns)}"
+                except Exception:
+                    ret = ""
+            out.append(f"L{node.lineno}\t{pad}{kw} {node.name}({argstr}){ret}")
+        elif isinstance(node, ast.ClassDef):
+            try:
+                bases = ", ".join(ast.unparse(b) for b in node.bases)
+            except Exception:
+                bases = ""
+            head = f"{node.name}({bases})" if bases else node.name
+            out.append(f"L{node.lineno}\t{pad}class {head}")
+        for child in getattr(node, "body", []):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                sig(child, depth + 1)
+
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            imports += [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            imports += [f"{mod}.{a.name}" for a in node.names]
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            sig(node, 0)
+    if imports:
+        out.append("imports: " + ", ".join(imports[:40]))
+    return out
+
+
+# Regex-фолбек для не-Python (одне визначення на рядок; евристика, не парсер).
+_DEF_RE = re.compile(
+    r"^\s*(?:export\s+)?(?:default\s+)?(?:public\s+|private\s+|protected\s+|static\s+)*"
+    r"(?:async\s+)?(?:function|func|class|interface|type|struct|enum|def|fn|impl|trait)\b"
+    r".*",
+)
+
+
+def _regex_symbols(content: str) -> list[str]:
+    out: list[str] = []
+    for i, line in enumerate(content.splitlines(), start=1):
+        if _DEF_RE.match(line):
+            out.append(f"L{i}\t{line.strip()[:160]}")
+    return out
+
+
+async def repo_symbols(path: str, *, pattern: str = "", user_id: int = 0) -> str:
+    msg = _disabled_message()
+    if msg:
+        return msg
+    target = (path or "").strip()
+    if not target:
+        return "path обов'язковий для repo_symbols."
+
+    from ..computer import _request
+
+    data = await _request("GET", "/fs/read", params={"path": target})
+    if "error" in data:
+        return str(data["error"])
+    content = str(data.get("content", ""))
+
+    is_py = target.lower().endswith((".py", ".pyi"))
+    if is_py:
+        try:
+            symbols = _py_symbols(content)
+        except SyntaxError as exc:
+            return f"repo_symbols: не вдалося розпарсити Python ({exc.msg}, рядок {exc.lineno})."
+    else:
+        symbols = _regex_symbols(content)
+
+    pat = (pattern or "").strip()
+    if pat:
+        try:
+            rx = re.compile(pat)
+            symbols = [s for s in symbols if rx.search(s)]
+        except re.error as exc:
+            return f"repo_symbols: невалідний pattern ({exc})."
+
+    if not symbols:
+        kind = "Python ast" if is_py else "regex"
+        return f"repo_symbols ({kind}): символів не знайдено у {target}."
+    kind = "ast" if is_py else "regex"
+    header = f"Символи {data.get('path', target)} ({kind}, {len(symbols)}):"
+    return _clip(f"{header}\n" + "\n".join(symbols))

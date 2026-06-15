@@ -186,3 +186,60 @@ async def test_code_read_start_beyond_eof(coding_enabled: None) -> None:
 async def test_code_read_requires_path(coding_enabled: None) -> None:
     out = await coding_tools.code_read("", user_id=1)
     assert "path" in out.lower()
+
+
+# --- repo_symbols ------------------------------------------------------------
+
+_PY_SAMPLE = (
+    "import os\n"
+    "from typing import Any\n"
+    "\n"
+    "class Foo(Base):\n"
+    "    def method(self, x: int) -> str:\n"
+    "        return str(x)\n"
+    "\n"
+    "async def helper(a, b=1):\n"
+    "    return a\n"
+)
+
+
+async def test_repo_symbols_python_ast(coding_enabled: None) -> None:
+    with _patch_request({"path": "m.py", "content": _PY_SAMPLE}) as req:
+        out = await coding_tools.repo_symbols("m.py", user_id=1)
+    assert req.await_args.kwargs["params"] == {"path": "m.py"}
+    assert "(ast," in out
+    assert "class Foo(Base)" in out
+    assert "def method(self, x: int) -> str" in out
+    assert "async def helper(a, b=1)" in out
+    assert "imports:" in out and "os" in out and "typing.Any" in out
+
+
+async def test_repo_symbols_pattern_filter(coding_enabled: None) -> None:
+    with _patch_request({"path": "m.py", "content": _PY_SAMPLE}):
+        out = await coding_tools.repo_symbols("m.py", pattern="helper", user_id=1)
+    assert "helper" in out and "method" not in out
+
+
+async def test_repo_symbols_syntax_error(coding_enabled: None) -> None:
+    with _patch_request({"path": "bad.py", "content": "def (:\n"}):
+        out = await coding_tools.repo_symbols("bad.py", user_id=1)
+    assert "розпарсити" in out.lower() or "syntax" in out.lower()
+
+
+async def test_repo_symbols_regex_fallback_for_js(coding_enabled: None) -> None:
+    js = "export function foo() {}\nclass Bar {}\nconst x = 1\n"
+    with _patch_request({"path": "a.js", "content": js}):
+        out = await coding_tools.repo_symbols("a.js", user_id=1)
+    assert "(regex," in out
+    assert "function foo" in out and "class Bar" in out
+    assert "const x = 1" not in out  # не визначення
+
+
+async def test_repo_symbols_requires_path(coding_enabled: None) -> None:
+    out = await coding_tools.repo_symbols("", user_id=1)
+    assert "path" in out.lower()
+
+
+async def test_repo_symbols_in_schema(coding_enabled: None) -> None:
+    names = [s["function"]["name"] for s in toolkit.agent_tool_schemas(computer=True)]
+    assert "repo_symbols" in names

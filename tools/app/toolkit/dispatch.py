@@ -413,6 +413,16 @@ async def _h_code_read(args: dict[str, Any], uid: int) -> str:
     )
 
 
+async def _h_repo_symbols(args: dict[str, Any], uid: int) -> str:
+    from ..tools.coding_tools import repo_symbols
+
+    return await repo_symbols(
+        str(args.get("path") or ""),
+        pattern=str(args.get("pattern") or ""),
+        user_id=uid,
+    )
+
+
 _HANDLERS: dict[str, Handler] = {
     "calc": _h_calc,
     "web_search": _h_web_search,
@@ -463,11 +473,12 @@ _HANDLERS: dict[str, Handler] = {
     "repo_tree": _h_repo_tree,
     "repo_grep": _h_repo_grep,
     "code_read": _h_code_read,
+    "repo_symbols": _h_repo_symbols,
 }
 
 _CONTINUE_DEV_TOOLS = frozenset({"continue_dev"})
 # Owner-gated як continue_dev: ходять через host-agent FS (той самий computer-кордон).
-_CODING_TOOLS = frozenset({"repo_tree", "repo_grep", "code_read"})
+_CODING_TOOLS = frozenset({"repo_tree", "repo_grep", "code_read", "repo_symbols"})
 
 
 async def dispatch(
