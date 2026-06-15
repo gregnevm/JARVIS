@@ -1,0 +1,42 @@
+[
+  {
+    "id": "broken_test_fixed_to_green",
+    "user": "полагодь падіння в tests/test_auth.py",
+    "no_progress_repeats": 2,
+    "turns": [
+      {"tool": "run_tests", "args": {"exe": "pytest", "args": ["-k", "test_expiry"]}},
+      {"tool": "code_edit", "args": {"path": "app/auth.py", "old": "ttl = 0", "new": "ttl = 3600"}},
+      {"tool": "run_tests", "args": {"exe": "pytest", "args": ["-k", "test_expiry"]}},
+      {"final": "Полагодив: test_expiry тепер зелений (ttl=3600). Diff застосовано."}
+    ],
+    "tool_results": [
+      "pytest ❌ FAIL — passed=3 failed=1 errors=0 skipped=0 (exit 1)\nfailed:\n  tests/test_auth.py::test_expiry\n---\nassert token.expired is True",
+      "✅ Застосовано diff до app/auth.py (1 hunk). revert: .jarvis_backup/auth.py.1700000000.bak",
+      "pytest ✅ PASS — passed=4 failed=0 errors=0 skipped=0 (exit 0)"
+    ],
+    "expect_final_substr": "зелений",
+    "expect_iters": 4,
+    "expect_tools": ["run_tests", "code_edit", "run_tests"],
+    "expect_stop_note": false
+  },
+  {
+    "id": "stuck_same_fail_honest_report",
+    "user": "полагодь падіння в tests/test_auth.py",
+    "no_progress_repeats": 2,
+    "turns": [
+      {"tool": "run_tests", "args": {"exe": "pytest", "args": ["-k", "test_expiry"]}},
+      {"tool": "code_edit", "args": {"path": "app/auth.py", "old": "ttl = 0", "new": "ttl = -1"}},
+      {"tool": "run_tests", "args": {"exe": "pytest", "args": ["-k", "test_expiry"]}},
+      {"final": "Не зміг полагодити test_expiry — той самий fail двічі, застряг."}
+    ],
+    "tool_results": [
+      "pytest ❌ FAIL — passed=3 failed=1 errors=0 skipped=0 (exit 1)\nfailed:\n  tests/test_auth.py::test_expiry\n---\nassert token.expired is True",
+      "✅ Застосовано diff до app/auth.py (1 hunk). revert: .jarvis_backup/auth.py.1700000001.bak",
+      "pytest ❌ FAIL — passed=3 failed=1 errors=0 skipped=0 (exit 1)\nfailed:\n  tests/test_auth.py::test_expiry\n---\nassert token.expired is True"
+    ],
+    "expect_final_substr": "застряг",
+    "expect_iters": 3,
+    "expect_tools": ["run_tests", "code_edit", "run_tests"],
+    "expect_stop_note": true
+  }
+]
