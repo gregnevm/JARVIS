@@ -202,8 +202,8 @@ async def projects_get(
     if include_content:
         proj["files_content"] = await app.state.db.read_project_files_content(
             project_id,
-            max_total_chars=settings.project_files_max_total_chars,
-            max_per_file=settings.project_files_max_per_file,
+            max_total_tokens=settings.project_files_max_total_tokens,
+            max_per_file_tokens=settings.project_files_max_per_file_tokens,
         )
     return proj
 

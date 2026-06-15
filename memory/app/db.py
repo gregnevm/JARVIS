@@ -6,6 +6,8 @@ from typing import Any
 
 import asyncpg
 
+from .budget import fit_token_budget
+
 logger = logging.getLogger("jarvis.memory.db")
 
 
@@ -308,28 +310,25 @@ class DB:
         self,
         project_id: int,
         *,
-        max_total_chars: int = 12000,
-        max_per_file: int = 4000,
+        max_total_tokens: int = 3000,
+        max_per_file_tokens: int = 1200,
     ) -> list[dict[str, str]]:
-        """Повертає вміст файлів проєкту для інжекту в system prompt агента."""
+        """Вміст файлів проєкту для інжекту в system prompt під ТОКЕН-бюджет (CA-2.5).
+
+        Релевантність дають RAG-чанки (CA-2.4); тут — лише сукупна стеля обсягу."""
         async with self.pool.acquire() as con:
             rows = await con.fetch(
                 "SELECT name, content FROM project_files "
                 "WHERE project_id=$1 ORDER BY created_at ASC",
                 project_id,
             )
-        out: list[dict[str, str]] = []
-        budget = max(0, max_total_chars)
-        for r in rows:
-            if budget <= 0:
-                break
-            name = str(r["name"] or "file")
-            raw = str(r["content"] or "")
-            per_cap = min(max_per_file, budget)
-            if len(raw) > per_cap:
-                content = raw[:per_cap] + "…[truncated]"
-            else:
-                content = raw
-            out.append({"name": name, "content": content})
-            budget -= len(content)
-        return out
+        items = [
+            {"name": str(r["name"] or "file"), "content": str(r["content"] or "")}
+            for r in rows
+        ]
+        return fit_token_budget(
+            items,
+            max_total_tokens=max_total_tokens,
+            max_per_item_tokens=max_per_file_tokens,
+            key="content",
+        )

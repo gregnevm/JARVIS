@@ -24,8 +24,10 @@ class Settings(BaseSettings):
     embed_cache_ttl: int = 86400  # 24 год
 
     # Ліміти контексту project files для агента (GET ?include_content=true).
-    project_files_max_total_chars: int = 12000
-    project_files_max_per_file: int = 4000
+    # CA-2.5: токен-бюджет (≈4 симв/токен) замість char-ліміту — передбачувано
+    # під вікно контексту. ~3000 токенів сукупно, ~1200 на файл.
+    project_files_max_total_tokens: int = 3000
+    project_files_max_per_file_tokens: int = 1200
     # CA-2.4: індексувати project-файли у scoped RAG (embed чанків при add/reindex).
     index_project_files: bool = True
 

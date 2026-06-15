@@ -74,7 +74,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 |----------|--------|----------|
 | Виконання команд/тестів | **7/10** | computer mode PS/CLI працює; немає coding-специфічного тест-лупа |
 | Редагування файлів | **7/10** | `code_edit` diff/apply (search_replace+unified diff) + git-safety `.jarvis_backup`; бракує лише транзакційного multi-file (CA-4.3) |
-| Repo-контекст | **4/10** | scoped RAG по project_id; немає дерева/symbol-графа |
+| Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
 | Self-review | **4/10** | P9 teams (Reviewer) є як bg job, не в coding-лупі |
 | UX (coding-специфічний) | **3/10** | Workbench загальний; немає diff-viewer, repo-tree, test-panel |
@@ -87,7 +87,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 |---|-----|-------|
 | ~~CB1~~ ✅ | ~~Немає `code_edit` (diff/apply)~~ → `code_edit` (search_replace+diff, confirm, diff-preview) | Закрито (CA-1.1/1.2) |
 | ~~CB2~~ ✅ | ~~Немає git-safety~~ → `.jarvis_backup/<name>.<ts>.bak` перед кожним записом | Закрито (CA-1.3) |
-| CB3 | Repo-контекст плоский (RAG), немає дерева/symbol-графа | Агент «не бачить» структуру проєкту |
+| CB3↓ | Repo-контекст: дерево/grep/symbol-outline + scoped-RAG індекс project-файлів є; лишається крос-файловий symbol-граф (CA-4.5) | Структура файлу видима; крос-файлові залежності — ще ні |
 | CB4 | Тест-луп не первинна операція (через generic PS) | Немає структурованого fail→fix циклу |
 | CB5 | Planning не coding-специфічний (немає file-targets у кроках) | План не прив'язаний до файлів |
 | CB6 | Немає diff-viewer / repo-tree / test-panel у Platform | Огляд правок лише через текст |
@@ -145,8 +145,8 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | CA-2.1 | `repo_tree` tool — дерево файлів (gitignore-aware, ліміт глибини/entries) | JSON для моделі | [x] `coding_tools.repo_tree` (`rg --files`, depth/entries cap) |
 | CA-2.2 | `repo_grep` / `repo_find` — ripgrep-обгортка по workspace | Read-only, ліміт результатів | [x] `coding_tools.repo_grep` (rg, `-g` glob, result cap) |
 | CA-2.3 | Symbol-граф (ctags/tree-sitter) — функції/класи/імпорти | Опційно per-language | [x] `repo_symbols` — Python `ast` (точно), regex-фолбек для решти |
-| CA-2.4 | Scoped RAG по project root (індексація файлів проєкту, не лише чату) | Reuse `project_id` embed | [ ] |
-| CA-2.5 | Context-budget: вибірка релевантних файлів під ліміт токенів | Як P1.7 (12k budget) для коду | [ ] |
+| CA-2.4 | Scoped RAG по project root (індексація файлів проєкту, не лише чату) | Reuse `project_id` embed | [x] embed project-файлів на add + `POST /projects/{id}/reindex` |
+| CA-2.5 | Context-budget: вибірка релевантних файлів під ліміт токенів | Як P1.7 (12k budget) для коду | [x] `memory/app/budget.py` token-бюджет; релевантність — RAG (CA-2.4) |
 
 **Вихід CA-2:** агент відповідає «де визначено `AgentRunner`?» і підтягує правильні файли в контекст.
 
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-15 | 1.4 | CA-2.4 scoped-RAG індекс project-файлів (embed+reindex) + CA-2.5 token-бюджет (`budget.py`) |
 | 2026-06-15 | 1.3 | CA-2.3 `repo_symbols` (Python ast + regex-фолбек) + CA-1.6 golden trace (apply/revert) |
 | 2026-06-15 | 1.2 | CA-1.1/1.2/1.3/1.5 done — `code_edit` (search_replace+diff) через host-agent `/fs/edit`, confirm-tier T1, git-safety `.jarvis_backup/` |
 | 2026-06-15 | 1.1 | CA-1.4/CA-2.1/CA-2.2 done — `coding_tools.py` (repo_tree/repo_grep/code_read), read-only, `ENABLE_CODING_TOOLS` |
