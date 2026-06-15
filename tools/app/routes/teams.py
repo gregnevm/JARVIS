@@ -67,7 +67,7 @@ def register(router: APIRouter) -> None:
         return {"teams": await teams.list_teams(user_id, limit), "user_id": user_id}
 
     @router.get("/teams/{team_id}")
-    async def teams_get_ep(team_id: str) -> dict[str, Any]:
+    async def teams_get_ep(team_id: str, user_id: int) -> dict[str, Any]:
         from .. import teams
 
-        return require_found(await teams.get_team(team_id), detail="team not found")
+        return require_found(await teams.get_team(team_id, user_id), detail="team not found")

@@ -61,6 +61,17 @@ async def test_create_and_get(monkeypatch: pytest.MonkeyPatch):
     assert got["payload"]["text"] == "hello agent"
 
 
+async def test_get_job_ownership_blocks_cross_user(monkeypatch: pytest.MonkeyPatch):
+    """IDOR-гейт (SAAS_DEEP_DIVE §4.0): чужий user_id → None, власник → rec,
+    без user_id (системний/worker доступ) → rec."""
+    _inject(monkeypatch)
+    rec = await bg_jobs.create_job(42, "secret task", "agent")
+    job_id = rec["id"]
+    assert (await bg_jobs.get_job(job_id, 42)) is not None  # власник
+    assert (await bg_jobs.get_job(job_id, 999)) is None  # чужий — IDOR заблоковано
+    assert (await bg_jobs.get_job(job_id)) is not None  # системний доступ збережено
+
+
 async def test_dequeue_and_finish(monkeypatch: pytest.MonkeyPatch):
     _inject(monkeypatch)
     rec = await bg_jobs.create_job(1, "task", "auto")

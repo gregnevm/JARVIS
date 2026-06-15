@@ -32,8 +32,8 @@ ROLE_PROMPTS: dict[str, str] = {
 }
 
 
-async def get_team(team_id: str) -> dict[str, Any] | None:
-    return await _STORE.get(team_id)
+async def get_team(team_id: str, user_id: int | None = None) -> dict[str, Any] | None:
+    return await _STORE.get(team_id, owner_user_id=user_id)
 
 
 async def create_team(

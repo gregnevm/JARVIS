@@ -45,8 +45,8 @@ def parse_critic_verdict(text: str) -> dict[str, Any]:
     return {"approved": False, "issues": [text[:300]], "feedback": text[:500]}
 
 
-async def get_run(run_id: str) -> dict[str, Any] | None:
-    return await _STORE.get(run_id)
+async def get_run(run_id: str, user_id: int | None = None) -> dict[str, Any] | None:
+    return await _STORE.get(run_id, owner_user_id=user_id)
 
 
 async def create_run(

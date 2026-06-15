@@ -65,10 +65,10 @@ def register(router: APIRouter) -> None:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @router.get("/agent/plan/{plan_id}")
-    async def agent_plan_get(plan_id: str) -> dict[str, Any]:
+    async def agent_plan_get(plan_id: str, user_id: int) -> dict[str, Any]:
         from .. import plans
 
-        return require_found(await plans.get_plan(plan_id), detail="plan not found")
+        return require_found(await plans.get_plan(plan_id, user_id), detail="plan not found")
 
     @router.get("/agent/plans")
     async def agent_plans_list(user_id: int, limit: int = 20) -> dict[str, Any]:

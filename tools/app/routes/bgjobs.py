@@ -48,10 +48,10 @@ def register(router: APIRouter) -> None:
         return {"job": job}
 
     @router.get("/bgjobs/{job_id}")
-    async def bgjobs_get(job_id: str) -> dict[str, Any]:
+    async def bgjobs_get(job_id: str, user_id: int) -> dict[str, Any]:
         from .. import bg_jobs
 
-        return require_found(await bg_jobs.get_job(job_id), detail="job not found")
+        return require_found(await bg_jobs.get_job(job_id, user_id), detail="job not found")
 
     @router.delete("/bgjobs/{job_id}")
     async def bgjobs_cancel(job_id: str, user_id: int) -> dict[str, Any]:

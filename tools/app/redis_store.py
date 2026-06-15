@@ -45,7 +45,13 @@ class RedisIndexedStore:
             **kwargs,
         )
 
-    async def get(self, doc_id: str) -> dict[str, Any] | None:
+    async def get(self, doc_id: str, *, owner_user_id: int | None = None) -> dict[str, Any] | None:
+        """Дістати документ за id.
+
+        Якщо `owner_user_id` задано — повертає None, коли `rec["user_id"]` не збігається
+        (ownership-гейт проти IDOR; див. SAAS_DEEP_DIVE §4.0). Default None зберігає
+        системний доступ для внутрішніх викликів (worker: finish/dequeue/progress).
+        """
         raw = await get_redis().get(self._key(doc_id))
         if not raw:
             return None
@@ -53,7 +59,11 @@ class RedisIndexedStore:
             data = json.loads(raw)
         except json.JSONDecodeError:
             return None
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return None
+        if owner_user_id is not None and int(data.get("user_id", 0)) != int(owner_user_id):
+            return None
+        return data
 
     async def index_append(self, user_id: int, doc_id: str) -> None:
         r = get_redis()

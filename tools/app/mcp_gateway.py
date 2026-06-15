@@ -64,51 +64,54 @@ class _McpSession:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
             env=env,
+            limit=8 * 1024 * 1024,  # великі tools/list-відповіді не повинні впиратись у 64 КБ readline
         )
-        await self._rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "jarvis", "version": "1.0"}})
-        await self._rpc("notifications/initialized", {})
+        # MCP stdio handshake: initialize (request) → initialized (notification).
+        # Викликаємо raw-варіанти: _ensure уже працює під self._lock (asyncio.Lock не реентрантний).
+        await self._rpc_raw(
+            "initialize",
+            {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "jarvis", "version": "1.0"}},
+        )
+        await self._rpc_raw("notifications/initialized", {}, notify=True)
 
     async def _read_message(self) -> dict[str, Any]:
+        # MCP stdio = JSON-RPC по одному повідомленню на рядок (newline-delimited, без Content-Length).
         assert self._proc and self._proc.stdout
-        header = b""
-        while b"\r\n\r\n" not in header:
-            chunk = await asyncio.wait_for(self._proc.stdout.read(1), timeout=_MCP_TIMEOUT)
-            if not chunk:
+        while True:
+            line = await asyncio.wait_for(self._proc.stdout.readline(), timeout=_MCP_TIMEOUT)
+            if not line:
                 raise RuntimeError("MCP stdout closed")
-            header += chunk
-        lines = header.decode("ascii", errors="replace").split("\r\n")
-        length = 0
-        for line in lines:
-            if line.lower().startswith("content-length:"):
-                length = int(line.split(":", 1)[1].strip())
-        body = b""
-        while len(body) < length:
-            chunk = await asyncio.wait_for(self._proc.stdout.read(length - len(body)), timeout=_MCP_TIMEOUT)
-            if not chunk:
-                break
-            body += chunk
-        return json.loads(body.decode("utf-8"))
+            line = line.strip()
+            if line:
+                return json.loads(line.decode("utf-8"))
 
     async def _write_message(self, msg: dict[str, Any]) -> None:
         assert self._proc and self._proc.stdin
-        data = json.dumps(msg, ensure_ascii=False).encode("utf-8")
-        frame = f"Content-Length: {len(data)}\r\n\r\n".encode("ascii") + data
-        self._proc.stdin.write(frame)
+        # ensure_ascii=False лишає Unicode; json.dumps не вставляє \n всередині → одне повідомлення = один рядок.
+        data = json.dumps(msg, ensure_ascii=False).encode("utf-8") + b"\n"
+        self._proc.stdin.write(data)
         await self._proc.stdin.drain()
+
+    async def _rpc_raw(self, method: str, params: dict[str, Any] | None = None, *, notify: bool = False) -> Any:
+        """Один JSON-RPC обмін без локу/handshake — викликати лише з-під self._lock."""
+        if notify:
+            await self._write_message({"jsonrpc": "2.0", "method": method, "params": params or {}})
+            return None
+        self._req_id += 1
+        rid = self._req_id
+        await self._write_message({"jsonrpc": "2.0", "id": rid, "method": method, "params": params or {}})
+        while True:
+            resp = await self._read_message()
+            if resp.get("id") == rid:
+                if "error" in resp:
+                    raise RuntimeError(str(resp["error"]))
+                return resp.get("result")
+            # чужий id / нотифікація сервера — пропускаємо
 
     async def _rpc(self, method: str, params: dict[str, Any] | None = None) -> Any:
         async with self._lock:
             await self._ensure()
-            self._req_id += 1
-            rid = self._req_id
-            await self._write_message({"jsonrpc": "2.0", "id": rid, "method": method, "params": params or {}})
-            while True:
-                resp = await self._read_message()
-                if resp.get("id") == rid:
-                    if "error" in resp:
-                        raise RuntimeError(str(resp["error"]))
-                    return resp.get("result")
-                # notification — skip
+            return await self._rpc_raw(method, params)
 
     async def list_tools(self) -> list[dict[str, Any]]:
         result = await self._rpc("tools/list")

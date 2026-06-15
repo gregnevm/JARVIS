@@ -18,8 +18,8 @@ _STORE = RedisIndexedStore(
 _QUEUE = "jarvis:bgjob:queue"
 
 
-async def get_job(job_id: str) -> dict[str, Any] | None:
-    return await _STORE.get(job_id)
+async def get_job(job_id: str, user_id: int | None = None) -> dict[str, Any] | None:
+    return await _STORE.get(job_id, owner_user_id=user_id)
 
 
 async def create_job(user_id: int, text: str, mode: str = "auto") -> dict[str, Any]:

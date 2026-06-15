@@ -19,8 +19,8 @@ _VALID_STATUS = frozenset(
 )
 
 
-async def get_plan(plan_id: str) -> dict[str, Any] | None:
-    return await _STORE.get(plan_id)
+async def get_plan(plan_id: str, user_id: int | None = None) -> dict[str, Any] | None:
+    return await _STORE.get(plan_id, owner_user_id=user_id)
 
 
 def _normalize_steps(steps: list[Any]) -> list[dict[str, Any]]:

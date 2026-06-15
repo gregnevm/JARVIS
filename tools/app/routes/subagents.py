@@ -49,11 +49,11 @@ def register(router: APIRouter) -> None:
         return {"runs": await subagents.list_runs(user_id, limit), "user_id": user_id}
 
     @router.get("/subagents/{run_id}")
-    async def subagents_get_ep(run_id: str) -> dict[str, Any]:
+    async def subagents_get_ep(run_id: str, user_id: int) -> dict[str, Any]:
         from .. import subagents
 
         return require_found(
-            await subagents.get_run(run_id), detail="subagent run not found"
+            await subagents.get_run(run_id, user_id), detail="subagent run not found"
         )
 
     @router.post("/subagents/run")

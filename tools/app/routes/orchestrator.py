@@ -75,9 +75,9 @@ def register(router: APIRouter) -> None:
         return {"runs": await orchestrator.list_runs(user_id, limit), "user_id": user_id}
 
     @router.get("/orchestrator/{run_id}")
-    async def orchestrator_get_ep(run_id: str) -> dict[str, Any]:
+    async def orchestrator_get_ep(run_id: str, user_id: int) -> dict[str, Any]:
         from .. import orchestrator
 
         return require_found(
-            await orchestrator.get_run(run_id), detail="orchestrator run not found"
+            await orchestrator.get_run(run_id, user_id), detail="orchestrator run not found"
         )
