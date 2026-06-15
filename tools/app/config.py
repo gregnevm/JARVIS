@@ -150,5 +150,13 @@ class Settings(BaseSettings):
     continue_dev_timeout: float = 300.0
     continue_vscode_cli: str = "code"
 
+    # Native coding-agent tools (Стовп B / CODING_AGENT_ROADMAP CA-1.4, CA-2.1, CA-2.2).
+    # Read-only repo intelligence (repo_tree/repo_grep/code_read) поверх host-agent FS —
+    # рідуть на ENABLE_COMPUTER_USE + owner gate. Дефолт false (нова фіча за прапором).
+    enable_coding_tools: bool = False
+    # Стелі для repo-інструментів (захист контексту/хоста).
+    coding_tree_max_entries: int = 300
+    coding_grep_max_results: int = 60
+
 
 settings = Settings()

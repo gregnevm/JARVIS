@@ -290,6 +290,44 @@ _CONTINUE_DEV_SCHEMA = _schema(
     ["action"],
 )
 
+_REPO_TREE_SCHEMA = _schema(
+    "repo_tree",
+    "Дерево файлів репозиторію (gitignore-aware, без .git/hidden). Для огляду "
+    "структури проєкту перед редагуванням.",
+    {
+        "path": {**_STR, "description": "корінь репо (абсолютний шлях на хості)"},
+        "max_depth": {"type": "integer", "description": "макс. глибина (1–8, default 3)"},
+    },
+    ["path"],
+)
+
+_REPO_GREP_SCHEMA = _schema(
+    "repo_grep",
+    "Пошук по коду (ripgrep, read-only, без .git/hidden/.gitignore). Повертає "
+    "file:line:match. Краще за fs_read для знаходження визначень/використань.",
+    {
+        "pattern": {**_STR, "description": "regex/підрядок для пошуку"},
+        "path": {**_STR, "description": "корінь пошуку (default '.')"},
+        "glob": {**_STR, "description": "фільтр файлів, напр. '*.py' (необов'язково)"},
+        "max_results": {"type": "integer", "description": "ліміт рядків (default 60)"},
+    },
+    ["pattern"],
+)
+
+_CODE_READ_SCHEMA = _schema(
+    "code_read",
+    "Прочитати файл із діапазоном рядків (start_line..end_line, 1-based). Економить "
+    "токени проти читання всього файлу; повертає пронумеровані рядки.",
+    {
+        "path": {**_STR, "description": "абсолютний шлях до файлу на хості"},
+        "start_line": {"type": "integer", "description": "перший рядок (1-based, default 1)"},
+        "end_line": {"type": "integer", "description": "останній рядок (default — кінець)"},
+    },
+    ["path"],
+)
+
+_CODING_SCHEMAS = [_REPO_TREE_SCHEMA, _REPO_GREP_SCHEMA, _CODE_READ_SCHEMA]
+
 _MCP_CALL_SCHEMA = _schema(
     "mcp_call",
     "Виклик інструменту зовнішнього MCP-сервера (allowlist у .env).",
@@ -367,6 +405,8 @@ def agent_tool_schemas(*, computer: bool = False, allow_computer: bool = True) -
                 schemas.append(_CURSOR_TASK_SCHEMA)
             if settings.enable_continue_dev:
                 schemas.append(_CONTINUE_DEV_SCHEMA)
+            if settings.enable_coding_tools:
+                schemas.extend(_CODING_SCHEMAS)
             schemas.extend(_COMPUTER_SCHEMAS)
             schemas.append(_CLIPBOARD_READ_SCHEMA)
             schemas.append(_CLIPBOARD_WRITE_SCHEMA)

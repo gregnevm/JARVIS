@@ -359,6 +359,46 @@ async def _h_continue_dev(args: dict[str, Any], uid: int) -> str:
     )
 
 
+def _as_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _h_repo_tree(args: dict[str, Any], uid: int) -> str:
+    from ..tools.coding_tools import repo_tree
+
+    return await repo_tree(
+        str(args.get("path") or ""),
+        max_depth=_as_int(args.get("max_depth")) or 3,
+        user_id=uid,
+    )
+
+
+async def _h_repo_grep(args: dict[str, Any], uid: int) -> str:
+    from ..tools.coding_tools import repo_grep
+
+    return await repo_grep(
+        str(args.get("pattern") or ""),
+        path=str(args.get("path") or ""),
+        glob=str(args.get("glob") or ""),
+        max_results=_as_int(args.get("max_results")),
+        user_id=uid,
+    )
+
+
+async def _h_code_read(args: dict[str, Any], uid: int) -> str:
+    from ..tools.coding_tools import code_read
+
+    return await code_read(
+        str(args.get("path") or ""),
+        start_line=_as_int(args.get("start_line")),
+        end_line=_as_int(args.get("end_line")),
+        user_id=uid,
+    )
+
+
 _HANDLERS: dict[str, Handler] = {
     "calc": _h_calc,
     "web_search": _h_web_search,
@@ -405,9 +445,14 @@ _HANDLERS: dict[str, Handler] = {
     "spawn_subagent": _h_spawn_subagent,
     "cursor_task": _h_cursor_task,
     "continue_dev": _h_continue_dev,
+    "repo_tree": _h_repo_tree,
+    "repo_grep": _h_repo_grep,
+    "code_read": _h_code_read,
 }
 
 _CONTINUE_DEV_TOOLS = frozenset({"continue_dev"})
+# Owner-gated як continue_dev: ходять через host-agent FS (той самий computer-кордон).
+_CODING_TOOLS = frozenset({"repo_tree", "repo_grep", "code_read"})
 
 
 async def dispatch(
@@ -418,7 +463,7 @@ async def dispatch(
     allow_computer: bool = True,
 ) -> str:
     """Викликає інструмент за іменем. Помилки повертаються текстом (модель їх читає)."""
-    if name in COMPUTER_TOOL_NAMES or name in _CONTINUE_DEV_TOOLS:
+    if name in COMPUTER_TOOL_NAMES or name in _CONTINUE_DEV_TOOLS or name in _CODING_TOOLS:
         from ..computer_access import computer_denied_message
         from ..computer_profile import computer_tool_names
 

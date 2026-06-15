@@ -128,7 +128,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | CA-1.1 | host-agent `POST /fs/edit` — apply unified-diff / search-replace block | Атомарний запис, повертає новий diff | P0 | [ ] |
 | CA-1.2 | Toolkit `code_edit` (схема: path, diff/old→new) + dispatch + confirm tier | Diff показується перед apply | P0 | [ ] |
 | CA-1.3 | Git-safety: auto-branch або stash перед першою мутацією в repo | `.jarvis_backup/` або `git stash` | P0 | [ ] |
-| CA-1.4 | `code_read` з line-ranges + контекст навколо матчу | Економія токенів vs повний файл | P1 | [ ] |
+| CA-1.4 | `code_read` з line-ranges + контекст навколо матчу | Економія токенів vs повний файл | P1 | [x] `tools/app/tools/coding_tools.py` (`ENABLE_CODING_TOOLS`) |
 | CA-1.5 | Workspace-скоуп: правки лише в `HOSTAGENT_FS_ROOTS`/project root | Deny поза скоупом | P0 | [ ] |
 | CA-1.6 | Golden trace: «додай docstring у функцію X» — diff apply + revert | `tools/tests/golden/` | P1 | [ ] |
 
@@ -142,8 +142,8 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-2.1 | `repo_tree` tool — дерево файлів (gitignore-aware, ліміт глибини/entries) | JSON для моделі | [ ] |
-| CA-2.2 | `repo_grep` / `repo_find` — ripgrep-обгортка по workspace | Read-only, ліміт результатів | [ ] |
+| CA-2.1 | `repo_tree` tool — дерево файлів (gitignore-aware, ліміт глибини/entries) | JSON для моделі | [x] `coding_tools.repo_tree` (`rg --files`, depth/entries cap) |
+| CA-2.2 | `repo_grep` / `repo_find` — ripgrep-обгортка по workspace | Read-only, ліміт результатів | [x] `coding_tools.repo_grep` (rg, `-g` glob, result cap) |
 | CA-2.3 | Symbol-граф (ctags/tree-sitter) — функції/класи/імпорти | Опційно per-language | [ ] |
 | CA-2.4 | Scoped RAG по project root (індексація файлів проєкту, не лише чату) | Reuse `project_id` embed | [ ] |
 | CA-2.5 | Context-budget: вибірка релевантних файлів під ліміт токенів | Як P1.7 (12k budget) для коду | [ ] |
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-15 | 1.1 | CA-1.4/CA-2.1/CA-2.2 done — `coding_tools.py` (repo_tree/repo_grep/code_read), read-only, `ENABLE_CODING_TOOLS` |
 | 2026-06-15 | 1.0 | Початковий roadmap Стовпа B (CA-0…CA-6) після аудиту фундаменту |
 
 ---
