@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from fastapi import Depends, Header, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from jarvis_core.context import RequestContext, synthetic_context
 
 from ..config import settings
 from ..telegram_webapp_auth import authorize_admin
@@ -34,6 +35,18 @@ def resolve_uid(auth: "PlatformAuth", user_id: int | None) -> int:
     інакше — uid автентифікованого користувача. Той самий патерн повторювався
     у кожному platform-роуті (`int(user_id) if user_id is not None else auth.user_id`)."""
     return int(user_id) if user_id is not None else auth.user_id
+
+
+def resolve_context(
+    auth: "PlatformAuth", user_id: int | None = None, *, request_id: str | None = None
+) -> RequestContext:
+    """PlatformAuth → RequestContext (SAAS_DEEP_DIVE §2.2; tenant-ґрунт PR#1).
+
+    Self-hosted (`SAAS_MODE=false`): synthetic org, Telegram uid → `legacy_uid`,
+    повний доступ (owner/studio). Коли постане SaaS (PR#6), сюди ляже branch на
+    JWT/api_key з реальними org/role/plan. Поки що — обгортка над `resolve_uid`,
+    тож self-hosted поведінка незмінна (S2)."""
+    return synthetic_context(resolve_uid(auth, user_id), via=auth.via, request_id=request_id)
 
 
 def _primary_admin_id() -> int:

@@ -37,9 +37,9 @@
 
 | Ризик | Де | Наслідок для multi-tenant |
 |-------|-----|---------------------------|
-| **get_by_id без ownership** | `proxy.register_tools_get_by_id` → `get_bg_job(id)` без `user_id` | Org A може прочитати job Org B за UUID |
-| **bgjobs_get без user_id** | `tools/app/routes/bgjobs.py::bgjobs_get` | Те саме на рівні Tools API |
-| **Дубль helpers gateway↔tools** | `_helpers.py` в обох сервісах | `RequestContext` треба в `jarvis_core`, не дублювати |
+| ~~**get_by_id без ownership**~~ ✅ PR#0 | `proxy.register_tools_get_by_id` → `owner_scoped` | Закрито: ownership-гейт у store + proxy (jobs/plans/teams/orchestrator/subagents; skills — глобальні) |
+| ~~**bgjobs_get без user_id**~~ ✅ PR#0 | `tools/app/routes/bgjobs.py::bgjobs_get` | Закрито: обов'язковий `user_id` на всіх GET-by-id |
+| ~~**Дубль helpers gateway↔tools**~~ ✅ PR#1 | `_helpers.py` в обох сервісах | Закрито: `jarvis_core/http_helpers.py` + re-export (дефолти `field` збережено) |
 | **Orchestrator без UI** | API `platform/orchestrator.py` є, табу в `platform.html` немає | Studio tier неповний в консолі |
 | **Глобальна черга bg jobs** | `jarvis:bgjob:queue` | Worker обробляє jobs усіх org без ізоляції |
 | **metrics глобальні** | `tools/app/metrics.py` | Billing metering не per-org |
@@ -346,30 +346,32 @@ CREATE POLICY messages_org ON messages
 
 ## 4. Файловий рефакторинг (повний інвентар)
 
-### 4.0 PR#0 — IDOR fix (до tenant, обовʼязково)
+### 4.0 PR#0 — IDOR fix (до tenant, обовʼязково) · ✅ done (2026-06-15, `1211acb`/`8abc022`)
 
-Закрити вразливість **до** multi-tenant: будь-хто з Platform auth може `GET /jobs/{id}` чужого job.
+Закрито вразливість **до** multi-tenant: будь-хто з Platform auth міг `GET /jobs/{id}` чужого job.
 
-| Файл | Зміна |
-|------|-------|
-| `gateway/app/platform/proxy.py` | `register_tools_get_by_id` → optional `owner_check(rec, uid)` |
-| `gateway/app/platform/jobs.py` | get: `rec["user_id"] == uid` або 404 |
-| `tools/app/routes/bgjobs.py` | `bgjobs_get(job_id, user_id)` — обовʼязковий user_id |
-| `tools/app/bg_jobs.py` | `get_job` + ownership у `cancel_job` (вже є) |
-| Аналогічно | `plans`, `teams`, `skills`, `orchestrator` stores |
+| Файл | Зміна | Статус |
+|------|-------|--------|
+| `gateway/app/platform/proxy.py` | `register_tools_get_by_id(owner_scoped=)` → резолвить uid, `fn(id, uid)` | [x] |
+| `gateway/app/platform/{jobs,plans,teams}.py` | `owner_scoped=True` | [x] |
+| `tools/app/routes/{bgjobs,agent,teams,orchestrator,subagents}.py` | GET-by-id: обов'язковий `user_id` | [x] |
+| `tools/app/{bg_jobs,plans,teams,orchestrator,subagents}.py` + `redis_store.py` | `get_*(id, user_id=None)` → `_STORE.get(owner_user_id=)` (None=системний доступ) | [x] |
+| skills | свідомо БЕЗ ownership — глобальна бібліотека (`get_skill` синхронний, не per-user) | [x] |
 
-Тести: `test_cross_user_job_get_returns_404` у `gateway/tests/test_platform_jobs.py`.
+Тести: `test_get_job_ownership_blocks_cross_user` (store), `test_cross_user_job_get_returns_404` + `test_jobs_get_forwards_user_id` (gateway).
 
-### 4.1 PR#1 — `jarvis_core/context.py` + proxy extension
+### 4.1 PR#1 — `jarvis_core/context.py` + http_helpers consolidate · ✅ foundation done (2026-06-15)
 
-| Файл | Дія |
-|------|-----|
-| `jarvis_core/context.py` | NEW: RequestContext, PlanLimits, `redis_key(org_id, *parts)` |
-| `jarvis_core/http_helpers.py` | NEW: consolidate `require_text`, `require_found` з gateway+tools |
-| `gateway/app/platform/proxy.py` | `resolve_context()` замість `resolve_uid`; headers у spawn/list |
-| `gateway/app/platform/auth.py` | JWT branch; `resolve_context()` |
-| `gateway/app/_helpers.py` | re-export з `jarvis_core/http_helpers` (backward compat) |
-| `tools/app/routes/_helpers.py` | re-export з `jarvis_core/http_helpers` |
+| Файл | Дія | Статус |
+|------|-----|--------|
+| `jarvis_core/context.py` | NEW: `RequestContext`, `synthetic_context`, `redis_key(org_id,*parts)`, `to_headers` (§2.3), `DEFAULT_ORG_ID` | [x] |
+| `jarvis_core/http_helpers.py` | NEW: consolidate `require_text`/`require_found`; не в `__init__` (Edge fastapi-free) | [x] |
+| `gateway/app/_helpers.py` · `tools/app/routes/_helpers.py` | re-export з `jarvis_core` (дефолти `field` text/task збережено) | [x] |
+| `gateway/app/platform/auth.py` | `resolve_context()` (synthetic org; JWT-branch → PR#6) | [x] |
+| `gateway/app/platform/router.py` | whoami → org/role/plan/legacy_uid (адитивно) — живий споживач | [x] |
+| `requirements-dev.txt` | `fastapi` для `mypy jarvis_core` (runtime jarvis_core лишився нейтральним) | [x] |
+| `gateway/app/platform/proxy.py` | resolve_context proxy-wide + `X-JARVIS-*` headers у spawn/list | ⏭️ PR#4 (коли tools читатиме headers; зараз proxy на `resolve_uid`) |
+| `PlanLimits` | enforcement | ⏭️ AP-4 (billing) |
 
 ### 4.2 PR#2 — Memory service
 
@@ -835,9 +837,9 @@ async def route_agent_turn(ctx: RequestContext, payload: dict) -> AsyncIterator:
 ## 12. PR sequence & timeline (оновлено v1.1)
 
 ```
-Week 0:     PR#0 IDOR fix (get_by_id ownership) — блокер перед будь-яким SaaS
-Week 1-2:   PR#1 jarvis_core/context + proxy.py + http_helpers consolidate
-Week 3-4:   PR#2 memory schema 003_saas_tenant
+Week 0:     PR#0 IDOR fix (get_by_id ownership) — блокер перед будь-яким SaaS   ✅ done (2026-06-15)
+Week 1-2:   PR#1 jarvis_core/context + http_helpers consolidate                 ✅ foundation done (proxy-wide+headers → PR#4)
+Week 3-4:   PR#2 memory schema 003_saas_tenant                                  ◀ next
 Week 5-6:   PR#3 RedisIndexedStore org-scoped + PR#4 tools middleware + tools_client_http
 Week 7-8:   PR#5 platform auth/billing (gateway/app/saas/*)
 Week 9-10:  PR#6 platform.html (billing, members, orchestrator tab) + tenant tests
@@ -938,6 +940,7 @@ INFERENCE_WORKERS=3
 |------|--------|-------|
 | 2026-06-08 | 1.0 | Початковий deep dive |
 | 2026-06-08 | 1.1 | Delta після P0–P12, proxy/routes refactor, PR#0 IDOR, jarvis_core strategy |
+| 2026-06-15 | 1.2 | PR#0 ✅ (ownership-гейт jobs/plans/teams/orchestrator/subagents) + PR#1 foundation ✅ (`jarvis_core/context.py` + `http_helpers.py`, resolve_context, whoami); proxy-wide ctx + `X-JARVIS-*` propagation → PR#4 |
 
 ---
 

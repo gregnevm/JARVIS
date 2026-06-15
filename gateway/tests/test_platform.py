@@ -114,6 +114,11 @@ def test_whoami(client):
     data = r.json()
     assert data["via"] == "basic"
     assert data["user_id"] == 42
+    # tenant-ґрунт PR#1: synthetic org + повний доступ у self-hosted
+    assert data["org_id"] == "00000000-0000-0000-0000-000000000001"
+    assert data["role"] == "owner"
+    assert data["plan"] == "studio"
+    assert data["legacy_uid"] == 42
 
 
 def test_spa_served(client):

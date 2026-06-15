@@ -6,3 +6,9 @@ pytest-asyncio>=0.24
 # pydantic потрібен mypy-плагіну (pyproject: plugins=["pydantic.mypy"]) у CI-джобі
 # jarvis_core, де він інакше не ставиться як транзитивна залежність.
 pydantic>=2
+# fastapi потрібен для `mypy jarvis_core`: jarvis_core/http_helpers.py імпортує
+# HTTPException (консолідація PR#1). Runtime jarvis_core лишається нейтральним —
+# http_helpers не експортується з __init__, тож офлайн Edge його не тягне. Пін
+# дзеркалить gateway (route-registration regression у 0.137/starlette 1.3.1).
+fastapi>=0.110,<0.137
+starlette<1.3.1

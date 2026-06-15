@@ -22,7 +22,7 @@ from . import hooks as platform_hooks
 from . import teams as platform_teams
 from . import orchestrator as platform_orchestrator
 from . import improve as platform_improve
-from .auth import PlatformAuth, require_platform_auth
+from .auth import PlatformAuth, require_platform_auth, resolve_context
 
 router = APIRouter()
 
@@ -41,7 +41,17 @@ async def platform_index() -> HTMLResponse:
 
 @router.get("/platform/api/whoami")
 async def platform_whoami(auth: PlatformAuth = Depends(require_platform_auth)) -> dict[str, object]:
-    return {"via": auth.via, "user_id": auth.user_id}
+    # tenant-ґрунт PR#1: розширено org/role/plan/legacy_uid із RequestContext.
+    # `user_id` лишається int (Telegram id) для backward compat з наявним platform.html.
+    ctx = resolve_context(auth)
+    return {
+        "via": ctx.via,
+        "user_id": auth.user_id,
+        "org_id": ctx.org_id,
+        "role": ctx.role,
+        "plan": ctx.plan,
+        "legacy_uid": ctx.legacy_uid,
+    }
 
 
 for _mod in (

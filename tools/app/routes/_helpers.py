@@ -1,15 +1,23 @@
-"""Спільні helpers для Tools route-модулів."""
+"""Спільні helpers для Tools route-модулів.
+
+`require_text`/`require_found` консолідовано в `jarvis_core.http_helpers` (PR#1).
+Ре-експортуємо: `require_found` — напряму; `require_text` — через тонкий wrapper,
+бо tools історично має дефолт `field="task"` (gateway — `"text"`), і 6 викликів
+покладаються на нього (`require_text(body.task)` без явного `field`). Wrapper зберігає
+цей дефолт побайтово; решта (`clamp_budget`/`ndjson`/`lora_paths`) — tools-локальні.
+"""
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
-from fastapi import HTTPException
+from jarvis_core.http_helpers import require_found
+from jarvis_core.http_helpers import require_text as _require_text
 
 from ..config import settings
 
-_T = TypeVar("_T")
+__all__ = ["clamp_budget", "require_text", "require_found", "ndjson", "lora_paths"]
 
 
 def clamp_budget(value: int) -> int:
@@ -21,31 +29,9 @@ def clamp_budget(value: int) -> int:
 
 
 def require_text(value: str | None, *, field: str = "task") -> str:
-    """Strip і перевірити, що поле непорожнє — інакше 400.
-
-    Узагальнює повторюваний патерн `task = (body.task or "").strip(); if not task: raise ...`,
-    що зустрічався 6 разів у `cursor`/`orchestrator`/`subagents`/`teams` route-модулях
-    (різнилось лише ім'я поля в тексті помилки).
-    """
-    text = (value or "").strip()
-    if not text:
-        raise HTTPException(status_code=400, detail=f"{field} required")
-    return text
-
-
-def require_found(value: _T | None, *, detail: str) -> _T:
-    """404 `detail`, якщо значення відсутнє — інакше повернути його як є.
-
-    Узагальнює побайтово ідентичний (з різним лише `detail`) патерн
-    `rec = await store.get_x(id); if rec is None: raise HTTPException(404,
-    detail="x not found"); return rec`, повторений 9 разів — `agent.py`
-    (×3: get/approve/deny plan), `bgjobs.py` (×2: get/result), `orchestrator.py`,
-    `skills.py`, `subagents.py`, `teams.py`. Дженерик через `TypeVar`, бо тип
-    запису різний у кожному модулі (plan/job/run/skill/team) — generic-параметр
-    усуває потребу в `cast`/`Any` на виклику."""
-    if value is None:
-        raise HTTPException(status_code=404, detail=detail)
-    return value
+    """Strip+непорожнє → 400 `"{field} required"`. tools-дефолт `field="task"`
+    (gateway — `"text"`); делегує в `jarvis_core.http_helpers.require_text`."""
+    return _require_text(value, field=field)
 
 
 def ndjson(obj: dict[str, Any]) -> bytes:
