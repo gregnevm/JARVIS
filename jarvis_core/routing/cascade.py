@@ -8,10 +8,17 @@ _URL_RE = re.compile(r"https?://", re.IGNORECASE)
 _MATH_RE = re.compile(r"\d\s*[-+*/^]\s*\d")
 _COMPUTER_RE = re.compile(
     r"(скріншот|screenshot|скрін\s+екран|"
+    r"що\s+на\s+екран|"
+    r"подивись\s+на\s+екран|"
+    r"на\s+екрані|"
     r"powershell|pwsh|"
     r"файл\s+на\s+(диск|хост|комп|windows)|"
     r"на\s+(хост|ПК|windows|комп.?ютер)|"
     r"комп.?ютер|"
+    r"cursor\s*:|"
+    r"відкрий\s+(excel|word|notepad|vscode|vs\s*code|блокнот)|"
+    r"натисни\s+(кнопк|на\s+)|"
+    r"клікни|"
     r"winget|choco\b|"
     r"каталог\s+[A-Za-z]:\\|"
     r"прочитай\s+файл\s+[A-Za-z]:\\|"

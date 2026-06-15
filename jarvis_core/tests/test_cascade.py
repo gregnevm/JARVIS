@@ -26,3 +26,13 @@ def test_hybrid_agent_url():
 def test_hybrid_chat():
     ctx = RouteContext(agent_mode="hybrid")
     assert classify_mode("привіт", ctx) == "chat"
+
+
+def test_hybrid_computer_what_on_screen():
+    ctx = RouteContext(agent_mode="hybrid", enable_computer=True, computer_allowed=True)
+    assert classify_mode("що на екрані?", ctx) == "computer"
+
+
+def test_hybrid_computer_cursor_prefix():
+    ctx = RouteContext(agent_mode="hybrid", enable_computer=True, computer_allowed=True)
+    assert classify_mode("cursor: fix tests", ctx) == "computer"
