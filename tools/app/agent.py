@@ -278,6 +278,29 @@ def _stop_note(*, no_progress: bool) -> str:
     return _STOP_NO_PROGRESS if no_progress else _STOP_MAX_ITERS
 
 
+_SEVERITIES = frozenset({"low", "medium", "high"})
+
+
+def _normalize_findings(raw: Any) -> list[dict[str, str]]:
+    """Code-review findings → [{file, severity, note}] (CA-5.1)."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, str]] = []
+    for f in raw[:50]:
+        if not isinstance(f, dict):
+            continue
+        note = str(f.get("note") or f.get("message") or "").strip()
+        if not note:
+            continue
+        sev = str(f.get("severity") or "medium").strip().lower()
+        out.append({
+            "file": str(f.get("file") or "")[:300],
+            "severity": sev if sev in _SEVERITIES else "medium",
+            "note": note[:1000],
+        })
+    return out
+
+
 def _progress_guard() -> "ProgressGuard":
     from .tools.check_tools import ProgressGuard
 
@@ -731,6 +754,58 @@ class AgentRunner:
         )
         rec["marker"] = PLAN_MARKER.format(id=rec["id"])
         return rec
+
+    async def _git_diff(self, path: str, ref: str = "") -> str:
+        """`git -C <path> diff [ref]` через host-agent /cli (read-only)."""
+        from . import computer
+
+        args = ["-C", path, "--no-pager", "diff"]
+        if ref:
+            args.append(ref)
+        data = await computer._request("POST", "/cli", json={"exe": "git", "args": args, "cwd": None})
+        if "error" in data:
+            return ""
+        return str(data.get("stdout", ""))
+
+    async def code_review(
+        self, user_id: int, *, diff: str = "", path: str = "", ref: str = ""
+    ) -> dict[str, Any]:
+        """Self-review pass (CA-5.1): diff → структуровані зауваження + вердикт.
+
+        diff передається напряму або тягнеться `git diff` у path (опційно vs ref).
+        Повертає {verdict: clean|issues|empty, summary, findings:[{file,severity,note}]}."""
+        diff_text = (diff or "").strip()
+        if not diff_text and (path or "").strip():
+            diff_text = (await self._git_diff(path.strip(), (ref or "").strip())).strip()
+        if not diff_text:
+            return {"verdict": "empty", "summary": "Немає diff для рев'ю.", "findings": []}
+        diff_text = diff_text[: settings.code_review_max_chars]
+        prompt = (
+            "Зроби code review цього diff. Шукай: баги, регресії, витоки/секрети, "
+            "пропущені краї, мертвий/дубльований код, проблеми типів. Поверни ЛИШЕ JSON:\n"
+            '{"summary":"стислий вердикт","findings":[{"file":"шлях","severity":'
+            '"low|medium|high","note":"проблема + як виправити"}]}\n'
+            "Якщо проблем нема — порожній findings. Diff:\n" + diff_text
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": "Ти прискіпливий Reviewer коду JARVIS. Відповідай лише валідним "
+                    "JSON; severity тільки low/medium/high.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        parsed = extract_json_object((msg.get("content") or "").strip()) or {}
+        findings = _normalize_findings(parsed.get("findings"))
+        verdict = "issues" if any(f["severity"] in ("medium", "high") for f in findings) else "clean"
+        return {
+            "verdict": verdict,
+            "summary": str(parsed.get("summary") or ("Знайдено зауваження." if findings else "Зауважень немає."))[:2000],
+            "findings": findings,
+        }
 
     async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:
         """Покрокове виконання схваленого плану (sync MVP, max 8 steps)."""

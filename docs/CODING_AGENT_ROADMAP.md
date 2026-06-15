@@ -76,7 +76,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Редагування файлів | **9/10** | `code_edit` diff/apply + git-safety; транзакційний `code_edit_batch` (усе/відкат) + dry-run; `rename_symbol` word-boundary рефактор (CA-4.3/4.4/4.5). Фаза CA-4 закрита |
 | Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
 | Планування коду | **7/10** | `code_plan` із file-targets (file/action/rationale/risk) + один апрув (CA-4.1/4.2); виконання мапиться на `code_edit_batch`; бракує авто-execute плану через batch + rename-рефактор (CA-4.5) |
-| Self-review | **4/10** | P9 teams (Reviewer) є як bg job, не в coding-лупі |
+| Self-review | **6/10** | `code_review` self-pass (diff → findings + вердикт, CA-5.1); бракує авто-fix перед звітом + Coder→Reviewer→Tester pipeline (CA-5.2) |
 | UX (coding-специфічний) | **3/10** | Workbench загальний; немає diff-viewer, repo-tree, test-panel |
 | CLI / IDE | **1/10** | немає `jarvis code`; Continue лише як міст |
 | Модель | **4/10** | qwen2.5:7b слабка для складного multi-file; потрібна 14b+/cloud opt-in |
@@ -190,7 +190,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit ✅) ─► CA-2 (repo-context ✅) �
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [ ] |
+| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [x] `AgentRunner.code_review` + `POST /agent/code/review` — diff (прямо або `git diff` у path) → структуровані findings `{file, severity, note}` + вердикт clean/issues (reviewer-промпт як P9) |
 | CA-5.2 | Coder→Reviewer→Tester team-pipeline для coding-задач | Reuse `teams.py` | [ ] |
 | CA-5.3 | bg job type `coding_task` — довгі задачі з progress/cancel | Reuse `bg_jobs.py` + AM-2.2 | [ ] |
 | CA-5.4 | Subagent на під-задачу (напр. окремий файл) з budget_iters | Reuse `subagents.py` | [ ] |
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit ✅) ─► CA-2 (repo-context ✅) �
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-15 | 2.1 | CA-5.1 done — `code_review` self-pass (`AgentRunner.code_review` + `POST /agent/code/review`, структуровані findings + вердикт) |
 | 2026-06-15 | 2.0 | CA-4.5 done — `rename_symbol` (word-boundary rg + транзакційний batch, оновлює імпорти; hostagent `word_boundary` flag) + golden; **фаза CA-4 закрита** |
 | 2026-06-15 | 1.9 | CA-4.1 + CA-4.2 done — `code_plan` (file/action/rationale/risk, `kind="code"`) + `POST /agent/code/plan`; один апрув через наявний `approve_plan` |
 | 2026-06-15 | 1.8 | CA-4.3 + CA-4.4 done — транзакційний `code_edit_batch` (hostagent `/fs/edit_batch`, усе/відкат) + dry-run; byte-exact apply/backup/rollback |

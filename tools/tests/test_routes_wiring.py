@@ -19,6 +19,7 @@ EXPECTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/agent/stream"),
     ("POST", "/agent/plan"),
     ("POST", "/agent/code/plan"),
+    ("POST", "/agent/code/review"),
     ("GET", "/agent/plan/{plan_id}"),
     ("GET", "/agent/plans"),
     ("POST", "/agent/plan/{plan_id}/approve"),
