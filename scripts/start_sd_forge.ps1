@@ -33,14 +33,33 @@ if (-not (Test-Path $webui)) {
     exit 1
 }
 
-# Do not use cmd /c - webui.bat spawns Python and the wrapper exits immediately.
-Write-Host "Starting Forge (log: $logFile)..." -ForegroundColor Cyan
+# launch.py + log redirect: webui.bat exits while Python keeps running in another window.
+$python = Join-Path $forgeDir "venv\Scripts\python.exe"
+$stdoutLog = Join-Path $logDir "sd-forge-stdout.log"
+$stderrLog = Join-Path $logDir "sd-forge-stderr.log"
+$argsFile = Join-Path $forgeDir "webui-user.bat"
+$forgeArgs = @("--api", "--port", "7860", "--opt-sdp-attention", "--no-half-vae")
+if (Test-Path $argsFile) {
+    $bat = Get-Content $argsFile -Raw
+    if ($bat -match 'COMMANDLINE_ARGS=(.+)') {
+        $forgeArgs = ($Matches[1].Trim() -split '\s+') | Where-Object { $_ }
+    }
+}
+Write-Host "Starting Forge (logs: $stdoutLog)..." -ForegroundColor Cyan
 $psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $webui
+$psi.FileName = $python
+$psi.Arguments = (@("launch.py") + $forgeArgs) -join ' '
 $psi.WorkingDirectory = $forgeDir
-$psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
-$psi.UseShellExecute = $true
-[void][System.Diagnostics.Process]::Start($psi)
+$psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+$psi.UseShellExecute = $false
+$psi.RedirectStandardOutput = $true
+$psi.RedirectStandardError = $true
+$proc = [System.Diagnostics.Process]::Start($psi)
+Start-Job -ScriptBlock {
+    param($p, $out, $err)
+    $p.StandardOutput.ReadToEnd() | Set-Content -Path $out -Encoding UTF8
+    $p.StandardError.ReadToEnd() | Set-Content -Path $err -Encoding UTF8
+} -ArgumentList $proc, $stdoutLog, $stderrLog | Out-Null
 
 Write-Host "Waiting for API (first run: venv + torch, 15-40 min)..."
 for ($i = 0; $i -lt 240; $i++) {

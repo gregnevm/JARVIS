@@ -321,6 +321,34 @@ if (-not $SkipHostagent) {
     }
 }
 
+# --- 5b) SD Forge (локальна генерація зображень) ---
+function Test-SdForgeWanted {
+    if (-not (Test-Path (Join-Path $root '.env'))) { return $false }
+    $line = Get-Content (Join-Path $root '.env') -ErrorAction SilentlyContinue |
+        Where-Object { $_ -match '^\s*IMAGE_GEN_URL=' } | Select-Object -First 1
+    if (-not $line) { return $false }
+    $val = ($line -split '=', 2)[1].Trim().ToLower()
+    return ($val -match '7860' -or $val -match 'host\.docker\.internal')
+}
+
+if (Test-SdForgeWanted) {
+    Step 'SD Forge (local image gen)'
+    $setupForge = Join-Path $PSScriptRoot 'setup_sd_forge.ps1'
+    $startForge = Join-Path $PSScriptRoot 'start_sd_forge.ps1'
+    $forgeDir = Join-Path $root 'vendor\sd-forge'
+    if (-not (Test-Path (Join-Path $forgeDir 'webui.py')) -and (Test-Path $setupForge)) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $setupForge
+        if ($LASTEXITCODE -ne 0) { Warn 'setup_sd_forge.ps1 failed' }
+    }
+    if (Test-Path $startForge) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $startForge
+        if ($LASTEXITCODE -ne 0) { Warn 'start_sd_forge.ps1 did not confirm API (watchdog/autostart will retry)' }
+        else { Ok 'SD Forge API :7860' }
+    } else {
+        Warn 'start_sd_forge.ps1 missing'
+    }
+}
+
 # --- 6) Docker Compose ---
 $verifyOk = $false
 if (-not $SkipCompose) {

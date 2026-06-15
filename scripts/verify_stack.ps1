@@ -85,10 +85,28 @@ try {
 $igUrl = (EnvVal "IMAGE_GEN_URL").ToLower()
 $igModel = EnvVal "IMAGE_GEN_MODEL"
 if ($igUrl -match "7860") {
-    try {
-        Invoke-RestMethod -Uri "http://127.0.0.1:7860/sdapi/v1/options" -TimeoutSec 5 | Out-Null
-        Ok "IMAGE_GEN: Forge local :7860"
-    } catch {
+    $forgeOk = $false
+    $forgeModel = ""
+    for ($fi = 0; $fi -lt 36; $fi++) {
+        try {
+            $fo = Invoke-RestMethod -Uri "http://127.0.0.1:7860/sdapi/v1/options" -TimeoutSec 5
+            $forgeModel = $fo.sd_model_checkpoint
+            $forgeOk = $true
+            break
+        } catch {
+            if ($fi -lt 35) { Start-Sleep -Seconds 5 }
+        }
+    }
+    if ($forgeOk) {
+        $ckpt = if ($forgeModel) { " ($forgeModel)" } else { "" }
+        Ok "IMAGE_GEN: Forge local :7860$ckpt"
+        try {
+            docker exec jarvis-tools-1 python -c "import urllib.request; urllib.request.urlopen('http://host.docker.internal:7860/sdapi/v1/options', timeout=8)" 2>$null | Out-Null
+            Ok "IMAGE_GEN: tools container -> Forge"
+        } catch {
+            Bad "IMAGE_GEN: tools cannot reach Forge (host.docker.internal:7860)"
+        }
+    } else {
         Bad "Forge not running - .\scripts\start_sd_forge.ps1"
     }
 } elseif ($igUrl -eq "horde") {
@@ -123,11 +141,67 @@ if ((EnvVal "ENABLE_COMPUTER_USE") -eq "true") {
     if ([string]::IsNullOrWhiteSpace((EnvVal "HOSTAGENT_FS_ROOTS"))) {
         Warn "HOSTAGENT_FS_ROOTS empty - FS paths not restricted on host"
     } else { Ok "HOSTAGENT_FS_ROOTS set" }
+    $prof = EnvVal "COMPUTER_PROFILE"
+    if ([string]::IsNullOrWhiteSpace($prof)) { Warn "COMPUTER_PROFILE empty (default safe)" }
+    else { Ok "COMPUTER_PROFILE=$prof" }
+    if ($tok) {
+        $hdr = @{ "X-Hostagent-Token" = $tok }
+        try {
+            $cap = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8400/screen/capture" -Headers $hdr -TimeoutSec 20
+            if ($cap.data_b64 -and $cap.data_b64.Length -gt 100) { Ok "hostagent: screen/capture" }
+            else { Bad "hostagent: screen/capture empty" }
+        } catch { Bad "hostagent: screen/capture $($_.Exception.Message)" }
+        try {
+            $psBody = '{"script":"Write-Output jarvis-ok"}'
+            $ps = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8400/powershell" -Headers $hdr -ContentType "application/json" -Body $psBody -TimeoutSec 20
+            if ($ps.stdout -match "jarvis-ok") { Ok "hostagent: powershell" }
+            else { Bad "hostagent: powershell unexpected output" }
+        } catch { Bad "hostagent: powershell $($_.Exception.Message)" }
+    }
+    try {
+        $st3 = Invoke-RestMethod -Uri "http://127.0.0.1:8200/status" -TimeoutSec 10
+        if ($st3.computer_profile) { Ok "tools: computer_profile=$($st3.computer_profile)" }
+        if ($st3.computer_session_trust_minutes -ge 0) {
+            Ok "tools: session_trust=$($st3.computer_session_trust_minutes)m"
+        }
+    } catch { Warn "tools: computer profile status failed" }
+    if ((EnvVal "OLLAMA_MODEL_VISION") -and $prof -in @("standard", "full")) {
+        Ok "agent: see_screen ready (vision model set)"
+    }
 }
 
 if ((EnvVal "WEBAPP_DEV_OPEN") -eq "true") {
     if ($StrictProd) { Bad "WEBAPP_DEV_OPEN=true (set false in prod)" }
     else { Warn "WEBAPP_DEV_OPEN=true - /app open without Telegram (use false in prod)" }
+}
+
+if ((EnvVal "ENABLE_CONTINUE_DEV") -eq "true") {
+    $cUrl = EnvVal "CONTINUE_DEV_URL"
+    if ([string]::IsNullOrWhiteSpace($cUrl)) { $cUrl = "http://host.docker.internal:65432" }
+    $cPort = 65432
+    if ($cUrl -match ":(\d+)") { $cPort = [int]$Matches[1] }
+    try {
+        $cs = Invoke-RestMethod -Uri "http://127.0.0.1:${cPort}/state" -TimeoutSec 5
+        $mock = $false
+        if ($cs.session.history) {
+            foreach ($item in $cs.session.history) {
+                if ($item.message.content -like "MOCK OK:*") { $mock = $true; break }
+            }
+        }
+        if ($mock) { Bad "continue: :$cPort is mock server - run start_continue.ps1" }
+        else { Ok "continue: API :$cPort" }
+    } catch {
+        Bad "continue: API down on :$cPort - run scripts/setup_continue.ps1"
+    }
+    $localCfg = Join-Path $env:USERPROFILE ".continue\config.yaml"
+    $localDone = Join-Path $env:USERPROFILE ".continue\.onboarding_complete"
+    if ((Test-Path $localCfg) -and (Test-Path $localDone)) {
+        Ok "continue: local Ollama config"
+    } elseif (-not [string]::IsNullOrWhiteSpace((EnvVal "CONTINUE_API_KEY"))) {
+        Ok "continue: CONTINUE_API_KEY set"
+    } else {
+        Warn "continue: run scripts/setup_continue.ps1 (local Ollama, no API key)"
+    }
 }
 
 if ((EnvVal "ENABLE_BROWSER") -eq "true") {

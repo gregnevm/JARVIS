@@ -15,7 +15,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $log = Join-Path $root 'data\autostart.log'
 New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
 
-function Log($m) {
+function AutostartLog($m) {
     $line = "{0} {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m
     Add-Content -Path $log -Value $line
     Write-Host $line
@@ -81,18 +81,18 @@ function Stop-HostagentListener {
 function Ensure-HostagentPython {
     $py = Get-Command python -ErrorAction SilentlyContinue
     if (-not $py) {
-        Log "hostagent: python not found on PATH"
+        AutostartLog "hostagent: python not found on PATH"
         return $false
     }
     & python -c "import uvicorn, fastapi" 2>$null
     if ($LASTEXITCODE -ne 0) {
         $req = Join-Path $root 'hostagent\requirements.txt'
         if (-not (Test-Path $req)) {
-            Log "hostagent: requirements.txt missing"
+            AutostartLog "hostagent: requirements.txt missing"
             return $false
         }
-        Log "hostagent: installing pip deps..."
-        & python -m pip install -q -r $req 2>&1 | ForEach-Object { Log "hostagent pip: $_" }
+        AutostartLog "hostagent: installing pip deps..."
+        & python -m pip install -q -r $req 2>&1 | ForEach-Object { AutostartLog "hostagent pip: $_" }
     }
     return $true
 }
@@ -112,17 +112,17 @@ function Start-JarvisHostagent {
     $screenOk = (-not $needScreen) -or (Test-HostagentScreenEndpoint -BindHost $bind -Port $port)
 
     if ($healthy -and $screenOk) {
-        Log "hostagent: already healthy $($bind):$port"
+        AutostartLog "hostagent: already healthy $($bind):$port"
         return
     }
 
     if ($healthy -and -not $screenOk) {
-        Log "hostagent: stale build (missing /screen/capture) - restarting"
+        AutostartLog "hostagent: stale build (missing /screen/capture) - restarting"
         Stop-HostagentListener -Port $port
     }
 
     if (-not $env:HOSTAGENT_TOKEN) {
-        Log "hostagent: skipped (HOSTAGENT_TOKEN missing in .env)"
+        AutostartLog "hostagent: skipped (HOSTAGENT_TOKEN missing in .env)"
         return
     }
 
@@ -130,30 +130,30 @@ function Start-JarvisHostagent {
 
     $workDir = Join-Path $root 'hostagent'
     if (-not (Test-Path (Join-Path $workDir 'app\main.py'))) {
-        Log "hostagent: app not found ($workDir)"
+        AutostartLog "hostagent: app not found ($workDir)"
         return
     }
 
     $args = @('-m', 'uvicorn', 'app.main:app', '--host', $bind, '--port', "$port")
     Start-Process -FilePath 'python' -ArgumentList $args -WorkingDirectory $workDir -WindowStyle Hidden
-    Log "hostagent: started $($bind):$port"
+    AutostartLog "hostagent: started $($bind):$port"
 
     for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Seconds 1
         if (Test-HostagentHealth -BindHost $bind -Port $port) {
             if ((-not $needScreen) -or (Test-HostagentScreenEndpoint -BindHost $bind -Port $port)) {
-                Log "hostagent: healthy"
+                AutostartLog "hostagent: healthy"
                 return
             }
         }
     }
-    Log "hostagent: started but health/capability check failed after 20s"
+    AutostartLog "hostagent: started but health/capability check failed after 20s"
 }
 
 $accessDir = Join-Path $root 'data\access'
 New-Item -ItemType Directory -Force -Path $accessDir | Out-Null
 
-Log "=== autostart start ==="
+AutostartLog "=== autostart start ==="
 
 # --- 1) Ollama ---
 $hwProfile = Read-JarvisHardwareProfile -Root $root
@@ -168,12 +168,12 @@ if ($ollamaEnv.OLLAMA_VULKAN) { $env:OLLAMA_VULKAN = $ollamaEnv.OLLAMA_VULKAN }
 else { Remove-Item Env:OLLAMA_VULKAN -ErrorAction SilentlyContinue }
 $ollama = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
 if (Get-Process ollama -ErrorAction SilentlyContinue) {
-    Log "Ollama: already running"
+    AutostartLog "Ollama: already running"
 } elseif (Test-Path $ollama) {
     Start-Process -FilePath $ollama -ArgumentList 'serve' -WindowStyle Hidden
-    Log "Ollama: started"
+    AutostartLog "Ollama: started"
 } else {
-    Log "Ollama: exe not found ($ollama)"
+    AutostartLog "Ollama: exe not found ($ollama)"
 }
 
 # --- 2) Docker Desktop engine ---
@@ -183,30 +183,30 @@ function Test-DockerEngine {
 }
 
 if (Test-DockerEngine) {
-    Log "Docker engine: already up"
+    AutostartLog "Docker engine: already up"
 } else {
     $dd = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
     if (Test-Path $dd) {
         Start-Process -FilePath $dd
-        Log "Docker Desktop: launching, waiting for engine..."
+        AutostartLog "Docker Desktop: launching, waiting for engine..."
     } else {
-        Log "Docker Desktop: exe not found ($dd)"
+        AutostartLog "Docker Desktop: exe not found ($dd)"
     }
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Seconds 3
         if (Test-DockerEngine) { break }
     }
-    if (Test-DockerEngine) { Log "Docker engine: up" }
-    else { Log "Docker engine: NOT up after ~180s" }
+    if (Test-DockerEngine) { AutostartLog "Docker engine: up" }
+    else { AutostartLog "Docker engine: NOT up after ~180s" }
 }
 
 # --- 3) Compose up ---
 if (Test-DockerEngine) {
     Set-Location $root
-    docker compose up -d 2>&1 | ForEach-Object { Log "compose: $_" }
-    Log "compose up -d done"
+    docker compose up -d 2>&1 | ForEach-Object { AutostartLog "compose: $_" }
+    AutostartLog "compose up -d done"
 } else {
-    Log "Skipping compose: engine unavailable"
+    AutostartLog "Skipping compose: engine unavailable"
 }
 
 function Test-ForgeApi {
@@ -216,32 +216,92 @@ function Test-ForgeApi {
     } catch { return $false }
 }
 
-function Start-SdForgeIfConfigured {
+function Test-SdForgeConfigured {
     $envPath = Join-Path $root '.env'
     Import-JarvisEnv $envPath
     $url = ($env:IMAGE_GEN_URL -as [string]).Trim().ToLower()
-    if ($url -notmatch '7860' -and $url -notmatch 'host\.docker\.internal') { return }
+    return ($url -match '7860' -or $url -match 'host\.docker\.internal')
+}
+
+function Ensure-SdForgeInstalled {
+    $forgeDir = Join-Path $root 'vendor\sd-forge'
+    if (Test-Path (Join-Path $forgeDir 'webui.py')) { return $true }
+    $setup = Join-Path $root 'scripts\setup_sd_forge.ps1'
+    if (-not (Test-Path $setup)) {
+        AutostartLog 'sd-forge: setup script missing'
+        return $false
+    }
+    AutostartLog 'sd-forge: first-time setup (clone + venv)...'
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $setup 2>&1 |
+        ForEach-Object { AutostartLog "sd-forge setup: $_" }
+    if (Test-Path (Join-Path $forgeDir 'webui.py')) {
+        AutostartLog 'sd-forge: setup done'
+        return $true
+    }
+    AutostartLog 'sd-forge: setup failed (no webui.py)'
+    return $false
+}
+
+function Wait-ForgeApi {
+    param([int]$MaxSeconds = 180)
+    if (Test-ForgeApi) { return $true }
+    AutostartLog "sd-forge: waiting for API (max ${MaxSeconds}s)..."
+    for ($i = 0; $i -lt [math]::Ceiling($MaxSeconds / 5); $i++) {
+        Start-Sleep -Seconds 5
+        if (Test-ForgeApi) {
+            AutostartLog 'sd-forge: API ready :7860'
+            return $true
+        }
+    }
+    AutostartLog "sd-forge: API not ready after ${MaxSeconds}s (watchdog will retry)"
+    return $false
+}
+
+function Start-SdForgeIfConfigured {
+    if (-not (Test-SdForgeConfigured)) { return }
+    if (-not (Ensure-SdForgeInstalled)) { return }
     if (Test-ForgeApi) {
-        Log 'sd-forge: API already up :7860'
+        AutostartLog 'sd-forge: API already up :7860'
         return
     }
     $start = Join-Path $root 'scripts\start_sd_forge.ps1'
     if (-not (Test-Path $start)) {
-        Log 'sd-forge: start script missing'
+        AutostartLog 'sd-forge: start script missing'
         return
     }
-    # Фоном: start_sd_forge.ps1 чекає API до 20 хв — не блокує hostagent/verify.
+    # Фоном: start_sd_forge.ps1 чекає API до 20 хв.
     Start-Process -FilePath 'powershell' -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $start
     ) -WindowStyle Hidden
-    Log 'sd-forge: start queued (background)'
+    AutostartLog 'sd-forge: start queued (background)'
 }
 
 # --- 4) Host-agent (Windows, outside Docker) — перед Forge, щоб Computer Use був після ребуту ---
 Start-JarvisHostagent
 
+# --- 4b) Continue.dev agent API (cn serve, :65432) ---
+function Start-ContinueIfConfigured {
+    $envPath = Join-Path $root '.env'
+    Import-JarvisEnv $envPath
+    if ($env:ENABLE_CONTINUE_DEV -ne 'true') { return }
+    $lib = Join-Path $PSScriptRoot 'lib\jarvis_continue.ps1'
+    if (-not (Test-Path $lib)) {
+        AutostartLog 'continue: jarvis_continue.ps1 missing'
+        return
+    }
+    . $lib
+    $cfg = Import-ContinueEnvFromDotenv -Root $root
+    if ($cfg.CONTINUE_API_KEY) { $env:CONTINUE_API_KEY = $cfg.CONTINUE_API_KEY }
+    [void](Start-ContinueServe -Root $root -Cfg $cfg -Log { param($m) AutostartLog "continue: $m" })
+}
+
+Start-ContinueIfConfigured
+
 # --- 5) SD Forge (локальні картинки, :7860) ---
 Start-SdForgeIfConfigured
+if (Test-SdForgeConfigured) {
+    Wait-ForgeApi -MaxSeconds 180 | Out-Null
+}
 
 # --- 5b) Quick tunnel for Mini App (optional, ENABLE_QUICK_TUNNEL=true) ---
 function Start-QuickTunnelIfEnabled {
@@ -249,17 +309,17 @@ function Start-QuickTunnelIfEnabled {
     Import-JarvisEnv $envPath
     if ($env:ENABLE_QUICK_TUNNEL -ne 'true') { return }
     if ($env:CLOUDFLARE_TUNNEL_TOKEN) {
-        Log 'quick-tunnel: skipped (CLOUDFLARE_TUNNEL_TOKEN set — use named tunnel)'
+        AutostartLog 'quick-tunnel: skipped (CLOUDFLARE_TUNNEL_TOKEN set — use named tunnel)'
         return
     }
     $setup = Join-Path $root 'scripts\setup_quick_tunnel.ps1'
     if (-not (Test-Path $setup)) {
-        Log 'quick-tunnel: setup script missing'
+        AutostartLog 'quick-tunnel: setup script missing'
         return
     }
-    Log 'quick-tunnel: syncing...'
+    AutostartLog 'quick-tunnel: syncing...'
     & powershell -NoProfile -ExecutionPolicy Bypass -File $setup -SyncOnly 2>&1 |
-        ForEach-Object { Log "quick-tunnel: $_" }
+        ForEach-Object { AutostartLog "quick-tunnel: $_" }
 }
 
 Start-QuickTunnelIfEnabled
@@ -268,7 +328,7 @@ Start-QuickTunnelIfEnabled
 for ($i = 0; $i -lt 15; $i++) {
     try {
         Invoke-RestMethod 'http://localhost:11434/api/tags' -TimeoutSec 4 | Out-Null
-        Log "Ollama API: ok"
+        AutostartLog "Ollama API: ok"
         break
     } catch { Start-Sleep -Seconds 2 }
 }
@@ -276,15 +336,15 @@ for ($i = 0; $i -lt 15; $i++) {
 if (-not $SkipVerify) {
     $verify = Join-Path $root 'scripts\verify_stack.ps1'
     if (Test-Path $verify) {
-        Log 'verify_stack: starting...'
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $verify 2>&1 | ForEach-Object { Log "verify: $_" }
-        if ($LASTEXITCODE -eq 0) { Log 'verify_stack: ok' }
-        else { Log "verify_stack: FAIL (exit $LASTEXITCODE)" }
+        AutostartLog 'verify_stack: starting...'
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $verify 2>&1 | ForEach-Object { AutostartLog "verify: $_" }
+        if ($LASTEXITCODE -eq 0) { AutostartLog 'verify_stack: ok' }
+        else { AutostartLog "verify_stack: FAIL (exit $LASTEXITCODE)" }
     } else {
-        Log 'verify_stack: script missing'
+        AutostartLog 'verify_stack: script missing'
     }
 } else {
-    Log 'verify_stack: skipped (-SkipVerify)'
+    AutostartLog 'verify_stack: skipped (-SkipVerify)'
 }
 
-Log "=== autostart done ==="
+AutostartLog "=== autostart done ==="

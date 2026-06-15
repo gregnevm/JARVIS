@@ -78,7 +78,7 @@ $taskOk = $false
 try {
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($logonTrigger, $watchTrigger) `
         -Settings $taskSettings -Principal $principal `
-        -Description 'JARVIS: Ollama, Docker compose, host-agent (idempotent, every 5 min)' | Out-Null
+        -Description 'JARVIS: Ollama, Docker, host-agent, SD Forge, Continue (idempotent, every 5 min)' | Out-Null
     Write-Host "Registered scheduled task: $taskName (logon + every 5 min)"
     $taskOk = $true
 } catch {

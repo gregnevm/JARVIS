@@ -64,13 +64,17 @@ function Get-JarvisHardwareProfile {
             $profile = 'nvidia'
             $ollamaVulkan = $false
             $chatModel = 'gemma3:4b'
-            if ($vram -ge 6144 -or $vram -eq 0) {
+            if ($vram -ge 14336) {
+                $agentModel = 'qwen2.5:14b-instruct'
+                $whisperModel = 'large-v3'
+            } elseif ($vram -ge 6144 -or $vram -eq 0) {
                 $agentModel = 'qwen2.5:7b-instruct'
+                $whisperModel = 'small'
             } else {
                 $agentModel = 'qwen2.5:3b-instruct'
+                $whisperModel = 'base'
                 $notes += 'VRAM < 6 GB — agent model зменшено до qwen2.5:3b-instruct'
             }
-            $whisperModel = 'small'
             if ($vram -gt 0 -and $vram -lt 10240) {
                 $visionOnDemand = $true
                 $notes += 'VRAM < 10 GB — OLLAMA_VISION_ON_DEMAND=true (vision за запитом)'
@@ -96,7 +100,11 @@ function Get-JarvisHardwareProfile {
         }
     }
 
-    $models = @($chatModel, $agentModel, 'nomic-embed-text') | Select-Object -Unique
+    $models = @($chatModel, $agentModel, 'nomic-embed-text')
+    if ($vendor -eq 'nvidia' -and $vram -ge 10240) {
+        $models += 'qwen2.5vl:7b'
+    }
+    $models = $models | Select-Object -Unique
 
     @{
         profile            = $profile
@@ -150,8 +158,13 @@ function Read-JarvisHardwareProfile {
 function Get-JarvisOllamaUserEnv {
     param([hashtable]$Profile)
     $env = @{
-        OLLAMA_HOST       = '0.0.0.0:11434'
-        OLLAMA_KEEP_ALIVE = '24h'
+        OLLAMA_HOST            = '0.0.0.0:11434'
+        # 15m замість 24h: на спільному GPU (LLM + XTTS + Forge) простійні моделі
+        # звільняють VRAM. Активне використання тримає модель гарячою.
+        OLLAMA_KEEP_ALIVE      = '15m'
+        # FlashAttention + q8_0 KV-cache: менше VRAM під контекст + швидша увага (RTX 50xx).
+        OLLAMA_FLASH_ATTENTION = '1'
+        OLLAMA_KV_CACHE_TYPE   = 'q8_0'
     }
     if ($Profile.ollama_vulkan) {
         $env['OLLAMA_VULKAN'] = '1'

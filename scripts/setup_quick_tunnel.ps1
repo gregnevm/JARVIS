@@ -94,7 +94,7 @@ function Get-QuickTunnelUrlFromLogs {
 function Test-QuickTunnelHttp {
     param([string]$BaseUrl)
     if (-not $BaseUrl) { return $false }
-    $probe = "$BaseUrl/app"
+    $probe = "$BaseUrl/health"
     try {
         $code = & curl.exe -s -o NUL -w '%{http_code}' --max-time 12 $probe
         return ($code -eq '200')
@@ -135,16 +135,26 @@ function Sync-PublicAppUrl {
     if (-not $TunnelUrl) { return $false }
 
     $appUrl = "$TunnelUrl/app"
+    $webhookUrl = "$TunnelUrl/webhook"
     $current = Get-DotEnvValue -Path $envFile -Name 'PUBLIC_APP_URL'
+    $currentWh = Get-DotEnvValue -Path $envFile -Name 'TELEGRAM_WEBHOOK_URL'
+    $ingest = (Get-DotEnvValue -Path $envFile -Name 'TELEGRAM_INGEST_MODE').ToLower()
     $last = if (Test-Path $stateFile) { (Get-Content $stateFile -Raw).Trim() } else { '' }
 
     $changed = ($current.TrimEnd('/') -ne $appUrl.TrimEnd('/')) -or ($last -ne $TunnelUrl)
+    if ($ingest -eq 'webhook' -and $currentWh.TrimEnd('/') -ne $webhookUrl.TrimEnd('/')) {
+        $changed = $true
+    }
     if (-not $changed) {
         Write-Host "PUBLIC_APP_URL already $appUrl"
         return $false
     }
 
     Set-DotEnvValue -Path $envFile -Name 'PUBLIC_APP_URL' -Value $appUrl
+    if ($ingest -eq 'webhook') {
+        Set-DotEnvValue -Path $envFile -Name 'TELEGRAM_WEBHOOK_URL' -Value $webhookUrl
+        Write-Host "Updated TELEGRAM_WEBHOOK_URL -> $webhookUrl" -ForegroundColor Green
+    }
     New-Item -ItemType Directory -Force -Path (Split-Path $stateFile) | Out-Null
     Set-Content -Path $stateFile -Value $TunnelUrl -Encoding UTF8 -NoNewline
     Write-Host "Updated PUBLIC_APP_URL -> $appUrl" -ForegroundColor Green
