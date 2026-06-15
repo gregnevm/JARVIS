@@ -463,7 +463,8 @@ def _backup_original(p: Path, original: str) -> str:
     backup_dir = p.parent / ".jarvis_backup"
     backup_dir.mkdir(parents=True, exist_ok=True)
     dest = backup_dir / f"{p.name}.{stamp}.bak"
-    dest.write_text(original, encoding="utf-8")
+    # Байт-точний бекап (write_text транслювала б нові рядки → revert був би не 1:1).
+    dest.write_bytes(original.encode("utf-8"))
     return str(dest)
 
 
@@ -477,7 +478,9 @@ async def fs_edit(
     if not p.is_file():
         raise HTTPException(status_code=404, detail="not a file")
     try:
-        original = p.read_text(encoding="utf-8")
+        # Читаємо БАЙТИ (не read_text): universal-newline режим read_text транслює
+        # \r\n→\n ще на читанні, через що детекція CRLF нижче завжди False.
+        original = p.read_bytes().decode("utf-8")
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -515,7 +518,8 @@ async def fs_edit(
     new_content = new_lf.replace("\n", "\r\n") if crlf else new_lf
     try:
         backup = _backup_original(p, original)
-        p.write_text(new_content, encoding="utf-8")
+        # Пишемо БАЙТИ: write_text транслювала б \n→os.linesep і ламала \r\n на Windows.
+        p.write_bytes(new_content.encode("utf-8"))
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {

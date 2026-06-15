@@ -14,7 +14,6 @@ repo-інструменти (набір `_CODING_TOOLS` у dispatch). `exe` об
 from __future__ import annotations
 
 import re
-from pathlib import PurePath
 from typing import Any
 
 from .coding_tools import _cli, _clip, _disabled_message
@@ -34,7 +33,9 @@ _LINT_RUNNERS = frozenset({
 
 
 def _basename(exe: str) -> str:
-    return PurePath(exe.strip().strip('"')).name.lower()
+    # Ділимо по ОБОХ роздільниках: цільовий хост — Windows (\), але tools-контейнер —
+    # Linux, де PurePath(PurePosixPath) не трактує \ як роздільник → весь шлях у name.
+    return re.split(r"[\\/]", exe.strip().strip('"'))[-1].lower()
 
 
 def _coerce_args(raw: Any) -> list[str]:
