@@ -112,22 +112,31 @@ def register_tools_get_by_id(
     *,
     id_name: str,
     not_found: str,
+    owner_scoped: bool = False,
 ) -> None:
     """GET /platform/api/.../{id} → tools.<attr>(id) або 404, якщо None.
 
     Узагальнює повторюваний патерн `jobs_get`/`plans_get`/`skills_get`/`teams_get`
     (отримати запис за id, 404 якщо відсутній). `id_name` — ім'я path-параметра
     (FastAPI сам резолвить його з `path` як `str` через `request.path_params`).
+
+    `owner_scoped=True` — запис належить користувачу (job/plan/team): резолвимо uid
+    і передаємо `fn(id, uid)`, щоб tools-шар відфільтрував чужі записи (анти-IDOR,
+    SAAS_DEEP_DIVE §4.0). `False` — глобальний ресурс (напр. skills-бібліотека), `fn(id)`.
     """
 
     @router.get(path)
     async def _handler(
         request: Request,
-        _auth: PlatformAuth = Depends(require_platform_auth),
+        auth: PlatformAuth = Depends(require_platform_auth),
+        user_id: int | None = None,
     ) -> dict[str, Any]:
         item_id = request.path_params[id_name]
         fn = getattr(request.app.state.tools, tools_attr)
-        rec = await fn(item_id)
+        if owner_scoped:
+            rec = await fn(item_id, resolve_uid(auth, user_id))
+        else:
+            rec = await fn(item_id)
         if rec is None:
             raise HTTPException(status_code=404, detail=not_found)
         return rec

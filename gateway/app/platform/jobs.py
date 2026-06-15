@@ -56,6 +56,7 @@ def register(router: APIRouter) -> None:
         "get_bg_job",
         id_name="job_id",
         not_found="job not found",
+        owner_scoped=True,
     )
 
     @router.delete("/platform/api/jobs/{job_id}")

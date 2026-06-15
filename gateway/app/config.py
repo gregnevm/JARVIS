@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     # Telegram ID з доступом до Computer Use. Порожньо → ADMIN_USER_IDS → ALLOWED_USER_IDS (.env).
     # Друзі з /allow сюди НЕ потрапляють — лише явний whitelist.
     computer_owner_user_ids: str = ""
+    computer_session_trust_minutes: int = 10
     # Режим computer лише для ADMIN_USER_IDS (застарілий прапор; краще COMPUTER_OWNER_USER_IDS).
     computer_mode_admins_only: bool = False
     # Інтервал поллера нагадувань (секунди).

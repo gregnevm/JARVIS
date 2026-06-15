@@ -56,6 +56,31 @@ _NO_CAPTION = {"location", "buttons", "reaction"}
 # Каталоги для резолву «голих» імен файлів (puppy.jpg → /data/uploads/puppy.jpg).
 _UPLOAD_SEARCH_DIRS = ("/data/uploads", "/data")
 
+_TOOL_MEDIA_RE = re.compile(
+    r"\[\[\s*(?:photo|image|document|file)\s*:\s*[^\]]+\]\]",
+    re.IGNORECASE,
+)
+
+
+def _newest_gen_png() -> str | None:
+    """Останній gen_*.png у uploads — фолбек, якщо агент вигадав ім'я файлу."""
+    best: tuple[float, str] | None = None
+    for base in _UPLOAD_SEARCH_DIRS:
+        if not os.path.isdir(base):
+            continue
+        try:
+            for entry in os.scandir(base):
+                if not entry.is_file():
+                    continue
+                if not entry.name.startswith("gen_") or not entry.name.endswith(".png"):
+                    continue
+                mtime = entry.stat().st_mtime
+                if best is None or mtime > best[0]:
+                    best = (mtime, entry.path)
+        except OSError:
+            continue
+    return best[1] if best else None
+
 
 def resolve_media_src(src: str) -> str:
     """Нормалізує src: http(s) і /data/... без змін; інакше шукає файл у /data/uploads."""
@@ -73,6 +98,11 @@ def resolve_media_src(src: str) -> str:
         candidate = os.path.join(base, name)
         if os.path.isfile(candidate):
             return candidate
+    if name.startswith("gen_") and name.endswith(".png"):
+        fb = _newest_gen_png()
+        if fb:
+            logger.info("resolve_media_src: %s -> %s (latest gen upload)", src, fb)
+            return fb
     return src
 
 
@@ -249,10 +279,16 @@ async def send_directives(
             failed.append(d.src)
     if failed:
         names = ", ".join(os.path.basename(f) for f in failed[:3])
+        if any(os.path.basename(f).startswith("gen_") for f in failed):
+            hint = (
+                "Можливо, агент вказав неіснуюче ім'я файлу. "
+                "Спробуй «згенеруй ще раз» або уточни запит."
+            )
+        else:
+            hint = "Перевір, що файл існує в /data/uploads або створений інструментом на хості."
         await tg.send_message(
             chat_id,
-            f"⚠️ Не вдалося надіслати файл(и): {names}. "
-            "Для генерації картинок у .env потрібен IMAGE_GEN_URL (Stable Diffusion/Forge).",
+            f"⚠️ Не вдалося надіслати файл(и): {names}. {hint}",
             message_thread_id=message_thread_id,
         )
 

@@ -36,4 +36,5 @@ def register(router: APIRouter) -> None:
         "get_team",
         id_name="team_id",
         not_found="team not found",
+        owner_scoped=True,
     )

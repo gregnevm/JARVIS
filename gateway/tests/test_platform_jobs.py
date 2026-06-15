@@ -66,6 +66,25 @@ def test_jobs_get(client):
     assert r.json()["status"] == "running"
 
 
+def test_jobs_get_forwards_user_id(client):
+    """owner_scoped: proxy має передати резолвлений uid у tools (анти-IDOR wiring)."""
+    r = client.get("/platform/api/jobs/abc", auth=AUTH)
+    assert r.status_code == 200
+    # basic-auth → primary admin id (admin_user_ids="42")
+    client.app.state.tools.get_bg_job.assert_awaited_with("abc", 42)
+
+
+def test_cross_user_job_get_returns_404(client):
+    """tools-шар повертає None для чужого job → platform віддає 404 (без cross-tenant leak)."""
+
+    async def _owned(job_id, user_id):
+        return {"id": job_id, "status": "running"} if int(user_id) == 42 else None
+
+    client.app.state.tools.get_bg_job = AsyncMock(side_effect=_owned)
+    r = client.get("/platform/api/jobs/abc?user_id=999", auth=AUTH)
+    assert r.status_code == 404
+
+
 def test_jobs_cancel(client):
     r = client.request("DELETE", "/platform/api/jobs/abc", auth=AUTH)
     assert r.status_code == 200

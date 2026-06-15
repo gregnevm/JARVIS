@@ -130,12 +130,13 @@ def admin_confirm_keyboard(action: str, code: str) -> dict[str, Any]:
     }
 
 
-def computer_confirm_keyboard(code: str) -> dict[str, Any]:
+def computer_confirm_keyboard(code: str, *, trust_minutes: int = 10) -> dict[str, Any]:
+    trust_label = f"✅ + Full trust {trust_minutes}х"
     return {
         "inline_keyboard": [
             [
                 {"text": "✅ Підтвердити", "callback_data": f"cmp:Y:{code}"},
-                {"text": "✅ + Trust 30х", "callback_data": f"cmp:YT:{code}"},
+                {"text": trust_label, "callback_data": f"cmp:YT:{code}"},
             ],
             [{"text": "❌ Скасувати", "callback_data": "cmp:N:0"}],
         ]

@@ -47,6 +47,7 @@ def register(router: APIRouter) -> None:
         "get_plan",
         id_name="plan_id",
         not_found="plan not found",
+        owner_scoped=True,
     )
 
     @router.post("/platform/api/plans/{plan_id}/approve")

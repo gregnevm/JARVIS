@@ -229,10 +229,10 @@ class ToolsClient:
         except httpx.HTTPError as exc:
             return f"Macro failed: {exc}"
 
-    async def grant_trust(self, user_id: int) -> None:
+    async def grant_trust(self, user_id: int, *, full: bool = False) -> None:
         await self._request(
             "POST", "/computer/trust",
-            json={"user_id": int(user_id)},
+            json={"user_id": int(user_id), "full": full},
             log_label="grant trust",
         )
 
@@ -359,8 +359,8 @@ class ToolsClient:
         except httpx.HTTPError as exc:
             return {"error": str(exc)}
 
-    async def get_bg_job(self, job_id: str) -> dict[str, Any] | None:
-        resp = await self._request("GET", f"/bgjobs/{job_id}")
+    async def get_bg_job(self, job_id: str, user_id: int) -> dict[str, Any] | None:
+        resp = await self._request("GET", f"/bgjobs/{job_id}", params={"user_id": user_id})
         if resp is None or resp.status_code == 404:
             return None
         try:
@@ -426,8 +426,8 @@ class ToolsClient:
         except httpx.HTTPError as exc:
             return {"error": str(exc)}
 
-    async def get_plan(self, plan_id: str) -> dict[str, Any] | None:
-        resp = await self._request("GET", f"/agent/plan/{plan_id}")
+    async def get_plan(self, plan_id: str, user_id: int) -> dict[str, Any] | None:
+        resp = await self._request("GET", f"/agent/plan/{plan_id}", params={"user_id": user_id})
         if resp is None or resp.status_code == 404:
             return None
         try:
@@ -748,8 +748,8 @@ class ToolsClient:
         except httpx.HTTPError:
             return []
 
-    async def get_team(self, team_id: str) -> dict[str, Any] | None:
-        resp = await self._request("GET", f"/teams/{team_id}")
+    async def get_team(self, team_id: str, user_id: int) -> dict[str, Any] | None:
+        resp = await self._request("GET", f"/teams/{team_id}", params={"user_id": user_id})
         if resp is None or resp.status_code == 404:
             return None
         try:
