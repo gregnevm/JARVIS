@@ -43,6 +43,7 @@ _TIER = {
     "fs_write_bytes": "T0",
     "code_edit": "T1",
     "code_edit_batch": "T1",
+    "rename_symbol": "T1",
     "capture_screenshot": "T0",
     "clipboard_read": "T0",
     "clipboard_write": "T0",
@@ -124,7 +125,7 @@ def is_mutating(tool: str, args: dict[str, Any]) -> bool:
         return True
     if tool == "code_edit":
         return True
-    if tool == "code_edit_batch":
+    if tool == "code_edit_batch" or tool == "rename_symbol":
         # dry_run нічого не пише → читання, без confirm.
         return not bool(args.get("dry_run", False))
     if tool == "clipboard_write":
@@ -182,6 +183,12 @@ def describe_action(tool: str, args: dict[str, Any]) -> str:
         shown = ", ".join(paths[:5]) + ("…" if len(paths) > 5 else "")
         dry = " [dry-run]" if args.get("dry_run") else ""
         return f"code_edit_batch{dry}: {len(paths)} файл(ів) транзакційно: {shown}"
+    if tool == "rename_symbol":
+        dry = " [dry-run]" if args.get("dry_run") else ""
+        return (
+            f"rename_symbol{dry}: {args.get('old_name', '')} → "
+            f"{args.get('new_name', '')} у {args.get('root', '')}"
+        )
     if tool == "browser_click":
         return f"Browser click: {args.get('selector', '')}"
     if tool == "browser_fill":

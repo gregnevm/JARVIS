@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 import uuid
 from pathlib import Path
 from typing import Any
@@ -244,6 +245,7 @@ def _normalize_edits(edits: Any) -> list[dict[str, Any]]:
             "new_string": str(e.get("new_string", "")),
             "diff": str(e.get("diff", "")),
             "replace_all": bool(e.get("replace_all", False)),
+            "word_boundary": bool(e.get("word_boundary", False)),
         })
     return out
 
@@ -281,6 +283,47 @@ async def _code_edit_batch_impl(edits: Any, *, dry_run: bool = False) -> str:
     return _truncate("\n".join(parts))
 
 
+_IDENT_RE = re.compile(r"[A-Za-z_]\w*$")
+
+
+async def _rename_symbol_impl(
+    old_name: str, new_name: str, root: str, *, dry_run: bool = False
+) -> str:
+    if not settings.enable_computer_use:
+        return "Computer Use вимкнено (ENABLE_COMPUTER_USE=false)."
+    old_name, new_name, root = old_name.strip(), new_name.strip(), root.strip()
+    if not _IDENT_RE.match(old_name) or not _IDENT_RE.match(new_name):
+        return (
+            "rename_symbol: old_name/new_name мають бути ідентифікаторами "
+            "([A-Za-z_]\\w*). Для довільного тексту — code_edit_batch."
+        )
+    if old_name == new_name:
+        return "rename_symbol: old_name і new_name однакові."
+    if not root:
+        return "rename_symbol: root (корінь репо) обов'язковий."
+    from .tools.coding_tools import find_symbol_files
+
+    files, err = await find_symbol_files(old_name, root)
+    if err:
+        return err
+    if not files:
+        return f"rename_symbol: токен «{old_name}» не знайдено в {root}."
+    edits = [
+        {
+            "path": f,
+            "mode": "search_replace",
+            "old_string": old_name,
+            "new_string": new_name,
+            "replace_all": True,
+            "word_boundary": True,
+        }
+        for f in files
+    ]
+    head = f"rename {old_name} → {new_name} у {len(files)} файл(ах)"
+    body = await _code_edit_batch_impl(edits, dry_run=dry_run)
+    return f"{head}\n{body}"
+
+
 async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = False) -> str:
     """Виконує computer-дію. trusted=True після ✅ у Telegram."""
     if tool == "run_powershell":
@@ -314,6 +357,13 @@ async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = F
     if tool == "code_edit_batch":
         return await _code_edit_batch_impl(
             args.get("edits"), dry_run=bool(args.get("dry_run", False))
+        )
+    if tool == "rename_symbol":
+        return await _rename_symbol_impl(
+            str(args.get("old_name", "")),
+            str(args.get("new_name", "")),
+            str(args.get("root", "") or args.get("path", "")),
+            dry_run=bool(args.get("dry_run", False)),
         )
     if tool == "capture_screenshot":
         return await _capture_screenshot_impl()
@@ -481,6 +531,33 @@ async def code_edit_batch(
         "code_edit_batch",
         args,
         lambda: _code_edit_batch_impl(edits, dry_run=dry_run),
+    )
+
+
+async def rename_symbol(
+    old_name: str,
+    new_name: str,
+    root: str,
+    *,
+    dry_run: bool = False,
+    user_id: int = 0,
+) -> str:
+    """Rename ідентифікатора по всьому репо (CA-4.5): word-boundary, транзакційно.
+
+    Знаходить файли з цілим токеном `old_name` (rg -w) і застосовує rename одним
+    `code_edit_batch` (усе/відкат). Оновлює і виклики, і імпорти (той самий токен).
+    Один confirm на весь rename. dry_run — лише diff-и."""
+    args: dict[str, Any] = {
+        "old_name": old_name,
+        "new_name": new_name,
+        "root": root,
+        "dry_run": dry_run,
+    }
+    return await wrap_execute(
+        user_id,
+        "rename_symbol",
+        args,
+        lambda: _rename_symbol_impl(old_name, new_name, root, dry_run=dry_run),
     )
 
 

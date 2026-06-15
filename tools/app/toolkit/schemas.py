@@ -374,6 +374,21 @@ _CODE_EDIT_BATCH_SCHEMA = _schema(
     ["edits"],
 )
 
+_RENAME_SYMBOL_SCHEMA = _schema(
+    "rename_symbol",
+    "Перейменувати ідентифікатор (функцію/клас/змінну) по всьому репо транзакційно: "
+    "знаходить файли з цілим токеном (word-boundary, rename `User` не зачепить "
+    "`UserProfile`) і оновлює і виклики, і імпорти одним батчем (усе/відкат, один "
+    "confirm). dry_run=true → лише показати diff-и.",
+    {
+        "old_name": {**_STR, "description": "поточне ім'я (ідентифікатор)"},
+        "new_name": {**_STR, "description": "нове ім'я (ідентифікатор)"},
+        "root": {**_STR, "description": "корінь репо (абсолютний шлях на хості)"},
+        "dry_run": {"type": "boolean", "description": "лише diff-и без застосування (default false)"},
+    },
+    ["old_name", "new_name", "root"],
+)
+
 _REPO_SYMBOLS_SCHEMA = _schema(
     "repo_symbols",
     "Outline визначень файлу (класи/функції/імпорти з номерами рядків, без тіл). "
@@ -502,6 +517,7 @@ def agent_tool_schemas(*, computer: bool = False, allow_computer: bool = True) -
                 schemas.extend(_CODING_SCHEMAS)
                 schemas.append(_CODE_EDIT_SCHEMA)
                 schemas.append(_CODE_EDIT_BATCH_SCHEMA)
+                schemas.append(_RENAME_SYMBOL_SCHEMA)
             schemas.extend(_COMPUTER_SCHEMAS)
             schemas.append(_CLIPBOARD_READ_SCHEMA)
             schemas.append(_CLIPBOARD_WRITE_SCHEMA)
@@ -547,6 +563,7 @@ COMPUTER_TOOL_NAMES = frozenset(
         "fs_write",
         "code_edit",
         "code_edit_batch",
+        "rename_symbol",
         "capture_screenshot",
         "see_screen",
         "clipboard_read",

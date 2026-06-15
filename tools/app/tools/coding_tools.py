@@ -143,6 +143,26 @@ async def repo_tree(path: str, *, max_depth: int = 3, user_id: int = 0) -> str:
     return _clip(f"{header}\n{tree}" if tree else f"{header}\n(порожньо)")
 
 
+async def find_symbol_files(symbol: str, root: str) -> tuple[list[str], str]:
+    """Файли, що містять цілий токен `symbol` (rg -l -w), для rename_symbol (CA-4.5).
+
+    Повертає (список_шляхів, error). Deny-глоби проти секретів — як у repo_grep.
+    """
+    s = (symbol or "").strip()
+    r = (root or "").strip()
+    if not r:
+        return [], "root обов'язковий."
+    data = await _cli("rg", ["-l", "-w", "--", s, r, *_deny_globs()], None)
+    if "error" in data:
+        return [], str(data["error"])
+    code = int(data.get("code", -1))
+    stdout = str(data.get("stdout", ""))
+    if code not in (0, 1):  # rg: 0=є збіги, 1=немає; решта — помилка
+        return [], f"rg code={code}: {str(data.get('stderr', ''))[:200]}"
+    files = [ln.strip() for ln in stdout.splitlines() if ln.strip()]
+    return files, ""
+
+
 # --- repo_grep (CA-2.2) ------------------------------------------------------
 
 async def repo_grep(

@@ -15,6 +15,7 @@ _TIER_BY_TOOL: dict[str, str] = {
     "fs_write": "T0",
     "code_edit": "T1",
     "code_edit_batch": "T1",
+    "rename_symbol": "T1",
     "capture_screenshot": "T0",
     "see_screen": "T0",
     "clipboard_read": "T0",
@@ -101,6 +102,7 @@ def computer_tool_names(*, computer: bool = True) -> set[str]:
     if settings.enable_coding_tools:
         names.add("code_edit")
         names.add("code_edit_batch")
+        names.add("rename_symbol")
     if allows_see_screen():
         names.add("see_screen")
     if allows_uia():

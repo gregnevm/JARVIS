@@ -161,6 +161,18 @@ async def _h_code_edit_batch(args: dict[str, Any], uid: int) -> str:
     )
 
 
+async def _h_rename_symbol(args: dict[str, Any], uid: int) -> str:
+    from .. import computer
+
+    return await computer.rename_symbol(
+        str(args.get("old_name", "")),
+        str(args.get("new_name", "")),
+        str(args.get("root", "") or args.get("path", "")),
+        dry_run=bool(args.get("dry_run", False)),
+        user_id=uid,
+    )
+
+
 async def _h_capture_screenshot(_args: dict[str, Any], uid: int) -> str:
     from .. import computer
 
@@ -479,6 +491,7 @@ _HANDLERS: dict[str, Handler] = {
     "fs_write": _h_fs_write,
     "code_edit": _h_code_edit,
     "code_edit_batch": _h_code_edit_batch,
+    "rename_symbol": _h_rename_symbol,
     "capture_screenshot": _h_capture_screenshot,
     "see_screen": _h_see_screen,
     "clipboard_read": _h_clipboard_read,

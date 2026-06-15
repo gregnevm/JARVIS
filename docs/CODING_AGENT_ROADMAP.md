@@ -73,7 +73,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
 | Виконання команд/тестів | **9/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); fix-цикл через ReAct-луп + no-progress stop-guard (CA-3.2/3.4); live-fix golden трейс (CA-3.5). Фаза CA-3 закрита; далі — модель 14b+ для складніших fix'ів |
-| Редагування файлів | **8/10** | `code_edit` diff/apply + git-safety `.jarvis_backup`; транзакційний multi-file `code_edit_batch` (усе/відкат) + dry-run (CA-4.3/4.4); бракує rename/move з оновленням імпортів (CA-4.5) |
+| Редагування файлів | **9/10** | `code_edit` diff/apply + git-safety; транзакційний `code_edit_batch` (усе/відкат) + dry-run; `rename_symbol` word-boundary рефактор (CA-4.3/4.4/4.5). Фаза CA-4 закрита |
 | Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
 | Планування коду | **7/10** | `code_plan` із file-targets (file/action/rationale/risk) + один апрув (CA-4.1/4.2); виконання мапиться на `code_edit_batch`; бракує авто-execute плану через batch + rename-рефактор (CA-4.5) |
 | Self-review | **4/10** | P9 teams (Reviewer) є як bg job, не в coding-лупі |
@@ -102,7 +102,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 CA-0 (bridges ✅) ─► CA-1 (diff-edit ✅) ─► CA-2 (repo-context ✅) ─► CA-3 (test-loop ✅)
                                                  │                      │
                                                  ▼                      ▼
-                                       CA-4 (plan/refactor) ─► CA-5 (review/agents) ─► CA-6 (CLI/IDE)
+                                       CA-4 (plan/refactor ✅) ─► CA-5 (review/agents) ─► CA-6 (CLI/IDE)
 ```
 
 ---
@@ -168,7 +168,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit ✅) ─► CA-2 (repo-context ✅) �
 
 ---
 
-## CA-4 — Plan / multi-file рефактор · **4–6 тижнів**
+## CA-4 — Plan / multi-file рефактор · ✅ **done**
 
 **Мета:** план із file-targets, один апрув, multi-file зміни консистентно.
 
@@ -178,7 +178,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit ✅) ─► CA-2 (repo-context ✅) �
 | CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [x] наявний `approve_plan` — один апрув на весь план (Redis TTL P3); виконання мапиться на `code_edit_batch` (один confirm на батч, CA-4.3) |
 | CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [x] hostagent `/fs/edit_batch` + tool `code_edit_batch` (один confirm на батч, T1); відкат вже-записаних при fail у середині (true-original навіть для повторів) |
 | CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [x] `code_edit_batch(dry_run=true)` — усі diff-и без запису, non-mutating (без confirm) |
-| CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [ ] |
+| CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [x] `rename_symbol` tool — word-boundary (`\bOLD\b`) rg-пошук файлів + транзакційний `code_edit_batch`; оновлює виклики й імпорти; golden у hostagent (User→Account, UserProfile не зачеплено) |
 
 **Вихід CA-4:** «винеси `_helpers` у `jarvis_core`» → план на 5 файлів → один апрув → консистентний apply.
 
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit ✅) ─► CA-2 (repo-context ✅) �
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-15 | 2.0 | CA-4.5 done — `rename_symbol` (word-boundary rg + транзакційний batch, оновлює імпорти; hostagent `word_boundary` flag) + golden; **фаза CA-4 закрита** |
 | 2026-06-15 | 1.9 | CA-4.1 + CA-4.2 done — `code_plan` (file/action/rationale/risk, `kind="code"`) + `POST /agent/code/plan`; один апрув через наявний `approve_plan` |
 | 2026-06-15 | 1.8 | CA-4.3 + CA-4.4 done — транзакційний `code_edit_batch` (hostagent `/fs/edit_batch`, усе/відкат) + dry-run; byte-exact apply/backup/rollback |
 | 2026-06-15 | 1.7 | CA-3.5 done — `golden/fix_loop.json` + `test_fix_loop_golden.py` (hermetic live-fix трейс через `AgentRunner`); **фаза CA-3 закрита** |

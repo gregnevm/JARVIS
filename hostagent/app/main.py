@@ -73,6 +73,7 @@ class FsEditRequest(BaseModel):
     new_string: str = ""
     replace_all: bool = False
     diff: str = ""
+    word_boundary: bool = False  # \bOLD\b (rename_symbol, CA-4.5)
 
 
 class FsEditBatchRequest(BaseModel):
@@ -365,14 +366,27 @@ async def fs_write(
 
 
 def _apply_search_replace(
-    content: str, old: str, new: str, *, replace_all: bool
+    content: str, old: str, new: str, *, replace_all: bool, word_boundary: bool = False
 ) -> tuple[str, int]:
     """Search-replace у LF-просторі; вимагає унікального збігу, якщо не replace_all.
 
-    Повертає (новий_вміст, кількість_замін). 4xx при відсутності/неоднозначності.
+    `word_boundary=True` (для rename_symbol, CA-4.5) матчить лише цілий токен `\\bOLD\\b`
+    (rename `User` не зачепить `UserProfile`). Повертає (новий_вміст, кількість_замін).
+    4xx при відсутності/неоднозначності.
     """
     if not old:
         raise HTTPException(status_code=400, detail="old_string required for search_replace")
+    if word_boundary:
+        pat = re.compile(rf"\b{re.escape(old)}\b")
+        count = len(pat.findall(content))
+        if count == 0:
+            raise HTTPException(status_code=422, detail="old_string not found")
+        if count > 1 and not replace_all:
+            raise HTTPException(
+                status_code=422,
+                detail=f"old_string not unique ({count} matches); add context or set replace_all",
+            )
+        return pat.sub(new, content, count=0 if replace_all else 1), (count if replace_all else 1)
     count = content.count(old)
     if count == 0:
         raise HTTPException(status_code=422, detail="old_string not found")
@@ -507,7 +521,9 @@ def _compute_edit(req: FsEditRequest) -> tuple[Path, bytes, bytes, dict[str, Any
     elif mode == "search_replace":
         old = req.old_string.replace("\r\n", "\n")
         new = req.new_string.replace("\r\n", "\n")
-        new_lf, occurrences = _apply_search_replace(base, old, new, replace_all=req.replace_all)
+        new_lf, occurrences = _apply_search_replace(
+            base, old, new, replace_all=req.replace_all, word_boundary=req.word_boundary
+        )
     else:
         raise HTTPException(status_code=400, detail=f"unknown mode {mode!r}")
 

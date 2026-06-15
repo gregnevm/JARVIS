@@ -124,6 +124,35 @@ def test_batch_rollback_restores_same_file_true_original(
     assert b.read_text(encoding="utf-8") == "k = 1\n"
 
 
+# --- word_boundary rename (CA-4.5) ------------------------------------------
+
+def test_word_boundary_pure() -> None:
+    from app.main import _apply_search_replace
+
+    src = "User u; UserProfile p; my_User = User()\n"
+    out, n = _apply_search_replace(src, "User", "Account", replace_all=True, word_boundary=True)
+    assert n == 2  # лише цілі токени User, НЕ UserProfile/my_User
+    assert out == "Account u; UserProfile p; my_User = Account()\n"
+
+
+def test_batch_rename_golden_two_files(client: TestClient, tmp_path: Path) -> None:
+    """CA-4.5 golden: rename User→Account у 2 файлах транзакційно; імпорт оновлено,
+    UserProfile не зачеплено."""
+    mod = tmp_path / "models.py"
+    use = tmp_path / "use.py"
+    mod.write_text("class User:\n    pass\n\nclass UserProfile:\n    pass\n", encoding="utf-8")
+    use.write_text("from models import User\n\nx = User()\nclass UserProfile: ...\n", encoding="utf-8")
+    rename = lambda p: {
+        "path": str(p), "old_string": "User", "new_string": "Account",
+        "replace_all": True, "word_boundary": True,
+    }
+    r = client.post("/fs/edit_batch", headers=H, json={"edits": [rename(mod), rename(use)]})
+    assert r.status_code == 200, r.text
+    assert r.json()["count"] == 2
+    assert mod.read_text(encoding="utf-8") == "class Account:\n    pass\n\nclass UserProfile:\n    pass\n"
+    assert use.read_text(encoding="utf-8") == "from models import Account\n\nx = Account()\nclass UserProfile: ...\n"
+
+
 def test_single_fs_edit_still_works(client: TestClient, tmp_path: Path) -> None:
     """Рефактор fs_edit через _compute_edit не зламав одиночний шлях."""
     f = tmp_path / "s.py"
