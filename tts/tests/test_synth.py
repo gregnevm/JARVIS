@@ -1,4 +1,4 @@
-"""clean_text — нормалізація тексту перед синтезом (piper/ffmpeg не тестуємо тут)."""
+"""clean_text — нормалізація тексту перед синтезом (XTTS/ffmpeg не тестуємо тут)."""
 from app.synth import clean_text
 
 
