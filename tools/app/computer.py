@@ -230,6 +230,57 @@ async def _code_edit_impl(
     return _truncate("\n".join(parts))
 
 
+def _normalize_edits(edits: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    if not isinstance(edits, list):
+        return out
+    for e in edits:
+        if not isinstance(e, dict):
+            continue
+        out.append({
+            "path": str(e.get("path", "")),
+            "mode": str(e.get("mode", "search_replace")),
+            "old_string": str(e.get("old_string", "")),
+            "new_string": str(e.get("new_string", "")),
+            "diff": str(e.get("diff", "")),
+            "replace_all": bool(e.get("replace_all", False)),
+        })
+    return out
+
+
+async def _code_edit_batch_impl(edits: Any, *, dry_run: bool = False) -> str:
+    if not settings.enable_computer_use:
+        return "Computer Use вимкнено (ENABLE_COMPUTER_USE=false)."
+    norm = _normalize_edits(edits)
+    if not norm:
+        return "code_edit_batch: порожній або некоректний список edits."
+    data = await _request(
+        "POST", "/fs/edit_batch", json={"edits": norm, "dry_run": dry_run}
+    )
+    if "error" in data:
+        return str(data["error"])
+    results = data.get("results") or []
+    dry = data.get("status") == "dry_run"
+    head = (
+        f"Dry-run: {len(results)} файл(ів) — diff без застосування 👀"
+        if dry
+        else f"Транзакційно застосовано {data.get('count', len(results))} файл(ів) ✅"
+    )
+    parts = [head]
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        block = f"• {r.get('path', '?')} (×{r.get('occurrences', 1)})"
+        preview = str(r.get("diff", "")).strip()
+        if preview:
+            block += f"\n```diff\n{preview}\n```"
+        backup = r.get("backup")
+        if backup and not dry:
+            block += f"\nbackup: {backup}"
+        parts.append(block)
+    return _truncate("\n".join(parts))
+
+
 async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = False) -> str:
     """Виконує computer-дію. trusted=True після ✅ у Telegram."""
     if tool == "run_powershell":
@@ -259,6 +310,10 @@ async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = F
             new_string=str(args.get("new_string", "")),
             diff=str(args.get("diff", "")),
             replace_all=bool(args.get("replace_all", False)),
+        )
+    if tool == "code_edit_batch":
+        return await _code_edit_batch_impl(
+            args.get("edits"), dry_run=bool(args.get("dry_run", False))
         )
     if tool == "capture_screenshot":
         return await _capture_screenshot_impl()
@@ -410,6 +465,22 @@ async def code_edit(
             diff=diff,
             replace_all=replace_all,
         ),
+    )
+
+
+async def code_edit_batch(
+    edits: list[dict[str, Any]],
+    *,
+    dry_run: bool = False,
+    user_id: int = 0,
+) -> str:
+    """Транзакційна multi-file правка (CA-4.3): усе або відкат; dry_run — лише diff (CA-4.4)."""
+    args: dict[str, Any] = {"edits": edits, "dry_run": dry_run}
+    return await wrap_execute(
+        user_id,
+        "code_edit_batch",
+        args,
+        lambda: _code_edit_batch_impl(edits, dry_run=dry_run),
     )
 
 

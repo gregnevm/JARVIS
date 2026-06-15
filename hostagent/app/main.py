@@ -75,6 +75,13 @@ class FsEditRequest(BaseModel):
     diff: str = ""
 
 
+class FsEditBatchRequest(BaseModel):
+    """Транзакційна multi-file правка: усе або відкат (CA-4.3); dry_run — лише diff (CA-4.4)."""
+
+    edits: list[FsEditRequest]
+    dry_run: bool = False
+
+
 class ClipboardWriteRequest(BaseModel):
     text: str
 
@@ -457,30 +464,33 @@ def _apply_unified_diff(content: str, diff: str) -> str:
     return "\n".join(file_lines)
 
 
-def _backup_original(p: Path, original: str) -> str:
-    """Зберігає оригінал у <parent>/.jarvis_backup/<name>.<ts>.bak (git-safety CA-1.3)."""
+def _backup_original(p: Path, original_bytes: bytes) -> str:
+    """Зберігає оригінал у <parent>/.jarvis_backup/<name>.<ts>.bak (git-safety CA-1.3).
+
+    Байт-точний бекап (write_text транслювала б нові рядки → revert був би не 1:1).
+    """
     stamp = f"{time.strftime('%Y%m%d_%H%M%S')}_{time.time_ns() % 100000:05d}"
     backup_dir = p.parent / ".jarvis_backup"
     backup_dir.mkdir(parents=True, exist_ok=True)
     dest = backup_dir / f"{p.name}.{stamp}.bak"
-    # Байт-точний бекап (write_text транслювала б нові рядки → revert був би не 1:1).
-    dest.write_bytes(original.encode("utf-8"))
+    dest.write_bytes(original_bytes)
     return str(dest)
 
 
-@app.post("/fs/edit")
-async def fs_edit(
-    req: FsEditRequest,
-    _: Annotated[None, Depends(_check_token)],
-) -> dict[str, Any]:
-    """Атомарна правка коду: search-replace / unified-diff + .jarvis_backup перед записом."""
+def _compute_edit(req: FsEditRequest) -> tuple[Path, bytes, bytes, dict[str, Any]]:
+    """Обчислює правку проти ПОТОЧНОГО стану диска БЕЗ запису.
+
+    Повертає (path, original_bytes, new_bytes, meta). Кидає HTTPException при будь-якій
+    помилці валідації/застосування. Спільне ядро для `/fs/edit` і `/fs/edit_batch`.
+    """
     p = _resolve_path(req.path)
     if not p.is_file():
         raise HTTPException(status_code=404, detail="not a file")
     try:
         # Читаємо БАЙТИ (не read_text): universal-newline режим read_text транслює
         # \r\n→\n ще на читанні, через що детекція CRLF нижче завжди False.
-        original = p.read_bytes().decode("utf-8")
+        original_bytes = p.read_bytes()
+        original = original_bytes.decode("utf-8")
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -516,20 +526,94 @@ async def fs_edit(
         )
     )
     new_content = new_lf.replace("\n", "\r\n") if crlf else new_lf
-    try:
-        backup = _backup_original(p, original)
-        # Пишемо БАЙТИ: write_text транслювала б \n→os.linesep і ламала \r\n на Windows.
-        p.write_bytes(new_content.encode("utf-8"))
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {
+    # Пишемо БАЙТИ: write_text транслювала б \n→os.linesep і ламала \r\n на Windows.
+    new_bytes = new_content.encode("utf-8")
+    meta = {
         "path": str(p),
-        "status": "ok",
         "mode": mode,
         "occurrences": occurrences,
-        "backup": backup,
         "diff": preview[:4000],
     }
+    return p, original_bytes, new_bytes, meta
+
+
+def _rollback(applied: list[tuple[Path, bytes]]) -> None:
+    """Відновлює оригінали вже-записаних файлів (зворотний порядок → точний true-original
+    навіть для повторних правок одного файлу в батчі)."""
+    for path, orig in reversed(applied):
+        try:
+            path.write_bytes(orig)
+        except OSError:
+            pass
+
+
+@app.post("/fs/edit")
+async def fs_edit(
+    req: FsEditRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, Any]:
+    """Атомарна правка коду: search-replace / unified-diff + .jarvis_backup перед записом."""
+    p, original_bytes, new_bytes, meta = _compute_edit(req)
+    try:
+        backup = _backup_original(p, original_bytes)
+        p.write_bytes(new_bytes)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "ok", "backup": backup, **meta}
+
+
+@app.post("/fs/edit_batch")
+async def fs_edit_batch(
+    req: FsEditBatchRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, Any]:
+    """Транзакційна multi-file правка (CA-4.3): усе або відкат. `dry_run` (CA-4.4) —
+    лише обчислити diff-и без запису. Кожна правка рахується проти ПОТОЧНОГО стану
+    диска по порядку; при будь-якій помилці у середині вже-записане відкочується."""
+    if not req.edits:
+        raise HTTPException(status_code=400, detail="edits required")
+    if len(req.edits) > settings.edit_batch_max_files:
+        raise HTTPException(
+            status_code=400,
+            detail=f"too many edits ({len(req.edits)} > {settings.edit_batch_max_files})",
+        )
+
+    if req.dry_run:
+        results: list[dict[str, Any]] = []
+        for i, spec in enumerate(req.edits):
+            try:
+                _p, _ob, _nb, meta = _compute_edit(spec)
+            except HTTPException as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"edit {i} ({spec.path}): {exc.detail}"
+                ) from exc
+            results.append(meta)
+        return {"status": "dry_run", "count": len(results), "results": results}
+
+    applied: list[tuple[Path, bytes]] = []
+    out: list[dict[str, Any]] = []
+    for i, spec in enumerate(req.edits):
+        try:
+            p, original_bytes, new_bytes, meta = _compute_edit(spec)
+            backup = _backup_original(p, original_bytes)
+            p.write_bytes(new_bytes)
+        except HTTPException as exc:
+            _rollback(applied)
+            raise HTTPException(
+                status_code=422,
+                detail=f"edit {i} ({spec.path}) failed: {exc.detail}; "
+                f"rolled back {len(applied)} edit(s) — нічого не змінено",
+            ) from exc
+        except OSError as exc:
+            _rollback(applied)
+            raise HTTPException(
+                status_code=500,
+                detail=f"edit {i} ({spec.path}) write error: {exc}; "
+                f"rolled back {len(applied)} edit(s)",
+            ) from exc
+        applied.append((p, original_bytes))
+        out.append({**meta, "backup": backup})
+    return {"status": "ok", "count": len(out), "results": out}
 
 
 def _screen_click_ps(x: int, y: int) -> str:

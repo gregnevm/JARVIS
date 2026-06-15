@@ -151,6 +151,16 @@ async def _h_code_edit(args: dict[str, Any], uid: int) -> str:
     )
 
 
+async def _h_code_edit_batch(args: dict[str, Any], uid: int) -> str:
+    from .. import computer
+
+    raw = args.get("edits")
+    edits = raw if isinstance(raw, list) else []
+    return await computer.code_edit_batch(
+        edits, dry_run=bool(args.get("dry_run", False)), user_id=uid
+    )
+
+
 async def _h_capture_screenshot(_args: dict[str, Any], uid: int) -> str:
     from .. import computer
 
@@ -468,6 +478,7 @@ _HANDLERS: dict[str, Handler] = {
     "fs_read": _h_fs_read,
     "fs_write": _h_fs_write,
     "code_edit": _h_code_edit,
+    "code_edit_batch": _h_code_edit_batch,
     "capture_screenshot": _h_capture_screenshot,
     "see_screen": _h_see_screen,
     "clipboard_read": _h_clipboard_read,

@@ -346,6 +346,34 @@ _CODE_EDIT_SCHEMA = _schema(
     ["path"],
 )
 
+_CODE_EDIT_BATCH_SCHEMA = _schema(
+    "code_edit_batch",
+    "Транзакційно застосувати правки до КІЛЬКОХ файлів (multi-file рефактор): усе або "
+    "відкат — якщо будь-яка правка не вдалась, усі вже-застосовані відкочуються. "
+    "Один confirm на весь батч. dry_run=true → лише показати всі diff-и без запису. "
+    "Кожен елемент edits — як code_edit (path + search_replace/diff).",
+    {
+        "edits": {
+            "type": "array",
+            "description": "список правок; кожна {path, mode, old_string, new_string, diff, replace_all}",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "path": {**_STR, "description": "абсолютний шлях до файлу на хості"},
+                    "mode": {"type": "string", "enum": ["search_replace", "diff"]},
+                    "old_string": {**_STR},
+                    "new_string": {**_STR},
+                    "diff": {**_STR},
+                    "replace_all": {"type": "boolean"},
+                },
+                "required": ["path"],
+            },
+        },
+        "dry_run": {"type": "boolean", "description": "лише показати diff-и без застосування (default false)"},
+    },
+    ["edits"],
+)
+
 _REPO_SYMBOLS_SCHEMA = _schema(
     "repo_symbols",
     "Outline визначень файлу (класи/функції/імпорти з номерами рядків, без тіл). "
@@ -473,6 +501,7 @@ def agent_tool_schemas(*, computer: bool = False, allow_computer: bool = True) -
             if settings.enable_coding_tools:
                 schemas.extend(_CODING_SCHEMAS)
                 schemas.append(_CODE_EDIT_SCHEMA)
+                schemas.append(_CODE_EDIT_BATCH_SCHEMA)
             schemas.extend(_COMPUTER_SCHEMAS)
             schemas.append(_CLIPBOARD_READ_SCHEMA)
             schemas.append(_CLIPBOARD_WRITE_SCHEMA)
@@ -517,6 +546,7 @@ COMPUTER_TOOL_NAMES = frozenset(
         "fs_read",
         "fs_write",
         "code_edit",
+        "code_edit_batch",
         "capture_screenshot",
         "see_screen",
         "clipboard_read",
