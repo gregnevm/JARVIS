@@ -89,6 +89,12 @@ def test_schemas_default_excludes_code_exec(monkeypatch):
     monkeypatch.setattr(settings, "image_gen_url", "")
     monkeypatch.setattr(settings, "image_gen_model", "")
     monkeypatch.setattr(settings, "cursor_tasks_enabled", False)
+    # Hermetic проти локального .env: ці гейти інакше підтягують реальні
+    # MCP_SERVERS_JSON/NOTION_TOKEN/SLACK_BOT_TOKEN і додають mcp_call/конектори
+    # у дефолтний набір (CI без .env проходить, dev-машина — ні).
+    monkeypatch.setattr(settings, "mcp_servers_json", "")
+    monkeypatch.setattr(settings, "notion_token", "")
+    monkeypatch.setattr(settings, "slack_bot_token", "")
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas()]
     assert names == [
         "calc", "web_search", "web_fetch", "parse_file", "ocr_image", "take_note",

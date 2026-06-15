@@ -19,6 +19,9 @@ def continue_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "continue_dev_url", "http://continue.test:65432")
     monkeypatch.setattr(settings, "continue_dev_timeout", 5.0)
     monkeypatch.setattr(settings, "fetch_max_chars", 500)
+    # Hermetic проти локального .env (CONTINUE_VSCODE_CLI може вказувати на повний
+    # шлях до code.cmd Cursor); тест звіряє виклик саме з "code".
+    monkeypatch.setattr(settings, "continue_vscode_cli", "code")
 
 
 def test_schema_hidden_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
