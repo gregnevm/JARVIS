@@ -31,9 +31,23 @@ def _normalize_steps(steps: list[Any]) -> list[dict[str, Any]]:
             continue
         if not isinstance(step, dict):
             continue
-        title = str(step.get("title") or step.get("name") or f"Крок {i}")[:200]
-        detail = str(step.get("detail") or step.get("description") or title)[:2000]
-        out.append({"id": int(step.get("id") or i), "title": title, "detail": detail, "status": "pending"})
+        # Code-specific поля (CA-4.1) — опційні, для generic-планів просто відсутні.
+        file = str(step.get("file") or "")[:500]
+        action = str(step.get("action") or "")[:500]
+        rationale = str(step.get("rationale") or "")[:1000]
+        risk = str(step.get("risk") or "").strip().lower()[:20]
+        title = str(step.get("title") or step.get("name") or action or file or f"Крок {i}")[:200]
+        detail = str(step.get("detail") or step.get("description") or rationale or title)[:2000]
+        rec = {"id": int(step.get("id") or i), "title": title, "detail": detail, "status": "pending"}
+        if file:
+            rec["file"] = file
+        if action:
+            rec["action"] = action
+        if rationale:
+            rec["rationale"] = rationale
+        if risk:
+            rec["risk"] = risk
+        out.append(rec)
     return out
 
 
@@ -45,6 +59,7 @@ async def create_plan(
     risks: list[Any] | None = None,
     source_text: str = "",
     status: str = "pending",
+    kind: str = "general",
 ) -> dict[str, Any]:
     plan_id = uuid.uuid4().hex[:12]
     now = now_ts()
@@ -52,6 +67,7 @@ async def create_plan(
         "id": plan_id,
         "user_id": int(user_id),
         "status": status if status in _VALID_STATUS else "pending",
+        "kind": kind if kind in ("general", "code") else "general",
         "summary": (summary or "")[:4000],
         "steps": _normalize_steps(steps or []),
         "risks": [str(r)[:500] for r in (risks or [])[:10]],

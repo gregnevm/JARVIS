@@ -688,6 +688,49 @@ class AgentRunner:
         rec["marker"] = PLAN_MARKER.format(id=rec["id"])
         return rec
 
+    async def code_plan(self, user_id: int, text: str) -> dict[str, Any]:
+        """Code-specific план (CA-4.1): кроки з file/action/rationale/risk → Redis (pending).
+
+        Один апрув на весь план (CA-4.2) — наявним `approve_plan`. Виконання потім
+        мапиться на `code_edit_batch` (транзакційний multi-file, CA-4.3)."""
+        from . import plans
+
+        prompt = (
+            "Склади план зміни/рефактору коду. Поверни ЛИШЕ JSON без пояснень:\n"
+            '{"summary":"короткий опис","steps":[{"file":"шлях до файлу",'
+            '"action":"що саме зробити","rationale":"навіщо","risk":"low|medium|high"}],'
+            '"risks":["загальні ризики"]}\n'
+            f"Максимум {_PLAN_MAX_STEPS} кроків, КОЖЕН прив'язаний до конкретного файлу. "
+            f"Запит: {text}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": "Ти планувальник рефакторингу коду JARVIS. Відповідай лише "
+                    "валідним JSON; кожен крок прив'язаний до файлу.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = (msg.get("content") or "").strip()
+        parsed = extract_json_object(content) or {}
+        steps = parsed.get("steps") if isinstance(parsed.get("steps"), list) else []
+        if not steps:
+            steps = [{"file": "", "action": text[:200], "rationale": "", "risk": "medium"}]
+        rec = await plans.create_plan(
+            user_id,
+            summary=str(parsed.get("summary") or text[:500]),
+            steps=steps,
+            risks=parsed.get("risks") if isinstance(parsed.get("risks"), list) else [],
+            source_text=text,
+            status="pending",
+            kind="code",
+        )
+        rec["marker"] = PLAN_MARKER.format(id=rec["id"])
+        return rec
+
     async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:
         """Покрокове виконання схваленого плану (sync MVP, max 8 steps)."""
         from . import plans

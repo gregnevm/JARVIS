@@ -64,6 +64,16 @@ def register(router: APIRouter) -> None:
             logger.exception("agent plan failed")
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    @router.post("/agent/code/plan")
+    async def agent_code_plan_ep(req: PlanCreateRequest, request: Request) -> dict[str, Any]:
+        """CA-4.1: code-specific план (file/action/rationale/risk), один апрув (CA-4.2)."""
+        text = require_text(req.text)
+        try:
+            return await request.app.state.agent.code_plan(req.user_id, text)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent code plan failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     @router.get("/agent/plan/{plan_id}")
     async def agent_plan_get(plan_id: str, user_id: int) -> dict[str, Any]:
         from .. import plans
