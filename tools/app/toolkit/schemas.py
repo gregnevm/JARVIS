@@ -357,11 +357,40 @@ _REPO_SYMBOLS_SCHEMA = _schema(
     ["path"],
 )
 
+_RUN_TESTS_SCHEMA = _schema(
+    "run_tests",
+    "Запустити тести й повернути СТРУКТУРОВАНИЙ підсумок (passed/failed/errors + "
+    "список впалих + хвіст). Для fix-циклу: run_tests → code_edit → run_tests. "
+    "exe — лише раннер (pytest/python/npm/go/cargo…).",
+    {
+        "exe": {**_STR, "description": "раннер, напр. 'pytest' або 'python'"},
+        "args": {"type": "array", "items": {**_STR}, "description": "аргументи, напр. ['-q','tests/']"},
+        "path": {**_STR, "description": "робочий каталог (repo root)"},
+        "framework": {**_STR, "description": "pytest|auto (парсер; default auto)"},
+    },
+    ["exe"],
+)
+
+_RUN_LINT_SCHEMA = _schema(
+    "run_lint",
+    "Запустити лінтер/тайпчекер (mypy/ruff/tsc/eslint…) і повернути структурований "
+    "підсумок (errors + хвіст). exe — лише лінтер-раннер.",
+    {
+        "exe": {**_STR, "description": "раннер, напр. 'mypy' або 'ruff'"},
+        "args": {"type": "array", "items": {**_STR}, "description": "аргументи, напр. ['app/']"},
+        "path": {**_STR, "description": "робочий каталог (repo root)"},
+        "tool": {**_STR, "description": "mypy|ruff|auto (парсер; default auto)"},
+    },
+    ["exe"],
+)
+
 _CODING_SCHEMAS = [
     _REPO_TREE_SCHEMA,
     _REPO_GREP_SCHEMA,
     _CODE_READ_SCHEMA,
     _REPO_SYMBOLS_SCHEMA,
+    _RUN_TESTS_SCHEMA,
+    _RUN_LINT_SCHEMA,
 ]
 
 _MCP_CALL_SCHEMA = _schema(

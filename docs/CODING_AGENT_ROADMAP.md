@@ -72,7 +72,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
-| Виконання команд/тестів | **7/10** | computer mode PS/CLI працює; немає coding-специфічного тест-лупа |
+| Виконання команд/тестів | **8/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); fix-цикл через ReAct-луп; бракує виділеної fix-orchestration (CA-3.2) |
 | Редагування файлів | **7/10** | `code_edit` diff/apply (search_replace+unified diff) + git-safety `.jarvis_backup`; бракує лише транзакційного multi-file (CA-4.3) |
 | Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
@@ -158,11 +158,11 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-3.1 | `run_tests` tool — обгортка (pytest/npm/…) з парсингом fail-summary | Структурований `{passed, failed[], output_tail}` | [ ] |
-| CA-3.2 | Fix-loop у `AgentRunner`: fail → локалізація файлу → `code_edit` → re-run | Max N ітерацій (config) | [ ] |
-| CA-3.3 | Build/lint tool (mypy/ruff/tsc) з тим самим патерном | Структурований вивід | [ ] |
-| CA-3.4 | Stop-conditions: green / max-iters / no-progress (однаковий fail двічі) | Graceful звіт | [ ] |
-| CA-3.5 | Golden trace: навмисно зламаний тест → агент полагодив до green | `tools/tests/golden/` | [ ] |
+| CA-3.1 | `run_tests` tool — обгортка (pytest/npm/…) з парсингом fail-summary | Структурований `{passed, failed[], output_tail}` | [x] `check_tools.run_tests` (runner-allowlist, pytest-парсер) |
+| CA-3.2 | Fix-loop у `AgentRunner`: fail → локалізація файлу → `code_edit` → re-run | Max N ітерацій (config) | [~] вмикається наявним ReAct-лупом (run_tests→code_edit→run_tests); виділеної orchestration-петлі ще нема |
+| CA-3.3 | Build/lint tool (mypy/ruff/tsc) з тим самим патерном | Структурований вивід | [x] `check_tools.run_lint` (mypy/ruff/generic парсер) |
+| CA-3.4 | Stop-conditions: green / max-iters / no-progress (однаковий fail двічі) | Graceful звіт | [~] max-iters є в агент-лупі; no-progress детектор — ще ні |
+| CA-3.5 | Golden trace: навмисно зламаний тест → агент полагодив до green | `tools/tests/golden/` | [~] детермінований golden парсингу (`check_output.json`); live-fix eval — попереду |
 
 **Вихід CA-3:** «полагодь падіння в `tests/`» → агент ітерує до green або чесно звітує, що застряг.
 
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-15 | 1.5 | CA-3.1 `run_tests` + CA-3.3 `run_lint` (структуровані раннери, `check_tools.py`) + golden парсингу |
 | 2026-06-15 | 1.4 | CA-2.4 scoped-RAG індекс project-файлів (embed+reindex) + CA-2.5 token-бюджет (`budget.py`) |
 | 2026-06-15 | 1.3 | CA-2.3 `repo_symbols` (Python ast + regex-фолбек) + CA-1.6 golden trace (apply/revert) |
 | 2026-06-15 | 1.2 | CA-1.1/1.2/1.3/1.5 done — `code_edit` (search_replace+diff) через host-agent `/fs/edit`, confirm-tier T1, git-safety `.jarvis_backup/` |

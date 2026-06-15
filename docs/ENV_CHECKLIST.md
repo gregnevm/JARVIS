@@ -20,7 +20,7 @@ Hostagent читає `HOSTAGENT_FS_ROOTS` як `fs_roots` у `hostagent/.env` а
 
 | Змінна | Приклад | Навіщо |
 |--------|---------|--------|
-| `ENABLE_CODING_TOOLS` | `true` | read-only `repo_tree`/`repo_grep`/`code_read` + мутуючий `code_edit` у computer mode. Owner-gate + `ENABLE_COMPUTER_USE` |
+| `ENABLE_CODING_TOOLS` | `true` | read-only `repo_tree`/`repo_grep`/`code_read`/`repo_symbols`, тест/лінт `run_tests`/`run_lint`, мутуючий `code_edit` (computer mode). Owner-gate + `ENABLE_COMPUTER_USE` |
 | `CODING_TREE_MAX_ENTRIES` | `300` | Стеля рядків дерева `repo_tree` |
 | `CODING_GREP_MAX_RESULTS` | `60` | Стеля результатів `repo_grep` (можна перебити аргументом, до 500) |
 

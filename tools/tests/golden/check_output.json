@@ -1,0 +1,42 @@
+[
+  {
+    "id": "pytest_pass",
+    "kind": "tests",
+    "framework": "pytest",
+    "stdout": "....\n=== 12 passed in 0.42s ===\n",
+    "code": 0,
+    "expect_substrings": ["✅ PASS", "passed=12"]
+  },
+  {
+    "id": "pytest_fail_lists_names",
+    "kind": "tests",
+    "framework": "pytest",
+    "stdout": "FAILED pkg/test_x.py::test_a - AssertionError\n=== 1 failed, 4 passed in 0.5s ===\n",
+    "code": 1,
+    "expect_substrings": ["❌ FAIL", "failed=1", "passed=4", "pkg/test_x.py::test_a"]
+  },
+  {
+    "id": "mypy_success",
+    "kind": "lint",
+    "framework": "mypy",
+    "stdout": "Success: no issues found in 80 source files\n",
+    "code": 0,
+    "expect_substrings": ["mypy ✅ PASS"]
+  },
+  {
+    "id": "mypy_errors",
+    "kind": "lint",
+    "framework": "mypy",
+    "stdout": "app/x.py:10: error: bad [arg-type]\nFound 3 errors in 2 files\n",
+    "code": 1,
+    "expect_substrings": ["mypy ❌ 3 errors"]
+  },
+  {
+    "id": "ruff_issues",
+    "kind": "lint",
+    "framework": "ruff",
+    "stdout": "app/x.py:1:1: F401 unused\nFound 2 errors.\n",
+    "code": 1,
+    "expect_substrings": ["ruff ❌", "2 issues"]
+  }
+]
