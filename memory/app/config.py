@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # Ліміти контексту project files для агента (GET ?include_content=true).
     project_files_max_total_chars: int = 12000
     project_files_max_per_file: int = 4000
+    # CA-2.4: індексувати project-файли у scoped RAG (embed чанків при add/reindex).
+    index_project_files: bool = True
 
     @property
     def dsn(self) -> str:

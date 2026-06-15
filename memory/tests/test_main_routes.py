@@ -71,6 +71,9 @@ class FakeDB:
         self.read_project_files_content = AsyncMock(return_value=[{"name": "a.txt", "content": "x"}])
         self.add_project_file = AsyncMock(return_value=5)
         self.delete_project_file = AsyncMock(return_value=True)
+        self.add_project_file_embedding = AsyncMock(return_value=None)
+        self.clear_project_file_embeddings = AsyncMock(return_value=3)
+        self.all_project_file_contents = AsyncMock(return_value=["alpha beta", "gamma"])
         self._pool = _FakePool(schema_meta_rows or [])
 
     @property
@@ -331,7 +334,9 @@ async def test_project_file_add_success(client):
             "/projects/1/files", json={"user_id": 1, "name": "doc.txt", "content": "hello"}
         )
     assert r.status_code == 200
-    assert r.json() == {"id": 5, "name": "doc.txt"}
+    body = r.json()
+    assert body["id"] == 5 and body["name"] == "doc.txt"
+    assert "chunks_indexed" in body  # CA-2.4: scoped-RAG indexing
 
 
 async def test_project_files_list_404_when_project_missing(client):
@@ -361,3 +366,59 @@ async def test_project_file_delete_success(client):
     async with client as c:
         r = await c.delete("/projects/1/files/5", params={"user_id": 1})
     assert r.json() == {"ok": True}
+
+
+# --- CA-2.4: scoped-RAG indexing of project files ---
+
+async def test_project_file_add_indexes_when_enabled(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "index_project_files", True)
+    async with client as c:
+        r = await c.post(
+            "/projects/1/files",
+            json={"user_id": 7, "name": "a.py", "content": "def f(): return 1"},
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == 5
+    assert body["chunks_indexed"] >= 1
+    app.state.db.add_project_file_embedding.assert_awaited()
+    # embed-чанк іде з тим самим project_id/user_id
+    call = app.state.db.add_project_file_embedding.await_args
+    assert call.args[0] == 7  # user_id
+    assert call.args[3] == 1  # project_id
+
+
+async def test_project_file_add_skips_index_when_disabled(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "index_project_files", False)
+    async with client as c:
+        r = await c.post(
+            "/projects/1/files",
+            json={"user_id": 7, "name": "a.py", "content": "x"},
+        )
+    assert r.json()["chunks_indexed"] == 0
+    app.state.db.add_project_file_embedding.assert_not_awaited()
+
+
+async def test_project_reindex_clears_then_reembeds(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "index_project_files", True)
+    async with client as c:
+        r = await c.post("/projects/1/reindex", json={"user_id": 7})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["removed"] == 3  # FakeDB.clear_project_file_embeddings
+    assert body["files"] == 2  # FakeDB.all_project_file_contents → 2 files
+    assert body["indexed"] >= 2
+    app.state.db.clear_project_file_embeddings.assert_awaited_once_with(1)
+
+
+async def test_project_reindex_404_for_foreign_project(client):
+    app.state.db.get_project = AsyncMock(return_value=None)
+    async with client as c:
+        r = await c.post("/projects/1/reindex", json={"user_id": 99})
+    assert r.status_code == 404

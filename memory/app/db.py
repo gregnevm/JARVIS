@@ -245,6 +245,41 @@ class DB:
             await con.execute("UPDATE projects SET updated_at=now() WHERE id=$1", project_id)
         return int(file_id)
 
+    async def add_project_file_embedding(
+        self, user_id: int, content: str, embedding: list[float], project_id: int
+    ) -> None:
+        """Embedding чанка project-файлу (scoped RAG, CA-2.4). `message_id=NULL` —
+        ці рядки належать файлу, не повідомленню; саме за `message_id IS NULL`
+        їх відрізняємо у `clear_project_file_embeddings` при reindex."""
+        async with self.pool.acquire() as con:
+            await con.execute(
+                "INSERT INTO embeddings (message_id, user_id, content, embedding, project_id) "
+                "VALUES (NULL,$1,$2,$3::vector,$4)",
+                user_id,
+                content,
+                to_vector_literal(embedding),
+                project_id,
+            )
+
+    async def clear_project_file_embeddings(self, project_id: int) -> int:
+        """Видаляє лише file-embeddings проєкту (message_id IS NULL) — message-RAG
+        лишається. Повертає к-сть видалених (для reindex idempotent)."""
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "DELETE FROM embeddings WHERE project_id=$1 AND message_id IS NULL",
+                project_id,
+            )
+        return int(res.split()[-1]) if res and res.split()[-1].isdigit() else 0
+
+    async def all_project_file_contents(self, project_id: int) -> list[str]:
+        """Повний (необрізаний) вміст усіх файлів проєкту — для reindex."""
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT content FROM project_files WHERE project_id=$1 ORDER BY created_at ASC",
+                project_id,
+            )
+        return [str(r["content"] or "") for r in rows]
+
     async def list_project_files(self, project_id: int) -> list[dict[str, Any]]:
         async with self.pool.acquire() as con:
             rows = await con.fetch(

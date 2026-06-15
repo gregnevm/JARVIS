@@ -173,6 +173,10 @@ class ProjectFileCreate(BaseModel):
     content: str
 
 
+class ProjectActionRequest(BaseModel):
+    user_id: int
+
+
 @app.post("/projects")
 async def projects_create(req: ProjectCreate) -> dict[str, Any]:
     name = req.name.strip()
@@ -234,6 +238,22 @@ async def _require_project(db: DB, project_id: int, user_id: int) -> None:
         raise HTTPException(status_code=404, detail="project not found")
 
 
+async def _index_file_content(user_id: int, project_id: int, content: str) -> int:
+    """Чанкує + embed-ить вміст у scoped RAG (best-effort, як /store). CA-2.4."""
+    if not settings.index_project_files:
+        return 0
+    stored = 0
+    for chunk in chunk_text(content):
+        try:
+            vec = await app.state.embedder.embed(chunk)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("embed failed for project file chunk: %s", exc)
+            continue
+        await app.state.db.add_project_file_embedding(user_id, chunk, vec, project_id)
+        stored += 1
+    return stored
+
+
 @app.post("/projects/{project_id}/files")
 async def project_file_add(project_id: int, req: ProjectFileCreate) -> dict[str, Any]:
     await _require_project(app.state.db, project_id, req.user_id)
@@ -241,7 +261,20 @@ async def project_file_add(project_id: int, req: ProjectFileCreate) -> dict[str,
     if not name:
         raise HTTPException(status_code=400, detail="name required")
     file_id = await app.state.db.add_project_file(project_id, name[:200], req.content)
-    return {"id": file_id, "name": name}
+    indexed = await _index_file_content(req.user_id, project_id, req.content)
+    return {"id": file_id, "name": name, "chunks_indexed": indexed}
+
+
+@app.post("/projects/{project_id}/reindex")
+async def project_reindex(project_id: int, req: ProjectActionRequest) -> dict[str, Any]:
+    """Перебудувати scoped-RAG індекс файлів проєкту: clear + re-embed усіх (CA-2.4)."""
+    await _require_project(app.state.db, project_id, req.user_id)
+    removed = await app.state.db.clear_project_file_embeddings(project_id)
+    contents = await app.state.db.all_project_file_contents(project_id)
+    indexed = 0
+    for content in contents:
+        indexed += await _index_file_content(req.user_id, project_id, content)
+    return {"removed": removed, "indexed": indexed, "files": len(contents)}
 
 
 @app.get("/projects/{project_id}/files")
