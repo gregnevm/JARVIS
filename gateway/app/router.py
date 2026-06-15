@@ -266,6 +266,19 @@ async def handle_update(
         ):
             return
 
+    if redis is not None:
+        from .bot.cursor_flow import try_awaiting_message, try_computer_cursor_message
+
+        if await try_computer_cursor_message(
+            text, int(chat_id), int(user_id), tg, tools, svc, redis=redis
+        ):
+            return
+
+        if await try_awaiting_message(
+            text, int(chat_id), int(user_id), tg, tools, redis
+        ):
+            return
+
     if _is_screenshot_request(text):
         from .auth import computer_denied_message
 

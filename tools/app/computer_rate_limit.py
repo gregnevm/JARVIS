@@ -4,20 +4,10 @@ from __future__ import annotations
 import logging
 import time
 
-import redis.asyncio as aioredis
-
 from .config import settings
+from .redis_util import get_redis
 
 logger = logging.getLogger("jarvis.tools.computer_rate_limit")
-
-_redis: aioredis.Redis | None = None
-
-
-def _client() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
 
 
 def _hour_key(user_id: int) -> str:
@@ -32,7 +22,7 @@ async def check_mutating_allowed(user_id: int) -> str | None:
         return None
     key = _hour_key(user_id)
     try:
-        raw = await _client().get(key)
+        raw = await get_redis().get(key)
         count = int(raw or 0)
     except Exception as exc:  # noqa: BLE001
         logger.warning("computer rate limit check failed (fail-open): %s", exc)
@@ -51,7 +41,7 @@ async def record_mutating(user_id: int) -> None:
         return
     key = _hour_key(user_id)
     try:
-        pipe = _client().pipeline()
+        pipe = get_redis().pipeline()
         pipe.incr(key)
         pipe.expire(key, 7200)
         await pipe.execute()

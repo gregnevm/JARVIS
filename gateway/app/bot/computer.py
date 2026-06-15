@@ -7,8 +7,10 @@ from typing import Any
 
 from ..agent_turn import resume_after_computer
 from ..outbound import deliver
+from ..config import settings
 from ..tools_client import ToolsClient
 from ..telegram import TelegramClient
+from ._helpers import send_denial
 from .dashboard import esc
 from .keyboards import admin_ps_confirm_keyboard, computer_confirm_keyboard
 
@@ -40,7 +42,9 @@ async def send_computer_confirm(
         f"Код: <code>{esc(code)}</code> (діє 5 хв)\n"
         "Підтверди дію на хості:",
         parse_mode="HTML",
-        reply_markup=computer_confirm_keyboard(code),
+        reply_markup=computer_confirm_keyboard(
+            code, trust_minutes=settings.computer_session_trust_minutes
+        ),
     )
 
 
@@ -96,8 +100,7 @@ async def handle_computer_callback(
     from ..auth import computer_denied_message
 
     denied = computer_denied_message(user_id)
-    if denied:
-        await tg.send_message(chat_id, denied)
+    if await send_denial(tg, chat_id, denied):
         return True
     if data.startswith("cmpA:"):
         parts = data.split(":")
@@ -136,8 +139,11 @@ async def handle_computer_callback(
     code = parts[2]
     result, origin = await tools.confirm_computer(user_id, code)
     if grant_trust:
-        await tools.grant_trust(user_id)
-        await tg.send_message(chat_id, "🔓 Trusted session: 30 хв без повторного ✅.")
+        await tools.grant_trust(user_id, full=True)
+        await tg.send_message(
+            chat_id,
+            "🔓 Full trust: mutating дії без ✅ до закінчення сесії (крім admin).",
+        )
     admin_c = parse_admin_confirm(result)
     if admin_c:
         await send_admin_confirm(chat_id, admin_c, tg)

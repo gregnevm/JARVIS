@@ -10,7 +10,9 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from ._helpers import require_text
 from .auth import computer_denied_message
+from .computer_resume import resume_text as _resume_text
 from .webapp import authorize
 
 logger = logging.getLogger("jarvis.gateway.webapp.ps")
@@ -20,6 +22,9 @@ _PS_PANEL_HINT = (
     "Використовуй tier T0 run_powershell для OS-задач. "
     "ЗАВЖДИ передавай as_admin: true у run_powershell (elevated PowerShell). "
     "Не використовуй GUI-клік (screen_click/uia), якщо є PS-шлях. "
+    "PowerShell без | && || — для процесів достатньо Get-Process або Get-Process -Name foo,bar. "
+    "Coding-задачі в репо — tool cursor_task (краще за PS/CLI). "
+    "CLI fallback: run_cli python + O:\\JARVIS\\scripts\\cursor_run_task.py --task ... --cwd O:\\JARVIS. "
     "Коротко поясни що робиш.\n\n"
 )
 
@@ -40,21 +45,26 @@ class PsResumeBody(BaseModel):
     init_data: str | None = None
 
 
-def _resume_text(origin: str, result: str) -> str:
-    parts: list[str] = []
-    origin = (origin or "").strip()
-    if origin:
-        parts.append(f"Оригінальний запит користувача:\n{origin[:3000]}")
-    parts.append(f"Результат підтвердженої Computer Use дії на хості:\n{result[:6000]}")
-    parts.append(
-        "Коротко підсумуй для користувача українською. "
-        "Якщо початкове завдання ще не виконано — продовж наступним кроком."
-    )
-    return "\n\n".join(parts)
-
-
 def _ndjson_sse(obj: dict[str, Any]) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
+
+def _check_computer_access(user_id: int) -> None:
+    """403, якщо Computer Use заборонено цьому користувачу.
+
+    `user_id == 0` означає dev-режим (немає реального Telegram-користувача
+    — `WEBAPP_DEV_OPEN`) — пропускаємо перевірку, бо `computer_denied_message`
+    очікує справжній user_id. Узагальнює побайтово ідентичний 4-рядковий блок
+    `if user_id: denied = computer_denied_message(user_id); if denied: raise
+    HTTPException(403, denied)`, повторений 5 разів у цьому файлі (ask/pending/
+    confirm/cancel/resume). Не використовує `platform/workbench.py::_check_computer`
+    — там завжди справжній auth.user_id (PlatformAuth), без dev-режиму, тож
+    `if user_id:`-гард там не потрібен і об'єднання дало б зайву гілку для
+    чужого сценарію."""
+    if user_id:
+        denied = computer_denied_message(user_id)
+        if denied:
+            raise HTTPException(status_code=403, detail=denied)
 
 
 def register_ps_routes(router: APIRouter) -> None:
@@ -65,13 +75,8 @@ def register_ps_routes(router: APIRouter) -> None:
         x_telegram_init_data: str | None = Header(default=None),
     ) -> StreamingResponse:
         user_id = authorize(x_telegram_init_data or body.init_data)
-        if user_id:
-            denied = computer_denied_message(user_id)
-            if denied:
-                raise HTTPException(status_code=403, detail=denied)
-        text = (body.text or "").strip()
-        if not text:
-            raise HTTPException(status_code=400, detail="text required")
+        _check_computer_access(user_id)
+        text = require_text(body.text)
         tools = request.app.state.tools
         prompt = _PS_PANEL_HINT + text
 
@@ -104,10 +109,7 @@ def register_ps_routes(router: APIRouter) -> None:
         x_telegram_init_data: str | None = Header(default=None),
     ) -> dict[str, Any]:
         user_id = authorize(x_telegram_init_data)
-        if user_id:
-            denied = computer_denied_message(user_id)
-            if denied:
-                raise HTTPException(status_code=403, detail=denied)
+        _check_computer_access(user_id)
         return await request.app.state.tools.get_ps_pending(user_id)
 
     @router.post("/app/ps/confirm")
@@ -117,13 +119,8 @@ def register_ps_routes(router: APIRouter) -> None:
         x_telegram_init_data: str | None = Header(default=None),
     ) -> dict[str, str]:
         user_id = authorize(x_telegram_init_data or body.init_data)
-        if user_id:
-            denied = computer_denied_message(user_id)
-            if denied:
-                raise HTTPException(status_code=403, detail=denied)
-        code = (body.code or "").strip()
-        if not code:
-            raise HTTPException(status_code=400, detail="code required")
+        _check_computer_access(user_id)
+        code = require_text(body.code, field="code")
         result, origin = await request.app.state.tools.confirm_computer(user_id, code)
         return {"result": result, "origin": origin}
 
@@ -133,10 +130,7 @@ def register_ps_routes(router: APIRouter) -> None:
         x_telegram_init_data: str | None = Header(default=None),
     ) -> dict[str, str]:
         user_id = authorize(x_telegram_init_data)
-        if user_id:
-            denied = computer_denied_message(user_id)
-            if denied:
-                raise HTTPException(status_code=403, detail=denied)
+        _check_computer_access(user_id)
         await request.app.state.tools.cancel_computer(user_id)
         return {"status": "cancelled"}
 
@@ -147,13 +141,8 @@ def register_ps_routes(router: APIRouter) -> None:
         x_telegram_init_data: str | None = Header(default=None),
     ) -> StreamingResponse:
         user_id = authorize(x_telegram_init_data or body.init_data)
-        if user_id:
-            denied = computer_denied_message(user_id)
-            if denied:
-                raise HTTPException(status_code=403, detail=denied)
-        result = (body.result or "").strip()
-        if not result:
-            raise HTTPException(status_code=400, detail="result required")
+        _check_computer_access(user_id)
+        result = require_text(body.result, field="result")
         tools = request.app.state.tools
         resume_text = _resume_text(body.origin, result)
 

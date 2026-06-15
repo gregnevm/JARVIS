@@ -9,9 +9,10 @@ import logging
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
+from .._helpers import require_text
 from ..services import ServicesClient
 from .auth import PlatformAuth, require_platform_auth
 
@@ -84,9 +85,7 @@ def register(router: APIRouter) -> None:
         request: Request,
         _auth: PlatformAuth = Depends(require_platform_auth),
     ) -> dict[str, Any]:
-        version = (body.version or "").strip()
-        if not version:
-            raise HTTPException(status_code=400, detail="version required")
+        version = require_text(body.version, field="version")
         return await request.app.state.svc.twin_promote_lora(version)
 
     @router.post("/platform/api/models/lora/rollback")

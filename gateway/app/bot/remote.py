@@ -12,6 +12,7 @@ from ..config import settings
 from ..outbound import deliver
 from ..telegram import TelegramClient
 from ..tools_client import ToolsClient
+from ._helpers import send_denial
 
 logger = logging.getLogger("jarvis.gateway.remote")
 
@@ -44,8 +45,7 @@ async def handle_remote_command(
     t = (text or "").strip()
     low = t.lower()
     if low.startswith("/file"):
-        if denied:
-            await tg.send_message(chat_id, denied)
+        if await send_denial(tg, chat_id, denied):
             return True
         parts = t.split(maxsplit=1)
         if len(parts) < 2:
@@ -62,8 +62,7 @@ async def handle_remote_command(
         return True
 
     if low.startswith("/macro"):
-        if denied:
-            await tg.send_message(chat_id, denied)
+        if await send_denial(tg, chat_id, denied):
             return True
         parts = t.split(maxsplit=2)
         if len(parts) < 2 or parts[1].lower() == "list":
@@ -82,8 +81,7 @@ async def handle_remote_command(
         return True
 
     if low.startswith("/tasks"):
-        if denied:
-            await tg.send_message(chat_id, denied)
+        if await send_denial(tg, chat_id, denied):
             return True
         if "cancel" in low:
             await tools.cancel_tasks(user_id)
@@ -94,8 +92,7 @@ async def handle_remote_command(
         return True
 
     if low.startswith("/see"):
-        if denied:
-            await tg.send_message(chat_id, denied)
+        if await send_denial(tg, chat_id, denied):
             return True
         q = t.split(maxsplit=1)[1] if " " in t else ""
         await tg.send_chat_action(chat_id, "upload_photo")
@@ -104,8 +101,7 @@ async def handle_remote_command(
         return True
 
     if low.startswith("/clipboard"):
-        if denied:
-            await tg.send_message(chat_id, denied)
+        if await send_denial(tg, chat_id, denied):
             return True
         reply = await tools.clipboard_read(user_id)
         await tg.send_message(chat_id, reply[:4000])

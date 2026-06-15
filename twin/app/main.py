@@ -11,9 +11,11 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .config import settings
+from .lora_paths import resolve_lora_path
 from .registry import ModelRegistry
 from .session_log import JsonlLog
 
@@ -85,6 +87,19 @@ async def latest_lora(request: Request) -> dict[str, Any]:
         "eval_score": active["eval_score"],
         "path": active["path"],
     }
+
+
+@app.get("/registry/lora/active/download")
+async def download_active_lora(request: Request) -> FileResponse:
+    """Edge pull: завантажити GGUF активної LoRA."""
+    active = request.app.state.registry.get_active()
+    if active is None:
+        raise HTTPException(status_code=404, detail="no active lora")
+    try:
+        path = resolve_lora_path(str(active["path"]), Path(settings.data_dir))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path, filename=path.name, media_type="application/octet-stream")
 
 
 @app.get("/status")

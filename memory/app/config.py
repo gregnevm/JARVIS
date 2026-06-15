@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     ollama_host: str = "http://host.docker.internal:11434"
     embed_model: str = "nomic-embed-text"
+    embed_dim: int = 768
 
     postgres_user: str = "jarvis"
     postgres_password: str = "changeme"
@@ -22,10 +23,22 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     embed_cache_ttl: int = 86400  # 24 год
 
+    # Ліміти контексту project files для агента (GET ?include_content=true).
+    project_files_max_total_chars: int = 12000
+    project_files_max_per_file: int = 4000
+
     @property
     def dsn(self) -> str:
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def sync_dsn(self) -> str:
+        """Sync DSN для Alembic (psycopg2)."""
+        return (
+            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 

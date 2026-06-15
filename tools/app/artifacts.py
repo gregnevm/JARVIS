@@ -12,15 +12,13 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from .config import settings
+from .redis_util import get_redis
 
 ALLOWED_KINDS = {"html", "markdown", "url", "image", "code"}
 
 ARTIFACT_TTL = 24 * 3600
 MAX_HISTORY = 20
 _MAX_CONTENT = 200_000
-
-_redis: aioredis.Redis | None = None
 
 
 def current_key(user_id: int) -> str:
@@ -29,20 +27,6 @@ def current_key(user_id: int) -> str:
 
 def list_key(user_id: int) -> str:
     return f"artifacts:{int(user_id)}"
-
-
-def _client() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
-
-
-async def aclose() -> None:
-    global _redis
-    if _redis is not None:
-        await _redis.aclose()
-        _redis = None
 
 
 def validate_artifact(kind: str, content: str, title: str = "") -> str | dict[str, Any]:
@@ -93,7 +77,7 @@ async def push_artifact(
 
 
 async def show_in_app(user_id: int, kind: str, content: str, title: str = "") -> str:
-    return await push_artifact(_client(), user_id, kind, content, title)
+    return await push_artifact(get_redis(), user_id, kind, content, title)
 
 
 async def get_current(redis: aioredis.Redis, user_id: int) -> dict[str, Any] | None:

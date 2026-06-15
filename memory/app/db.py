@@ -14,43 +14,26 @@ def to_vector_literal(embedding: list[float]) -> str:
     return "[" + ",".join(repr(float(x)) for x in embedding) + "]"
 
 
-# Ідемпотентні міграції (P1 Projects). init.sql покриває fresh install; це — для
-# наявних БД (init.sql не перезапускається). Виконуються при кожному connect().
-_MIGRATIONS: tuple[str, ...] = (
-    """CREATE TABLE IF NOT EXISTS projects (
-        id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, name TEXT NOT NULL,
-        system_prompt TEXT NOT NULL DEFAULT '', archived BOOLEAN NOT NULL DEFAULT false,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now())""",
-    "CREATE INDEX IF NOT EXISTS idx_projects_user ON projects (user_id, archived)",
-    """CREATE TABLE IF NOT EXISTS project_files (
-        id BIGSERIAL PRIMARY KEY,
-        project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-        name TEXT NOT NULL, content TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now())""",
-    "CREATE INDEX IF NOT EXISTS idx_project_files_project ON project_files (project_id)",
-    "ALTER TABLE messages ADD COLUMN IF NOT EXISTS project_id BIGINT "
-    "REFERENCES projects(id) ON DELETE SET NULL",
-    "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS project_id BIGINT "
-    "REFERENCES projects(id) ON DELETE SET NULL",
-    "CREATE INDEX IF NOT EXISTS idx_embeddings_user_project ON embeddings (user_id, project_id)",
-)
-
-
 class DB:
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
         self._pool: asyncpg.Pool | None = None
 
     async def connect(self) -> None:
+        from . import migrate as alembic_migrate
+
+        alembic_migrate.upgrade_head()
         self._pool = await asyncpg.create_pool(self._dsn, min_size=1, max_size=5)
-        await self.migrate()
+        meta = await alembic_migrate.get_schema_meta(self)
+        warn = alembic_migrate.embed_dim_mismatch(meta)
+        if warn:
+            logger.warning(warn)
 
     async def migrate(self) -> None:
-        """Прокочує ідемпотентні DDL (P1). Безпечно на наявних і чистих БД."""
-        async with self.pool.acquire() as con:
-            for stmt in _MIGRATIONS:
-                await con.execute(stmt)
+        """Alembic upgrade head (idempotent). Викликати окремо без connect()."""
+        from . import migrate as alembic_migrate
+
+        alembic_migrate.upgrade_head()
 
     async def close(self) -> None:
         if self._pool is not None:
@@ -285,3 +268,33 @@ class DB:
                 "DELETE FROM project_files WHERE id=$1 AND project_id=$2", file_id, project_id
             )
         return res.endswith("1")
+
+    async def read_project_files_content(
+        self,
+        project_id: int,
+        *,
+        max_total_chars: int = 12000,
+        max_per_file: int = 4000,
+    ) -> list[dict[str, str]]:
+        """Повертає вміст файлів проєкту для інжекту в system prompt агента."""
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT name, content FROM project_files "
+                "WHERE project_id=$1 ORDER BY created_at ASC",
+                project_id,
+            )
+        out: list[dict[str, str]] = []
+        budget = max(0, max_total_chars)
+        for r in rows:
+            if budget <= 0:
+                break
+            name = str(r["name"] or "file")
+            raw = str(r["content"] or "")
+            per_cap = min(max_per_file, budget)
+            if len(raw) > per_cap:
+                content = raw[:per_cap] + "…[truncated]"
+            else:
+                content = raw
+            out.append({"name": name, "content": content})
+            budget -= len(content)
+        return out

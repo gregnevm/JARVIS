@@ -1,6 +1,8 @@
 """Конфігурація Tools service (інструменти + агент-луп)."""
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,8 +11,11 @@ class Settings(BaseSettings):
 
     # Ollama (на ХОСТІ) + дві моделі
     ollama_host: str = "http://host.docker.internal:11434"
-    ollama_model_chat: str = "qwen3:4b"
+    ollama_model_chat: str = "gemma3:4b"
     ollama_model_agent: str = "qwen2.5:7b-instruct"
+    # LLM_BACKEND=kobold — chat через KoboldAdapter (Edge/Twin CPU inference).
+    llm_backend: Literal["ollama", "kobold"] = "ollama"
+    kobold_host: str = "http://host.docker.internal:5001"
     # Vision-модель для розпізнавання зображень (напр. "llava:7b", "qwen2.5vl:7b").
     # Порожньо = describe_image вимкнено.
     ollama_model_vision: str = ""
@@ -44,6 +49,8 @@ class Settings(BaseSettings):
     enable_code_exec: bool = False
     # Telegram ID з доступом до Computer Use (скріншот, PS, FS). Порожньо → ADMIN → ALLOWED (.env).
     computer_owner_user_ids: str = ""
+    # Режим computer лише для ADMIN_USER_IDS (застарілий прапор; краще COMPUTER_OWNER_USER_IDS).
+    computer_mode_admins_only: bool = False
     allowed_user_ids: str = ""
     admin_user_ids: str = ""
     # Computer Use — керування Windows-хостом через host-agent (поза Docker).
@@ -68,7 +75,11 @@ class Settings(BaseSettings):
     http_timeout: float = 20.0          # web_fetch / web_search
     ollama_timeout: float = 180.0       # CPU-інференс може бути повільним
     max_agent_iters: int = 5            # стеля ітерацій тул-лупа
-    computer_max_iters: int = 8         # окремо для AGENT_MODE=computer (багатокрокові задачі)
+    computer_max_iters: int = 12        # окремо для AGENT_MODE=computer (багатокрокові задачі)
+    # safe | standard | full — які tier computer-tools доступні (див. computer_profile.py).
+    computer_profile: str = "safe"
+    # Після ✅ — session trust: без confirm для T0/T1 (хв; 0 = вимкнено). cmp:YT = full trust.
+    computer_session_trust_minutes: int = 10
     fetch_max_chars: int = 6000         # обрізаємо сторінку, щоб не рознести контекст
     code_exec_timeout: float = 8.0
     # Circuit breaker Ollama: N підряд помилок → пауза cooldown секунд (fail-fast).
@@ -76,6 +87,68 @@ class Settings(BaseSettings):
     ollama_cooldown: float = 60.0
     # D.4: retrain коли +N кураційних turns після останнього export (0 = вимкнено).
     train_retrain_min_curated: int = 200
+
+    # P4 Deep Research
+    research_max_hops: int = 3
+    research_max_urls: int = 5
+    research_max_chars: int = 40000
+
+    # P5 MCP Gateway — JSON array of {name, command, args, env?}
+    mcp_servers_json: str = ""
+
+    # P6 Connectors (integration tokens via .env)
+    notion_token: str = ""
+    notion_database_id: str = ""
+    slack_bot_token: str = ""
+    slack_default_channel: str = ""
+    calendar_ics_url: str = ""
+
+    # P7 Skills
+    skills_max_chars: int = 4000
+
+    # P8 Subagents
+    subagent_default_budget: int = 3
+    subagent_max_budget: int = 8
+
+    # Phase 7.1 Orchestrator + Critic
+    orchestrator_enabled: bool = True
+    orchestrator_worker_budget: int = 5
+    orchestrator_max_revisions: int = 1
+
+    # Phase 7.2 Self-improving loop (judge → human gate → export)
+    self_improve_enabled: bool = True
+    self_improve_judge_model: str = ""  # порожньо → ollama_model_chat
+    self_improve_scan_limit: int = 50
+
+    # P10 Hooks
+    hooks_enabled: bool = True
+
+    # LoRA deploy (Phase 3.2): promote/rollback → Ollama live
+    lora_deploy_enabled: bool = True
+    lora_base_model: str = ""
+    lora_ollama_model: str = "jarvis-lora"
+    lora_active_dir: str = ""
+
+    # Cursor IDE tasks (Telegram /cursor + tool cursor_task)
+    cursor_tasks_enabled: bool = True
+    cursor_runtime: str = "local"  # local | cloud
+    cursor_api_key: str = ""
+    cursor_api_base: str = "https://api.cursor.com"
+    cursor_model: str = "composer-2.5"
+    cursor_repo_url: str = ""
+    cursor_repo_ref: str = "main"
+    cursor_auto_create_pr: bool = False
+    cursor_host_workspace: str = ""  # O:\JARVIS на хості
+    cursor_host_script: str = ""  # O:\JARVIS\scripts\cursor_run_task.py
+    cursor_python_exe: str = "python"
+    cursor_timeout: float = 900.0
+    cursor_fallback_inbox: bool = True
+
+    # Continue.dev — VS Code + local agent API (tool continue_dev, Computer Use mode)
+    enable_continue_dev: bool = False
+    continue_dev_url: str = "http://host.docker.internal:65432"
+    continue_dev_timeout: float = 300.0
+    continue_vscode_cli: str = "code"
 
 
 settings = Settings()

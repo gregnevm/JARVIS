@@ -23,7 +23,7 @@ class FakeRedis:
 
 def _inject(monkeypatch) -> FakeRedis:
     fake = FakeRedis()
-    monkeypatch.setattr(reminders, "_redis", fake)
+    monkeypatch.setattr(reminders, "get_redis", lambda: fake)
     return fake
 
 

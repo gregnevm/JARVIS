@@ -7,6 +7,11 @@
 > архітектуру PortableAI. Аналіз того, як поточний стек (microservices Telegram-бот)
 > співвідноситься з нею — у `docs/GAP_ANALYSIS.md`. Коротко: поточний стек ≈ «Twin».
 
+> **Місце в ієрархії документів:** DESIGN — **архітектурний шар** (Edge + Twin + fine-tuning).
+> Продуктове бачення (3 стовпи: API-платформа · coding-агент · мультиплатформа) і фази —
+> у [`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md); місія й принципи — у [`AGENTS.md`](../AGENTS.md).
+> PortableAI (Edge/Twin/LoRA) лишається фундаментом, на якому стоять стовпи.
+
 ---
 ## Table of Contents
 1. [Vision & Principles](#1-vision--principles)
@@ -1254,6 +1259,21 @@ Rollback procedure:
 **Decision:** training виконується на ephemeral RunPod-інстансі; результат (LoRA .gguf) тягнеться назад і реєструється у ModelRegistry
 **Alternatives:** окрема NVIDIA-машина (капітальні витрати), AMD ROCm + кастомний стек (нестабільно)
 **Consequences:** +inference лишається суверенним і локальним; -датасет тимчасово залишає машину під час training (звузити тезу «privacy абсолютна» до inference); -потрібен RunPod-акаунт і трансфер даних
+---
+### ADR-008: Self-improve scan — навмисно ручний тригер (human-in-the-loop)
+**Context:** `tools/app/routes/improve.py` (фіча 7.2) має judge, що відбирає кандидатів
+з історії діалогів для тренувального датасету; постає питання — запускати scan
+автоматично (cron/scheduler) чи залишати ручним
+**Decision:** scan запускається лише явним викликом `POST /improve/scan` (з Platform
+Improve tab); жодного `JOB_TYPES`/cron/scheduler-запису немає і не планується —
+людина обов'язково review'ить кандидатів (`/improve/pending`, `/improve/review`)
+перед `/improve/export` у тренувальний датасет
+**Alternatives:** періодичний авто-scan (cron у `bg_jobs`/scheduler) — обрано НЕ робити
+**Consequences:** +жодна неякісна репліка не потрапляє в датасет без нагляду людини
+(захист якості тренувальних даних); +просте ментальне навантаження (один шлях запуску,
+не два); -потребує дисципліни користувача регулярно тригерити scan вручну; -не
+масштабується на "фоновий self-improvement" без додаткової роботи, якщо колись
+знадобиться повна автономність
 ---
 ## 12. Roadmap
 ### Phase 1 — Edge MVP (Week 1-2)

@@ -6,13 +6,12 @@ import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import redis.asyncio as aioredis
-
 from .computer_audit import log_action
 from .computer_learned import is_cli_trusted, is_ps_trusted, learn_from_action
 from .ps_whitelist import check_ps_whitelist, extract_ps_cmdlets
 from .computer_access import computer_denied_message
 from .config import settings
+from .redis_util import get_redis
 
 _PENDING_PREFIX = "jarvis:computer:pending:"
 _ORIGIN_PREFIX = "jarvis:computer:origin:"
@@ -56,29 +55,17 @@ _TIER = {
     "window_focus": "T3",
     "uia_invoke": "T3",
     "screen_click": "T4",
+    "screen_type": "T4",
+    "screen_hotkey": "T4",
+    "screen_scroll": "T4",
+    "see_screen": "T0",
 }
-
-_redis: aioredis.Redis | None = None
 
 
 def _redis_str(raw: bytes | str | None) -> str:
     if raw is None:
         return ""
     return raw.decode() if isinstance(raw, bytes) else str(raw)
-
-
-def _client() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
-
-
-async def aclose_redis() -> None:
-    global _redis
-    if _redis is not None:
-        await _redis.aclose()
-        _redis = None
 
 
 def _pending_key(user_id: int) -> str:
@@ -113,6 +100,7 @@ def is_mutating(tool: str, args: dict[str, Any]) -> bool:
         "fs_list",
         "fs_read",
         "capture_screenshot",
+        "see_screen",
         "clipboard_read",
         "browser_open",
         "browser_read",
@@ -125,6 +113,9 @@ def is_mutating(tool: str, args: dict[str, Any]) -> bool:
         "window_focus",
         "uia_invoke",
         "screen_click",
+        "screen_type",
+        "screen_hotkey",
+        "screen_scroll",
     ):
         return True
     if tool == "fs_write" or tool == "fs_write_bytes":
@@ -199,12 +190,12 @@ async def save_pending(
         },
         ensure_ascii=False,
     )
-    await _client().setex(_pending_key(user_id), _PENDING_TTL, f"{code}:{payload}")
+    await get_redis().setex(_pending_key(user_id), _PENDING_TTL, f"{code}:{payload}")
     return code
 
 
 async def load_pending(user_id: int, code: str) -> dict[str, Any] | None:
-    raw = await _client().get(_pending_key(user_id))
+    raw = await get_redis().get(_pending_key(user_id))
     if not raw:
         return None
     stored_code, _, payload = _redis_str(raw).partition(":")
@@ -218,7 +209,7 @@ async def load_pending(user_id: int, code: str) -> dict[str, Any] | None:
 
 
 async def clear_pending(user_id: int) -> None:
-    await _client().delete(_pending_key(user_id))
+    await get_redis().delete(_pending_key(user_id))
     await clear_origin(user_id)
 
 
@@ -227,21 +218,21 @@ async def save_origin(user_id: int, text: str) -> None:
     t = (text or "").strip()
     if not t or int(user_id) <= 0:
         return
-    await _client().setex(_origin_key(user_id), _PENDING_TTL, t[:4000])
+    await get_redis().setex(_origin_key(user_id), _PENDING_TTL, t[:4000])
 
 
 async def load_origin(user_id: int) -> str:
-    raw = await _client().get(_origin_key(user_id))
+    raw = await get_redis().get(_origin_key(user_id))
     return _redis_str(raw).strip()
 
 
 async def clear_origin(user_id: int) -> None:
-    await _client().delete(_origin_key(user_id))
+    await get_redis().delete(_origin_key(user_id))
 
 
 async def load_pending_raw(user_id: int) -> dict[str, Any]:
     """Для Mini App — поточний pending з повним описом дії."""
-    raw = await _client().get(_pending_key(user_id))
+    raw = await get_redis().get(_pending_key(user_id))
     if not raw:
         return {"pending": False}
     stored_code, _, payload = _redis_str(raw).partition(":")
@@ -266,13 +257,30 @@ async def load_pending_raw(user_id: int) -> dict[str, Any]:
     }
 
 
-def _is_effectively_mutating(tool: str, args: dict[str, Any], *, trusted: bool) -> bool:
+def _trust_skips_confirm(tool: str, args: dict[str, Any], level: str | None) -> bool:
+    if not level or bool(args.get("as_admin")):
+        return False
+    if not is_mutating(tool, args):
+        return False
+    if level == "full":
+        return True
+    return tier_for(tool) in ("T0", "T1")
+
+
+async def _is_effectively_mutating(
+    tool: str, args: dict[str, Any], *, user_id: int
+) -> bool:
+    from .computer_trust import trust_level
+
     mutating = is_mutating(tool, args)
     if bool(args.get("as_admin")):
         return True
-    if mutating and trusted:
+    if not mutating:
         return False
-    return mutating
+    level = await trust_level(user_id)
+    if _trust_skips_confirm(tool, args, level):
+        return False
+    return True
 
 
 async def _check_mutating_quota(user_id: int, tool: str, args: dict[str, Any]) -> str | None:
@@ -297,14 +305,11 @@ async def wrap_execute(
     executor: Callable[[], Awaitable[str]],
 ) -> str:
     """Виконує дію або повертає маркер підтвердження для gateway."""
-    from .computer_trust import is_trusted
-
     denied = computer_denied_message(user_id)
     if denied:
         return denied
     tier = audit_tier(tool, args)
-    trusted = await is_trusted(user_id)
-    mutating = _is_effectively_mutating(tool, args, trusted=trusted)
+    mutating = await _is_effectively_mutating(tool, args, user_id=user_id)
     if mutating:
         blocked = await _check_mutating_quota(user_id, tool, args)
         if blocked:
@@ -367,4 +372,8 @@ async def execute_confirmed(user_id: int, code: str) -> tuple[str, str]:
     await _touch_mutating_quota(user_id, tool, args)
     learn_from_action(tool, args)
     log_action(user_id, tool, tier, args, result, confirmed=True)
+    from .computer_trust import grant_trust, trust_ttl_seconds
+
+    if trust_ttl_seconds() > 0:
+        await grant_trust(user_id)
     return result, origin

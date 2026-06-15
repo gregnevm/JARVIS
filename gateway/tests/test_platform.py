@@ -28,6 +28,7 @@ _DASH = {
         "rag_hit_rate": 0.5,
         "rag_queries": 10,
         "tools": {"web_search": {"count": 3, "p50_ms": 40, "p95_ms": 90}},
+        "tok_s": {"count": 12, "p50": 42.5, "p95": 55.0, "avg": 40.0},
     },
 }
 
@@ -77,8 +78,12 @@ def client(monkeypatch, tmp_path):
         svc.dashboard = AsyncMock(return_value=_DASH)
         svc.twin_status = AsyncMock(return_value={"phase": "idle"})
         svc.twin_lora_versions = AsyncMock(return_value={"versions": ["lora-001", "lora-002"]})
-        svc.twin_promote_lora = AsyncMock(return_value={"status": "ok"})
-        svc.twin_rollback_lora = AsyncMock(return_value={"status": "ok"})
+        svc.twin_promote_lora = AsyncMock(
+            return_value={"status": "ok", "ollama": {"ok": True, "model": "jarvis-lora:v2"}}
+        )
+        svc.twin_rollback_lora = AsyncMock(
+            return_value={"status": "ok", "ollama": {"ok": True, "model": "jarvis-lora:v1"}}
+        )
         svc.set_mode = AsyncMock(return_value={"mode": "agent", "status": "ok"})
         svc.reset_mode = AsyncMock(return_value={"mode": "hybrid", "status": "reset"})
 
@@ -124,6 +129,7 @@ def test_overview(client):
     d = r.json()
     assert d["ok"] is True
     assert d["metrics"]["turn_ms"]["p95_ms"] == 240
+    assert d["metrics"]["tok_s"]["p50"] == 42.5
     assert d["models"]["chat_model"] == "qwen2.5:7b"
     assert d["stack"]["hostagent_up"]["ok"] is True
     assert d["agent_mode"] == "hybrid"
@@ -148,6 +154,25 @@ def test_workbench_bad_mode(client):
 def test_workbench_empty_text(client):
     r = client.post("/platform/api/workbench/ask", auth=AUTH, json={"text": "  ", "mode": "auto"})
     assert r.status_code == 400
+
+
+def test_workbench_confirm(client, monkeypatch):
+    monkeypatch.setattr("app.auth.can_use_computer", lambda uid: True)
+    client.app.state.tools.confirm_computer = AsyncMock(
+        return_value=("ok output", "original question")
+    )
+    client.app.state.tools.get_ps_pending = AsyncMock(return_value={"pending": True, "code": "abc"})
+    r = client.post("/platform/api/workbench/confirm", auth=AUTH, json={"code": "abc123"})
+    assert r.status_code == 200
+    assert r.json()["result"] == "ok output"
+
+
+def test_workbench_cancel(client, monkeypatch):
+    monkeypatch.setattr("app.auth.can_use_computer", lambda uid: True)
+    client.app.state.tools.cancel_computer = AsyncMock(return_value=None)
+    r = client.post("/platform/api/workbench/cancel", auth=AUTH, json={})
+    assert r.status_code == 200
+    assert r.json()["status"] == "cancelled"
 
 
 # ---------------- memory ----------------
@@ -181,6 +206,31 @@ def test_memory_search_graceful(client):
 def test_memory_search_empty_query(client):
     r = client.post("/platform/api/memory/search", auth=AUTH, json={"query": ""})
     assert r.status_code == 400
+
+
+def test_memory_search_project_id(client):
+    r = client.post(
+        "/platform/api/memory/search",
+        auth=AUTH,
+        json={"query": "тест", "project_id": 7},
+    )
+    assert r.status_code == 200
+    assert r.json()["project_id"] == 7
+
+
+def test_memory_notes(client, tmp_path):
+    ndir = tmp_path / "notes"
+    ndir.mkdir(parents=True, exist_ok=True)
+    (ndir / "42.jsonl").write_text(
+        json.dumps({"ts": 1700000000, "text": "купити молоко"}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    r = client.get("/platform/api/memory/notes", auth=AUTH)
+    assert r.status_code == 200
+    d = r.json()
+    assert d["user_id"] == 42
+    assert len(d["notes"]) == 1
+    assert d["notes"][0]["text"] == "купити молоко"
 
 
 # ---------------- logs ----------------
@@ -287,4 +337,6 @@ def test_models_lora(client):
 def test_models_lora_promote(client):
     r = client.post("/platform/api/models/lora/promote", auth=AUTH, json={"version": "lora-002"})
     assert r.status_code == 200
-    assert r.json()["status"] == "ok"
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["ollama"]["model"] == "jarvis-lora:v2"

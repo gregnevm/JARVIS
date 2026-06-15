@@ -64,23 +64,48 @@ class ServicesClient:
             logger.error("twin versions failed: %s", exc)
             return {"versions": [], "error": str(exc)}
 
-    async def twin_promote_lora(self, version: str) -> dict[str, Any]:
+    async def tools_deploy_lora(self) -> dict[str, Any]:
+        try:
+            r = await self._client.post(
+                f"{self._tools}/lora/deploy",
+                json={},
+                timeout=200.0,
+            )
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as exc:
+            logger.error("lora deploy failed: %s", exc)
+            detail = str(exc)
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                try:
+                    detail = exc.response.json().get("detail", detail)
+                except ValueError:
+                    detail = exc.response.text[:200]
+            return {"ok": False, "error": detail}
+
+    async def twin_promote_lora(self, version: str, *, deploy: bool = True) -> dict[str, Any]:
         try:
             r = await self._client.post(f"{self._twin}/registry/lora/{version}/promote")
             r.raise_for_status()
-            return r.json()
+            out = r.json()
         except httpx.HTTPError as exc:
             logger.error("twin promote failed: %s", exc)
             return {"error": str(exc)}
+        if deploy:
+            out["ollama"] = await self.tools_deploy_lora()
+        return out
 
-    async def twin_rollback_lora(self, n: int = 1) -> dict[str, Any]:
+    async def twin_rollback_lora(self, n: int = 1, *, deploy: bool = True) -> dict[str, Any]:
         try:
             r = await self._client.post(f"{self._twin}/registry/lora/rollback", params={"n": n})
             r.raise_for_status()
-            return r.json()
+            out = r.json()
         except httpx.HTTPError as exc:
             logger.error("twin rollback failed: %s", exc)
             return {"error": str(exc)}
+        if deploy:
+            out["ollama"] = await self.tools_deploy_lora()
+        return out
 
     async def reset_mode(self) -> dict[str, Any]:
         try:

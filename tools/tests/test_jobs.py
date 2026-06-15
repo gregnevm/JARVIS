@@ -33,7 +33,7 @@ class FakeRedis:
 
 def _inject(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
     fake = FakeRedis()
-    monkeypatch.setattr(jobs, "_redis", fake)
+    monkeypatch.setattr(jobs, "get_redis", lambda: fake)
     return fake
 
 

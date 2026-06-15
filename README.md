@@ -4,12 +4,22 @@ Self-hosted Telegram-бот на мікросервісах. Усе працює
 агент-луп у **Tools** (Python), пам'ять через **PostgreSQL + pgvector**, голос через **Whisper**,
 синхронізація Edge↔Twin через **twin** (SyncServer + ModelRegistry). Жодних зовнішніх AI API.
 Запуск — один `docker compose up`. Цільова архітектура PortableAI — `docs/DESIGN.md`.
-Продуктовий roadmap (фази 0–7) — `docs/PRODUCT_ROADMAP.md`; Platform (консоль, 12 можливостей) — `docs/PLATFORM_ROADMAP.md`; ops-backlog — `ROADMAP.md`.
+
+**Бачення продукту:** JARVIS росте у повноцінну суверенну платформу — **API-платформу розробника**
+(як OpenAI/Anthropic), **агента кодування рівня Claude Code**, і **мультиплатформу** (web · Telegram ·
+mobile APK). Статут і принципи — [`AGENTS.md`](AGENTS.md); парасолька-roadmap — [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).
+
+**Roadmap-и:** статут [`AGENTS.md`](AGENTS.md) → парасолька [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md);
+треки: API [`docs/API_PLATFORM_ROADMAP.md`](docs/API_PLATFORM_ROADMAP.md) · Coding [`docs/CODING_AGENT_ROADMAP.md`](docs/CODING_AGENT_ROADMAP.md) ·
+Clients [`docs/CLIENTS_ROADMAP.md`](docs/CLIENTS_ROADMAP.md) · Platform-консоль [`docs/PLATFORM_ROADMAP.md`](docs/PLATFORM_ROADMAP.md) ·
+Computer Use [`docs/AGENT_MODE_ROADMAP.md`](docs/AGENT_MODE_ROADMAP.md) · SaaS [`docs/SAAS_DEEP_DIVE.md`](docs/SAAS_DEEP_DIVE.md) · ops-backlog [`ROADMAP.md`](ROADMAP.md).
 Бекапи — `docs/BACKUP.md`; перевірка стеку — `scripts/verify_stack.ps1`.
 
-> Статус: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
-> Tools + агент-луп на двох моделях, polish (rate limit, circuit breaker, healthchecks).
-> Чеклист — у кінці README.
+> Статус фундаменту: **усі 7 фаз готові** — скелет, gateway, Ollama-bridge, памʼять/RAG, голос,
+> Tools + агент-луп на двох моделях, polish (rate limit, circuit breaker, healthchecks),
+> Platform-консоль P0–P12, Computer Use C0–C6. Чеклист — у кінці README.
+> **Далі:** 3 продуктові стовпи (API-платформа · coding-агент · мультиплатформа) над цим фундаментом —
+> див. [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).
 
 ---
 
@@ -92,6 +102,39 @@ $env:OLLAMA_VULKAN=1; $env:OLLAMA_HOST="0.0.0.0:11434"; ollama serve
 
 ## Швидкий старт
 
+### FirstSetup (рекомендовано, Windows)
+
+#### Повністю автономно (один клік, без питань)
+
+```powershell
+# 1) Секрети (один раз):
+copy setup.local.env.example setup.local.env
+#    → TELEGRAM_BOT_TOKEN, ALLOWED_USER_IDS
+
+# 2) Запуск:
+.\FirstSetup-Auto.bat
+```
+
+`-Auto` робить усе сам: **winget** (Docker, Ollama, Python) → GPU-профіль → `.env` →
+`ollama pull` → host-agent → **SD Forge** (`setup` + `start`) → `docker compose up -d --build` →
+`verify_stack` → `install_autostart.ps1`. Якщо Docker щойно встановився — реєструє resume-задачу на логін.
+
+Альтернатива секретам: змінні `JARVIS_TELEGRAM_BOT_TOKEN`, `JARVIS_ALLOWED_USER_IDS`.
+
+#### Інтерактивно (з питаннями)
+
+```powershell
+.\FirstSetup.bat
+# або:
+powershell -ExecutionPolicy Bypass -File scripts\FirstSetup.ps1
+```
+
+Профіль заліза: `data/hardware_profile.json`. Лог: `data/firstsetup.log`, статус: `data/firstsetup.status.json`.
+
+Параметри: `-Auto`, `-InstallMissing`, `-NonInteractive`, `-TelegramToken`, `-AllowedUserIds`, `-SkipCompose`, `-SkipModels`.
+
+### Вручну
+
 ```bash
 # 1. Конфіг
 cp .env.example .env          # Windows: copy .env.example .env
@@ -150,20 +193,70 @@ cd O:\JARVIS\hostagent
 5. `docker compose up -d gateway tools` — tools ходить на `http://host.docker.internal:8400`.
 6. У чаті: `/mode computer` або `AGENT_MODE=computer`; мутуючі дії — підтвердження ✅/❌ у Telegram.
 
+#### Standard Agent Mode (рекомендований пресет)
+
+Для повноцінного desktop-агента на одному trusted ПК:
+
+```env
+AGENT_MODE=hybrid
+ENABLE_COMPUTER_USE=true
+COMPUTER_PROFILE=standard
+COMPUTER_SESSION_TRUST_MINUTES=10
+COMPUTER_MAX_ITERS=12
+ENABLE_BROWSER=true
+OLLAMA_MODEL_VISION=llava:7b
+COMPUTER_AUTO_VISION=true
+HOSTAGENT_TOKEN=<той самий на хості>
+COMPUTER_OWNER_USER_IDS=<твій Telegram ID>
+```
+
+`standard` дає browser (T2), UIA (T3) і `see_screen` (vision). Для піксельного кліку (T4):
+`COMPUTER_PROFILE=full`. Детальний план: `docs/AGENT_MODE_ROADMAP.md`.
+
+#### Програмування з Telegram (Cursor + Continue)
+
+| Шлях | Команда в Telegram | Що потрібно |
+|------|-------------------|-------------|
+| **Cursor** | `/cursor …` або `cursor: …` | `CURSOR_TASKS_ENABLED=true` (дефолт) |
+| **Continue.dev** | звичайний текст у `/mode computer` | `ENABLE_CONTINUE_DEV=true` + `cn serve` |
+
+**Continue — один раз:**
+
+```powershell
+# Локальна Ollama (OLLAMA_MODEL_AGENT) — без API ключів:
+powershell -File scripts/setup_continue.ps1
+# Опційно: Continue Hub акаунт (-Login) або CONTINUE_API_KEY у .env
+```
+
+Після логону `scripts/autostart.ps1` / watchdog піднімають `cn serve` на порту з
+`CONTINUE_DEV_URL` (дефолт `:65432`). Перевірка: `.\scripts\verify_stack.ps1`.
+
+Приклади в чаті (computer mode): `cursor: додай тести до agent.py` ·
+`Відкрий O:\JARVIS\tools\app\agent.py і через Continue додай docstring`.
+
 > **Безпека:** ротуй `TELEGRAM_BOT_TOKEN` у @BotFather, якщо токен світився в логах/чаті
 > (див. `ROADMAP.md` M4). Після revoke — онови `.env` і `docker compose up -d gateway`.
 
 ### Windows: автозапуск усього стеку (завжди)
 
-Щоб **Ollama, Docker Compose, host-agent** піднімались після логону і відновлювались
-кожні 5 хв (watchdog), один раз:
+Щоб **Ollama, Docker Compose, host-agent, SD Forge** (і Continue, якщо увімкнено)
+піднімались після логону і відновлювались кожні 5 хв (watchdog), один раз:
 
 ```powershell
 powershell -File scripts/install_autostart.ps1
 ```
 
+У `.env` для локальних картинок:
+
+```
+IMAGE_GEN_URL=http://host.docker.internal:7860
+```
+
+Перший раз: `scripts/setup_sd_forge.ps1` (або `FirstSetup -Auto` зробить сам).
+Autostart підніме Forge на `:7860` і дочекається API перед `verify_stack`.
+
 У кореневому `.env` має бути `HOSTAGENT_TOKEN` (той самий, що для `ENABLE_COMPUTER_USE`).
-Лог: `data/autostart.log`. Видалити: `install_autostart.ps1 -Uninstall`.
+Лог: `data/autostart.log`. Перевірка: `scripts/verify_stack.ps1`. Видалити: `install_autostart.ps1 -Uninstall`.
 
 ---
 

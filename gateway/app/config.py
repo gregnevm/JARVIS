@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     # Telegram ID з доступом до Computer Use. Порожньо → ADMIN_USER_IDS → ALLOWED_USER_IDS (.env).
     # Друзі з /allow сюди НЕ потрапляють — лише явний whitelist.
     computer_owner_user_ids: str = ""
+    computer_session_trust_minutes: int = 10
     # Режим computer лише для ADMIN_USER_IDS (застарілий прапор; краще COMPUTER_OWNER_USER_IDS).
     computer_mode_admins_only: bool = False
     # Інтервал поллера нагадувань (секунди).
@@ -106,6 +107,11 @@ class Settings(BaseSettings):
     hostagent_drop_dir: str = ""
     # Макс. розмір файлу для /file pull (байти, Telegram cap ~50MB).
     remote_file_max_bytes: int = 48 * 1024 * 1024
+
+    # P11 OpenAI-compatible API (opt-in)
+    enable_openai_api: bool = False
+    openai_api_key: str = ""
+    openai_default_user_id: int = 0
 
     @property
     def allowed_ids(self) -> set[int]:

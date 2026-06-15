@@ -9,6 +9,7 @@ from ..access_store import AccessStore, UserRecord, format_user_label, record_fr
 from ..auth import is_admin
 from ..config import settings
 from ..telegram import TelegramClient
+from ._helpers import require_admin_or_reply
 from .dashboard import esc
 from .keyboards import access_decision_keyboard
 
@@ -210,8 +211,8 @@ async def handle_access_command(
                     target_id,
                     "Доступ до бота не надано. Якщо це помилка — напиши власнику окремо.",
                 )
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — користувач міг заблокувати бота, не зривати адмін-флоу
+                logger.warning("notify denied user %s failed: %s", target_id, exc)
         else:
             await tg.send_message(chat_id, "Немає такого запиту в черзі.")
         return True
@@ -239,8 +240,8 @@ async def handle_access_command(
             )
             try:
                 await tg.send_message(target_id, "Доступ до JARVIS закрито.")
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 — користувач міг заблокувати бота, не зривати адмін-флоу
+                logger.warning("notify revoked user %s failed: %s", target_id, exc)
         else:
             await tg.send_message(chat_id, "Користувач не був погоджений через бота.")
         return True
@@ -271,8 +272,7 @@ async def handle_access_callback(
     store: AccessStore,
 ) -> bool:
     if data.strip() == "acc:list":
-        if not is_admin(user_id):
-            await tg.send_message(chat_id, "⛔ Admin only.")
+        if await require_admin_or_reply(tg, chat_id, user_id):
             return True
         await _send_pending_list(chat_id, tg, store)
         return True
@@ -280,8 +280,7 @@ async def handle_access_callback(
     m = _ACC_RE.match(data.strip())
     if not m:
         return False
-    if not is_admin(user_id):
-        await tg.send_message(chat_id, "⛔ Admin only.")
+    if await require_admin_or_reply(tg, chat_id, user_id):
         return True
 
     verb, uid_s = m.group(1).lower(), m.group(2)

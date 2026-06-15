@@ -49,8 +49,8 @@ async def test_admin_second_confirm(admin_env, monkeypatch: pytest.MonkeyPatch):
     import re
 
     fr = FakeRedis()
-    monkeypatch.setattr("app.computer_confirm._redis", fr)
-    monkeypatch.setattr("app.computer_rate_limit._redis", fr)
+    monkeypatch.setattr("app.computer_confirm.get_redis", lambda: fr)
+    monkeypatch.setattr("app.computer_rate_limit.get_redis", lambda: fr)
 
     code = await save_pending(1, "run_powershell", {"script": "Write-Output 1", "as_admin": True})
     result, _origin = await execute_confirmed(1, code)

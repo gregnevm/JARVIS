@@ -77,16 +77,39 @@ app = FastAPI(title="JARVIS Memory", lifespan=lifespan)
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
+    from .migrate import embed_dim_mismatch, get_schema_meta
+
     ok = await app.state.db.health()
-    return {"status": "ok" if ok else "degraded", "db": ok}
+    meta = await get_schema_meta(app.state.db)
+    warn = embed_dim_mismatch(meta)
+    out: dict[str, Any] = {
+        "status": "ok" if ok else "degraded",
+        "db": ok,
+        "embed_dim": settings.embed_dim,
+        "embed_model": settings.embed_model,
+    }
+    if meta:
+        out["schema_meta"] = meta
+    if warn:
+        out["schema_warn"] = warn
+    return out
+
+
+async def _embed_or_502(text: str) -> list[float]:
+    """`await app.state.embedder.embed(text)`, або 502 `HTTPException("embed failed: …")`.
+
+    Узагальнює try/except, побайтово повторений у `embed`/`search` (2 рази) —
+    обидва ендпоінти ембедять текст напряму (на відміну від `store`, де помилка
+    ембедингу окремого chunk'а нефатальна — там лишається `continue`+log)."""
+    try:
+        return await app.state.embedder.embed(text)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"embed failed: {exc}") from exc
 
 
 @app.post("/embed")
 async def embed(req: EmbedRequest) -> dict[str, Any]:
-    try:
-        vec = await app.state.embedder.embed(req.text)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"embed failed: {exc}") from exc
+    vec = await _embed_or_502(req.text)
     return {"dim": len(vec), "embedding": vec}
 
 
@@ -111,10 +134,7 @@ async def store(req: StoreRequest) -> dict[str, Any]:
 
 @app.post("/search")
 async def search(req: SearchRequest) -> dict[str, Any]:
-    try:
-        vec = await app.state.embedder.embed(req.query)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"embed failed: {exc}") from exc
+    vec = await _embed_or_502(req.query)
     results = await app.state.db.search(req.user_id, vec, req.top_k, project_id=req.project_id)
     return {"results": results}
 
@@ -168,11 +188,19 @@ async def projects_list(user_id: int, include_archived: bool = False) -> dict[st
 
 
 @app.get("/projects/{project_id}")
-async def projects_get(project_id: int, user_id: int) -> dict[str, Any]:
+async def projects_get(
+    project_id: int, user_id: int, include_content: bool = False
+) -> dict[str, Any]:
     proj = await app.state.db.get_project(project_id, user_id)
     if proj is None:
         raise HTTPException(status_code=404, detail="project not found")
     proj["files"] = await app.state.db.list_project_files(project_id)
+    if include_content:
+        proj["files_content"] = await app.state.db.read_project_files_content(
+            project_id,
+            max_total_chars=settings.project_files_max_total_chars,
+            max_per_file=settings.project_files_max_per_file,
+        )
     return proj
 
 
@@ -196,10 +224,19 @@ async def projects_delete(project_id: int, user_id: int) -> dict[str, Any]:
     return {"ok": True}
 
 
+async def _require_project(db: DB, project_id: int, user_id: int) -> None:
+    """404 "project not found", якщо проєкт відсутній або не належить user_id.
+
+    Узагальнює guard `if await db.get_project(...) is None: raise ...`, що
+    повторювався тричі (побайтово, лише ім'я user_id-аргументу різнилось)
+    у `project_file_{add,list,delete}`."""
+    if await db.get_project(project_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="project not found")
+
+
 @app.post("/projects/{project_id}/files")
 async def project_file_add(project_id: int, req: ProjectFileCreate) -> dict[str, Any]:
-    if await app.state.db.get_project(project_id, req.user_id) is None:
-        raise HTTPException(status_code=404, detail="project not found")
+    await _require_project(app.state.db, project_id, req.user_id)
     name = req.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name required")
@@ -209,15 +246,13 @@ async def project_file_add(project_id: int, req: ProjectFileCreate) -> dict[str,
 
 @app.get("/projects/{project_id}/files")
 async def project_files_list(project_id: int, user_id: int) -> dict[str, Any]:
-    if await app.state.db.get_project(project_id, user_id) is None:
-        raise HTTPException(status_code=404, detail="project not found")
+    await _require_project(app.state.db, project_id, user_id)
     return {"files": await app.state.db.list_project_files(project_id)}
 
 
 @app.delete("/projects/{project_id}/files/{file_id}")
 async def project_file_delete(project_id: int, file_id: int, user_id: int) -> dict[str, Any]:
-    if await app.state.db.get_project(project_id, user_id) is None:
-        raise HTTPException(status_code=404, detail="project not found")
+    await _require_project(app.state.db, project_id, user_id)
     ok = await app.state.db.delete_project_file(file_id, project_id)
     if not ok:
         raise HTTPException(status_code=404, detail="file not found")

@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
 
+from ._helpers import AGENT_MODES, require_mode
 from .access_store import AccessStore, UserRecord
 from .auth import allowed_ids_snapshot, computer_owner_ids
 from .bot.admin import execute_action
@@ -306,9 +307,7 @@ async def admin_set_mode(
     request: Request,
     _auth: PanelAuth = Depends(require_panel_auth),
 ) -> dict[str, Any]:
-    mode = body.mode.lower().strip()
-    if mode not in {"chat", "agent", "hybrid", "computer"}:
-        raise HTTPException(status_code=400, detail="bad mode")
+    mode = require_mode(body.mode, AGENT_MODES)
     return await request.app.state.svc.set_mode(mode)
 
 

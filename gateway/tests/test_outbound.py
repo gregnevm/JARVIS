@@ -96,7 +96,8 @@ async def test_deliver_warns_on_missing_local_photo():
     tg = FakeTG()
     tg.photo_ok = False
     await deliver(tg, 7, "ось [[photo:puppy.jpg|щеня]]")
-    assert any("IMAGE_GEN_URL" in t for _, t in tg.sent)
+    assert any("Не вдалося надіслати" in t for _, t in tg.sent)
+    assert not any("IMAGE_GEN_URL" in t for _, t in tg.sent)
 
 
 class _Redis:

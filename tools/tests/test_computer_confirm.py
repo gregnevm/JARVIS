@@ -23,15 +23,21 @@ from app.config import settings
 class FakeRedis:
     def __init__(self) -> None:
         self.store: dict[str, str] = {}
+        self.ttl_map: dict[str, int] = {}
 
     async def setex(self, key: str, ttl: int, value: str) -> None:
         self.store[key] = value
+        self.ttl_map[key] = int(ttl)
 
     async def get(self, key: str) -> str | None:
         return self.store.get(key)
 
+    async def ttl(self, key: str) -> int:
+        return self.ttl_map.get(key, -2)
+
     async def delete(self, key: str) -> None:
         self.store.pop(key, None)
+        self.ttl_map.pop(key, None)
 
 
 @pytest.fixture()
@@ -42,8 +48,10 @@ def confirm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeRedis:
     monkeypatch.setattr(settings, "computer_owner_user_ids", "1,7,42")
     monkeypatch.setattr(settings, "hostagent_token", "tok")
     monkeypatch.setattr(settings, "data_dir", str(tmp_path))
-    monkeypatch.setattr("app.computer_confirm._redis", fake)
+    monkeypatch.setattr("app.computer_confirm.get_redis", lambda: fake)
+    monkeypatch.setattr("app.computer_trust.get_redis", lambda: fake)
     monkeypatch.setattr(settings, "ps_whitelist", "Set-Content,Write-Output")
+    monkeypatch.setattr(settings, "computer_session_trust_minutes", 0)
     return fake
 
 
@@ -66,6 +74,46 @@ async def test_load_pending_raw_includes_script(confirm_env: FakeRedis):
     assert raw["script"] == "Set-Content x y"
     assert "PowerShell" in raw["description"]
     assert raw["mutating"] is True
+
+
+async def test_wrap_execute_session_trust_skips_t0_confirm(confirm_env: FakeRedis):
+    from app.computer_trust import grant_trust
+
+    await grant_trust(42, ttl=120)
+
+    async def exec_fn() -> str:
+        return "written"
+
+    out = await wrap_execute(42, "fs_write", {"path": "C:\\a", "content": "x"}, exec_fn)
+    assert out == "written"
+
+
+async def test_wrap_execute_session_trust_still_confirms_t2(confirm_env: FakeRedis):
+    from app.computer_trust import grant_trust
+
+    await grant_trust(42, ttl=120)
+
+    async def exec_fn() -> str:
+        return "clicked"
+
+    out = await wrap_execute(
+        42, "browser_click", {"selector": "#ok"}, exec_fn
+    )
+    assert "[[COMPUTER_CONFIRM:" in out
+
+
+async def test_wrap_execute_full_trust_skips_browser(confirm_env: FakeRedis):
+    from app.computer_trust import grant_trust
+
+    await grant_trust(42, ttl=120, full=True)
+
+    async def exec_fn() -> str:
+        return "clicked"
+
+    out = await wrap_execute(
+        42, "browser_click", {"selector": "#ok"}, exec_fn
+    )
+    assert out == "clicked"
 
 
 async def test_wrap_execute_returns_confirm_marker(confirm_env: FakeRedis):

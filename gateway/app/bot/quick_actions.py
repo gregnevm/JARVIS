@@ -6,17 +6,19 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from ..auth import can_use_computer, computer_mode_denied_message
+from ..auth import can_use_computer, computer_mode_denied_message, is_admin
 from ..config import settings
 from ..outbound import deliver
 from ..services import ServicesClient
 from ..telegram import TelegramClient
 from ..tools_client import ToolsClient
 from .dashboard import esc, format_dashboard
+from ._helpers import send_denial
 from .keyboards import (
     BTN_BRIEF,
     BTN_CLIPBOARD,
     BTN_COMPUTER,
+    BTN_CURSOR,
     BTN_HIDE,
     BTN_MENU,
     BTN_REMINDERS,
@@ -43,6 +45,7 @@ QUICK_ACTIONS = frozenset(
         BTN_COMPUTER,
         BTN_SCREEN,
         BTN_CLIPBOARD,
+        BTN_CURSOR,
         BTN_MENU,
         BTN_HIDE,
     }
@@ -133,8 +136,7 @@ async def handle_quick_action(
         denied = agent_mode_denied_message(user_id) or computer_mode_denied_message(
             user_id, "computer"
         )
-        if denied:
-            await tg.send_message(chat_id, denied)
+        if await send_denial(tg, chat_id, denied):
             return True
         res = await svc.set_mode("computer")
         if res.get("error"):
@@ -143,7 +145,10 @@ async def handle_quick_action(
             await tg.send_message(
                 chat_id,
                 "💻 <b>Computer mode</b>\n"
-                "Мутуючі дії (PowerShell, FS, CLI) потребують підтвердження ✅/❌.\n"
+                "OS/файли: PowerShell, fs_*, CLI (whitelist).\n"
+                "Coding у репо: <code>cursor: твоя задача</code> → Cursor IDE.\n"
+                "Приклад: <code>cursor: додай тести для cursor_flow.py</code>\n"
+                "Мутуючі дії потребують ✅/❌.\n"
                 f"Режим: <code>{esc(res.get('mode', 'computer'))}</code>",
                 parse_mode="HTML",
                 reply_markup=mode_keyboard(show_computer=can_use_computer(user_id)),
@@ -154,8 +159,7 @@ async def handle_quick_action(
         from ..auth import computer_denied_message
 
         denied = computer_denied_message(user_id)
-        if denied:
-            await tg.send_message(chat_id, denied)
+        if await send_denial(tg, chat_id, denied):
             return True
         await tg.send_chat_action(chat_id, "upload_photo")
         reply = await tools.capture_screenshot(user_id)
@@ -166,11 +170,28 @@ async def handle_quick_action(
         from ..auth import computer_denied_message
 
         denied = computer_denied_message(user_id)
-        if denied:
-            await tg.send_message(chat_id, denied)
+        if await send_denial(tg, chat_id, denied):
             return True
         reply = await tools.clipboard_read(user_id)
         await tg.send_message(chat_id, reply[:4000])
+        return True
+
+    if action == BTN_CURSOR:
+        from .cursor_flow import set_await
+
+        if not is_admin(user_id):
+            await tg.send_message(chat_id, "⛔ Cursor — лише для адмінів.")
+            return True
+        if redis is None:
+            await tg.send_message(chat_id, "Redis недоступний.")
+            return True
+        await set_await(redis, user_id)
+        await tg.send_message(
+            chat_id,
+            "🧠 <b>Cursor</b> — напиши задачу наступним повідомленням.\n"
+            "Скасувати: <code>/cursor off</code> · Статус: <code>/cursor status</code>",
+            parse_mode="HTML",
+        )
         return True
 
     if action == BTN_MENU:
@@ -240,7 +261,9 @@ async def ensure_reply_keyboard_auto(
         chat_id,
         "⌨️ Швидкий доступ — кнопки внизу.",
         reply_markup=reply_keyboard(
-            settings.mini_app_https_url, show_computer=can_use_computer(user_id or 0)
+            settings.mini_app_https_url,
+            show_computer=can_use_computer(user_id or 0),
+            show_cursor=is_admin(user_id or 0),
         ),
     )
 
@@ -260,6 +283,8 @@ async def show_reply_keyboard(
         chat_id,
         "⌨️ Швидкі кнопки активні.",
         reply_markup=reply_keyboard(
-            settings.mini_app_https_url, show_computer=can_use_computer(user_id or 0)
+            settings.mini_app_https_url,
+            show_computer=can_use_computer(user_id or 0),
+            show_cursor=is_admin(user_id or 0),
         ),
     )

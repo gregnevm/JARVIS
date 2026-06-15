@@ -20,11 +20,45 @@ from .memory_client import MemoryClient
 from .thread_context import build_thread_context
 from .user_profile import profile_prompt_block
 from jarvis_core.llm.chat import ChatBackend
+from jarvis_core.llm.parsers import extract_json_object
 from .toolkit import agent_tool_schemas, coerce_args, dispatch, image_gen_enabled
 
 logger = logging.getLogger("jarvis.tools.agent")
 
 FALLBACK = "Не зміг сформувати відповідь. Спробуй переформулювати."
+
+PLAN_MARKER = "[[PLAN_CONFIRM:{id}]]"
+_PLAN_MAX_STEPS = 8
+_TOOL_MEDIA_RE = re.compile(
+    r"\[\[\s*(?:photo|image|document|file)\s*:\s*[^\]]+\]\]",
+    re.IGNORECASE,
+)
+
+
+def _collect_tool_media(messages: list[dict[str, Any]]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in messages:
+        if m.get("role") != "tool":
+            continue
+        for directive in _TOOL_MEDIA_RE.findall(str(m.get("content") or "")):
+            if directive not in seen:
+                seen.add(directive)
+                out.append(directive)
+    return out
+
+
+def _ensure_tool_media(answer: str, messages: list[dict[str, Any]]) -> str:
+    """Додає [[photo:…]] з результатів інструментів, якщо модель їх пропустила."""
+    directives = _collect_tool_media(messages)
+    if not directives:
+        return answer
+    answer = (answer or "").strip()
+    missing = [d for d in directives if d not in answer]
+    if not missing:
+        return answer
+    return answer + "\n\n" + "\n".join(missing)
+
 
 def media_hint() -> str:
     """Підказка для [[photo:…]] з урахуванням увімкненої генерації зображень."""
@@ -79,21 +113,34 @@ def system_agent() -> str:
 
 
 def system_computer() -> str:
-    vision = ""
+    from .computer_profile import format_tools_prompt_block
+
+    tools_block = format_tools_prompt_block(computer=True)
+    vision_hint = ""
     if settings.ollama_model_vision:
-        vision = (
-            " Для «що на екрані?» — спочатку capture_screenshot, потім describe_image "
-            "з шляхом з відповіді та питанням користувача."
-        )
+        if "see_screen" in tools_block:
+            vision_hint = (
+                " Для «що на екрані?» — see_screen(question=…); "
+                "або capture_screenshot + describe_image."
+            )
+        else:
+            vision_hint = (
+                " Для «що на екрані?» — capture_screenshot, потім describe_image."
+            )
     return (
-        "Ти JARVIS — агент керування комп'ютером Windows. Дотримуйся «драбини швидкодії»: "
-        "T0 PowerShell (whitelist) і fs_* — найперший вибір для OS/файлів; T1 CLI (whitelist) — "
-        "для git, winget, curl тощо; capture_screenshot — зняти екран. "
-        "Браузер (Playwright), UI Automation і піксельний клік НЕ доступні — не вигадуй їх. "
+        "Ти JARVIS — агент керування комп'ютером Windows. Дотримуйся «драбини швидкодії» "
+        "(T0→T1→T2→T3→T4): спочатку PowerShell/CLI/FS, потім браузер по DOM, потім UIA, "
+        "і лише в крайньому випадку піксельний клік. "
+        f"{tools_block} "
+        "Використовуй ЛИШЕ інструменти зі списку — не вигадуй інших. "
+        "Якщо користувач пише cursor: … — одразу cursor_task(async_mode=true), не run_powershell. "
+        "PowerShell: без пайпів |, &&, ||, $( ) — лише прості cmdlet з PS_WHITELIST; "
+        "список процесів — Get-Process або Get-Process -Name ollama,python. "
+        "CLI fallback: run_cli python + O:\\JARVIS\\scripts\\cursor_run_task.py. "
         "Команда /app — Mini App дашборд, не шлях у ФС. "
         "Не вигадуй результатів — перевіряй інструментами. "
-        "У фінальній відповіді коротко вкажи tier (T0/T1), яким діяв."
-        + vision
+        "У фінальній відповіді коротко вкажи tier, яким діяв."
+        + vision_hint
         + " Фінальну відповідь українською, стисло. "
         + media_hint()
     )
@@ -127,6 +174,7 @@ _TOOL_STATUS = {
     "fs_read": "📄 читаю файл…",
     "fs_write": "✍️ записую файл…",
     "capture_screenshot": "📸 знімаю екран…",
+    "see_screen": "👁 дивлюся на екран…",
     "browser_open": "🌐 браузер…",
     "browser_read": "🌐 читаю сторінку…",
     "browser_click": "🌐 клік…",
@@ -135,6 +183,12 @@ _TOOL_STATUS = {
     "window_list": "🪟 вікна…",
     "window_focus": "🪟 фокус…",
     "uia_invoke": "🪟 UIA…",
+    "screen_click": "🖱 клік…",
+    "screen_type": "⌨️ ввід…",
+    "screen_hotkey": "⌨️ hotkey…",
+    "screen_scroll": "🖱 scroll…",
+    "cursor_task": "🧠 Cursor IDE…",
+    "spawn_subagent": "🤖 subagent…",
 }
 
 
@@ -192,7 +246,9 @@ def decide_mode(
     )
 
 
-def _max_iters(*, computer: bool = False) -> int:
+def _max_iters(*, computer: bool = False, override: int | None = None) -> int:
+    if override is not None:
+        return max(1, min(int(override), settings.computer_max_iters if computer else settings.max_agent_iters))
     if computer:
         return max(settings.computer_max_iters, settings.max_agent_iters)
     return settings.max_agent_iters
@@ -251,7 +307,7 @@ class AgentRunner:
         pid = await active_project_id(user_id)
         if pid is None:
             return None, ""
-        proj = await self._mem.get_project(user_id, pid)
+        proj = await self._mem.get_project(user_id, pid, include_content=True)
         if not proj:
             await set_active_project(user_id, None)
             return None, ""
@@ -271,19 +327,32 @@ class AgentRunner:
         return (" | ".join(parts) if parts else ""), prof
 
     async def run(
-        self, user_id: int, text: str, mode: str | None = None, *, mode_hint: str | None = None
+        self,
+        user_id: int,
+        text: str,
+        mode: str | None = None,
+        *,
+        mode_hint: str | None = None,
+        max_iters_override: int | None = None,
     ) -> dict[str, Any]:
         """Повертає {'text': ..., 'mode': 'chat'|'agent'|'computer', 'iters': N}."""
         from .runtime import get_agent_mode
+        from . import hooks as agent_hooks
 
         from .metrics import record_turn
 
         t0 = time.perf_counter()
         iters = 0
         resolved = "chat"
+        hook_ctx = await agent_hooks.run_pre_turn(
+            {"user_id": user_id, "text": text, "mode": mode or ""}
+        )
+        text = str(hook_ctx.get("text") or text)
         project_id, project_block = await self._resolve_project(user_id)
         ctx, prof = await self._memory_context(user_id, text, project_id)
-        prof += project_block
+        from .skills import resolve_skill_block
+
+        prof += project_block + await resolve_skill_block(user_id)
         hint = mode_hint or mode
         resolved = _resolve_mode_hint(hint) or decide_mode(
             text, get_agent_mode(), mode_hint=hint, user_id=user_id
@@ -302,10 +371,16 @@ class AgentRunner:
                     computer=(resolved == "computer"),
                     allow_computer=can_use_computer(user_id),
                     profile=prof,
+                    max_iters_override=max_iters_override,
                 )
 
             await self._persist_turn(user_id, text, answer or "", resolved, iters, project_id)
             return {"text": answer or FALLBACK, "mode": resolved, "iters": iters}
+        except Exception as exc:  # noqa: BLE001
+            await agent_hooks.run_on_error(
+                {"user_id": user_id, "text": text, "error": str(exc), "mode": resolved}
+            )
+            raise
         finally:
             await record_turn((time.perf_counter() - t0) * 1000, resolved, iters)
 
@@ -327,9 +402,17 @@ class AgentRunner:
         t0 = time.perf_counter()
         iters = 0
         resolved = "chat"
+        from . import hooks as agent_hooks
+
+        hook_ctx = await agent_hooks.run_pre_turn(
+            {"user_id": user_id, "text": text, "mode": mode or ""}
+        )
+        text = str(hook_ctx.get("text") or text)
         project_id, project_block = await self._resolve_project(user_id)
         ctx, prof = await self._memory_context(user_id, text, project_id)
-        prof += project_block
+        from .skills import resolve_skill_block
+
+        prof += project_block + await resolve_skill_block(user_id)
         hint = mode_hint or mode
         resolved = _resolve_mode_hint(hint) or decide_mode(
             text, get_agent_mode(), mode_hint=hint, user_id=user_id
@@ -389,6 +472,7 @@ class AgentRunner:
         computer: bool = False,
         allow_computer: bool = True,
         profile: str = "",
+        max_iters_override: int | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Тул-луп зі стрімом: статус на кожен виклик інструмента + фінальний текст.
 
@@ -402,7 +486,7 @@ class AgentRunner:
             {"role": "user", "content": text},
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
-        limit = _max_iters(computer=computer)
+        limit = _max_iters(computer=computer, override=max_iters_override)
         for i in range(1, limit + 1):
             msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
             messages.append(_assistant_msg(msg))
@@ -412,7 +496,7 @@ class AgentRunner:
                 calls = _parse_inline_tool_calls(content)
             if not calls:
                 if content.strip():
-                    yield {"delta": content.strip()}
+                    yield {"delta": _ensure_tool_media(content.strip(), messages)}
                 yield {"iters": i}
                 return
             for call in calls:
@@ -422,6 +506,17 @@ class AgentRunner:
                 yield {"status": _tool_status(name)}
                 yield {"tool_start": {"name": name, "args": args}}
                 result = await dispatch(name, args, user_id, allow_computer=allow_computer)
+                from . import hooks as agent_hooks
+
+                hook_out = await agent_hooks.run_post_tool(
+                    {
+                        "user_id": user_id,
+                        "tool": name,
+                        "args": args,
+                        "result": result,
+                    }
+                )
+                result = str(hook_out.get("result") or result)
                 yield {"tool_done": {"name": name, "result": result}}
                 confirm = _parse_confirm(result)
                 if confirm:
@@ -462,13 +557,14 @@ class AgentRunner:
         computer: bool = False,
         allow_computer: bool = True,
         profile: str = "",
+        max_iters_override: int | None = None,
     ) -> tuple[str, int]:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": _agent_system(ctx, computer=computer, profile=profile)},
             {"role": "user", "content": text},
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
-        limit = _max_iters(computer=computer)
+        limit = _max_iters(computer=computer, override=max_iters_override)
         for i in range(1, limit + 1):
             msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
             messages.append(_assistant_msg(msg))
@@ -478,12 +574,23 @@ class AgentRunner:
                 # Фолбек: модель могла віддати tool call текстом (inline XML/JSON).
                 calls = _parse_inline_tool_calls(content)
             if not calls:
-                return content.strip(), i
+                return _ensure_tool_media(content.strip(), messages), i
             for call in calls:
                 fn = call.get("function") or {}
                 name = str(fn.get("name", ""))
                 args = coerce_args(fn.get("arguments"))
                 result = await dispatch(name, args, user_id, allow_computer=allow_computer)
+                from . import hooks as agent_hooks
+
+                hook_out = await agent_hooks.run_post_tool(
+                    {
+                        "user_id": user_id,
+                        "tool": name,
+                        "args": args,
+                        "result": result,
+                    }
+                )
+                result = str(hook_out.get("result") or result)
                 confirm = _parse_confirm(result)
                 if confirm:
                     from .computer_confirm import save_origin
@@ -501,4 +608,74 @@ class AgentRunner:
             {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
         )
         final = await self._llm.chat(settings.ollama_model_agent, messages)
-        return (final.get("content") or "").strip(), limit
+        return _ensure_tool_media((final.get("content") or "").strip(), messages), limit
+
+    async def plan(self, user_id: int, text: str) -> dict[str, Any]:
+        """Structured plan JSON → Redis (status pending) + marker для Telegram."""
+        from . import plans
+
+        prompt = (
+            "Склади план виконання запиту користувача. Поверни ЛИШЕ JSON без пояснень:\n"
+            '{"summary":"короткий опис","steps":[{"title":"...","detail":"..."}],'
+            '"risks":["..."]}\n'
+            f"Максимум {_PLAN_MAX_STEPS} кроків. Запит: {text}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {"role": "system", "content": "Ти планувальник задач JARVIS. Відповідай лише валідним JSON."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = (msg.get("content") or "").strip()
+        parsed = extract_json_object(content)
+        if not parsed:
+            parsed = {"summary": content[:500] or text[:200], "steps": [{"title": text[:200], "detail": text}], "risks": []}
+        rec = await plans.create_plan(
+            user_id,
+            summary=str(parsed.get("summary") or text[:500]),
+            steps=parsed.get("steps") or [],
+            risks=parsed.get("risks") if isinstance(parsed.get("risks"), list) else [],
+            source_text=text,
+            status="pending",
+        )
+        rec["marker"] = PLAN_MARKER.format(id=rec["id"])
+        return rec
+
+    async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:
+        """Покрокове виконання схваленого плану (sync MVP, max 8 steps)."""
+        from . import plans
+
+        rec = await plans.get_plan(plan_id)
+        if rec is None or int(rec.get("user_id", 0)) != int(user_id):
+            return {"error": "plan not found", "plan_id": plan_id}
+        if rec.get("status") != "approved":
+            return {"error": f"plan status is {rec.get('status')}, need approved", "plan": rec}
+        steps = rec.get("steps") or []
+        if not steps:
+            await plans.finish_plan(plan_id, result="План без кроків.", status="done")
+            rec = await plans.get_plan(plan_id)
+            return {"plan": rec}
+
+        await plans.set_executing(plan_id)
+        outputs: list[str] = []
+        for i, step in enumerate(steps):
+            if not isinstance(step, dict):
+                continue
+            title = str(step.get("title") or f"Крок {i + 1}")
+            detail = str(step.get("detail") or title)
+            step_prompt = f"Виконай крок {i + 1} з плану «{rec.get('summary', '')}»: {title}. Деталі: {detail}"
+            try:
+                turn = await self.run(user_id, step_prompt, mode="agent")
+                answer = str(turn.get("text") or "")
+                outputs.append(f"### Крок {i + 1}: {title}\n{answer}")
+                await plans.advance_step(plan_id, i, status="done")
+            except Exception as exc:  # noqa: BLE001
+                await plans.advance_step(plan_id, i, status="failed")
+                outputs.append(f"### Крок {i + 1}: {title}\nПомилка: {exc}")
+                break
+
+        result = "\n\n".join(outputs)
+        await plans.finish_plan(plan_id, result=result, status="done")
+        final = await plans.get_plan(plan_id)
+        return {"plan": final, "result": result}

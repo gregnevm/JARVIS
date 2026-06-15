@@ -14,7 +14,8 @@ python3 "$SCRIPT_DIR/train_unsloth.py" \
   --data-dir "$DATA_DIR" \
   --output-dir "$OUTPUT_DIR" \
   --base-model "$BASE_MODEL" \
-  --train-file train.jsonl
+  --train-file train.jsonl \
+  --export-gguf
 rc=$?
 echo "train_unsloth.py exit=$rc"
 exit "$rc"

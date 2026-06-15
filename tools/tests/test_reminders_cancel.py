@@ -24,7 +24,7 @@ def fake_redis(monkeypatch):
             store.get(key, {}).pop(member, None)
 
     r = R()
-    monkeypatch.setattr("app.reminders._client", lambda: r)
+    monkeypatch.setattr("app.reminders.get_redis", lambda: r)
     return store
 
 

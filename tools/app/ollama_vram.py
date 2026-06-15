@@ -1,4 +1,8 @@
-"""C6.1 — on-demand vision: вивантажити agent/chat моделі перед vision, потім keep_alive=0."""
+"""C6.1 — on-demand vision: вивантажити agent/chat моделі перед vision, потім keep_alive=0.
+
+ВАЖЛИВО: вивантаження = `/api/generate` з `keep_alive=0` (звільняє VRAM, лишає модель
+на диску). НЕ `/api/delete` — той фізично видаляє модель з диска.
+"""
 from __future__ import annotations
 
 import logging
@@ -12,24 +16,50 @@ from .config import settings
 logger = logging.getLogger("jarvis.tools.ollama_vram")
 
 
-async def _delete_model(name: str) -> bool:
-    if not name.strip():
+async def _loaded_models() -> set[str]:
+    """Імена моделей, що ЗАРАЗ у VRAM (GET /api/ps). Помилка → порожньо."""
+    url = f"{settings.ollama_host.rstrip('/')}/api/ps"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as cli:
+            resp = await cli.get(url)
+            if resp.status_code != 200:
+                return set()
+            data = resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("ollama /api/ps failed: %s", exc)
+        return set()
+    names: set[str] = set()
+    for m in data.get("models", []):
+        for key in ("name", "model"):
+            val = (m.get(key) or "").strip()
+            if val:
+                names.add(val)
+    return names
+
+
+async def _unload_model(name: str) -> bool:
+    """Вивантажити модель з VRAM (keep_alive=0), якщо вона завантажена. Диск НЕ чіпаємо."""
+    name = name.strip()
+    if not name:
         return False
-    url = f"{settings.ollama_host.rstrip('/')}/api/delete"
+    loaded = await _loaded_models()
+    # Точний збіг або з тегом ':latest' (Ollama /api/ps віддає повне ім'я).
+    if name not in loaded and f"{name}:latest" not in loaded:
+        return True  # уже не у VRAM — нічого робити
+    url = f"{settings.ollama_host.rstrip('/')}/api/generate"
     try:
         async with httpx.AsyncClient(timeout=30.0) as cli:
-            resp = await cli.request("DELETE", url, json={"name": name.strip()})
-            if resp.status_code in (200, 404):
-                return True
+            resp = await cli.post(url, json={"model": name, "keep_alive": 0})
+            return resp.status_code == 200
     except httpx.HTTPError as exc:
-        logger.warning("ollama delete %s failed: %s", name, exc)
+        logger.warning("ollama unload %s failed: %s", name, exc)
     return False
 
 
 async def unload_agent_models() -> None:
     """Звільнити VRAM під vision (chat + agent)."""
     for model in (settings.ollama_model_chat, settings.ollama_model_agent):
-        await _delete_model(model)
+        await _unload_model(model)
 
 
 @asynccontextmanager

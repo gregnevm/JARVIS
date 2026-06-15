@@ -12,6 +12,7 @@ def computer_on(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "enable_computer_use", True)
     monkeypatch.setattr(settings, "hostagent_token", "tok")
     monkeypatch.setattr(settings, "computer_owner_user_ids", "1")
+    monkeypatch.setattr(settings, "computer_profile", "full")
     monkeypatch.setattr(settings, "computer_require_confirm", False)
 
 

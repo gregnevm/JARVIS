@@ -1,0 +1,14 @@
+# Continue CLI — локальна Ollama (без хмарних API).
+# Генерується scripts/setup_continue.ps1 з OLLAMA_MODEL_AGENT у .env
+name: JARVIS Local
+version: 0.0.1
+models:
+  - name: JARVIS Agent
+    provider: ollama
+    model: __OLLAMA_MODEL__
+    apiBase: http://127.0.0.1:11434
+    roles:
+      - chat
+      - edit
+    capabilities:
+      - tool_use

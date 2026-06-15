@@ -6,19 +6,25 @@ import pytest
 from jarvis_core.llm.adapters import KoboldAdapter
 from jarvis_core.llm.chat import OllamaChatBackend
 from jarvis_core.llm.decorators import CacheLLM, StyleLLM, build_llm_stack
-from jarvis_core.llm.parsers import kobold_token, ollama_chat_chunk, ollama_chunk
+from jarvis_core.llm.parsers import extract_json_object, kobold_token, ollama_chat_chunk, ollama_chunk
 
 
 def test_parsers():
     assert kobold_token('data: {"token": "а"}') == "а"
     assert ollama_chunk('{"response": "x", "done": true}') == ("x", True)
+    assert extract_json_object('```json\n{"ok": true}\n```') == {"ok": True}
+    assert extract_json_object('prefix {"x": 1} suffix') == {"x": 1}
+    assert extract_json_object("") is None
 
 
 def test_chat_chunk_parser():
-    assert ollama_chat_chunk('{"message":{"content":"hi"},"done":false}') == ("hi", False)
-    assert ollama_chat_chunk('{"message":{"content":""},"done":true}') == ("", True)
-    assert ollama_chat_chunk("not json") == ("", False)
-    assert ollama_chat_chunk("") == ("", False)
+    assert ollama_chat_chunk('{"message":{"content":"hi"},"done":false}') == ("hi", False, None)
+    assert ollama_chat_chunk('{"message":{"content":""},"done":true}') == ("", True, None)
+    assert ollama_chat_chunk(
+        '{"message":{"content":""},"done":true,"eval_count":100,"eval_duration":5000000000}'
+    ) == ("", True, {"eval_count": 100, "eval_duration_ns": 5000000000, "model": ""})
+    assert ollama_chat_chunk("not json") == ("", False, None)
+    assert ollama_chat_chunk("") == ("", False, None)
 
 
 async def test_ollama_chat_stream_yields_deltas():

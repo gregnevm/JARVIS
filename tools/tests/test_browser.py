@@ -110,6 +110,8 @@ def test_browser_mutating_confirm():
 def test_browser_schemas_gated(monkeypatch: pytest.MonkeyPatch):
     from app import toolkit
 
+    monkeypatch.setattr(settings, "enable_computer_use", True)
+    monkeypatch.setattr(settings, "computer_profile", "standard")
     monkeypatch.setattr(settings, "enable_browser", False)
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas(computer=True)]
     assert "browser_open" not in names
@@ -122,6 +124,7 @@ async def test_dispatch_browser_eval(browser_on, monkeypatch: pytest.MonkeyPatch
     from app import toolkit
 
     monkeypatch.setattr(settings, "enable_computer_use", True)
+    monkeypatch.setattr(settings, "computer_profile", "standard")
     monkeypatch.setattr(settings, "computer_owner_user_ids", "1")
     monkeypatch.setattr("app.browser.browser_eval", AsyncMock(return_value="ok"))
     out = await toolkit.dispatch("browser_eval", {"js": "x"}, user_id=1)

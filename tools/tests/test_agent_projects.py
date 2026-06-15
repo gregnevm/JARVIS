@@ -23,7 +23,7 @@ class FakeMem:
     async def history(self, user_id, limit=12):  # noqa: ANN001
         return []
 
-    async def get_project(self, user_id, project_id):  # noqa: ANN001
+    async def get_project(self, user_id, project_id, *, include_content=False):  # noqa: ANN001
         return self.project
 
 
@@ -65,6 +65,23 @@ async def test_resolve_missing_clears(monkeypatch: pytest.MonkeyPatch) -> None:
     assert pid is None
     assert block == ""
     assert cleared["call"] == (7, None)
+
+
+async def test_resolve_active_injects_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _active(_uid):
+        return 5
+
+    monkeypatch.setattr("app.projects.active_project_id", _active)
+    proj = {
+        "id": 5,
+        "name": "Робота",
+        "system_prompt": "будь стислим",
+        "files_content": [{"name": "spec.md", "content": "API v2"}],
+    }
+    pid, block = await AgentRunner(object(), FakeMem(proj))._resolve_project(1)
+    assert pid == 5
+    assert "spec.md" in block
+    assert "API v2" in block
 
 
 async def test_memory_context_passes_project_id(monkeypatch: pytest.MonkeyPatch) -> None:

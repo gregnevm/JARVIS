@@ -22,6 +22,7 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
 from . import artifacts as app_artifacts
+from ._helpers import AGENT_MODES, require_mode, require_text
 from .auth import agent_mode_denied_message, can_change_agent_mode
 from .config import settings
 from .runtime_flags import get_flags, set_flag
@@ -39,6 +40,18 @@ def authorize(init_data: str | None) -> int:
     if not init_data and settings.webapp_dev_open:
         return 0
     return authorize_allowed(init_data)
+
+
+def _require_admin(user_id: int) -> None:
+    """403 "admin only", якщо користувачу заборонено змінювати режим агента.
+
+    Узагальнює побайтово ідентичний 2-рядковий блок `if not
+    can_change_agent_mode(user_id): raise HTTPException(403, "admin
+    only")`, повторений 4 рази в ендпоінтах цього модуля
+    (`app_set_flag`, `app_lora_versions`, `app_lora_promote`,
+    `app_lora_rollback`) — усі вимагають прав адміна на зміну режиму/LoRA."""
+    if not can_change_agent_mode(user_id):
+        raise HTTPException(status_code=403, detail="admin only")
 
 
 class ModeBody(BaseModel):
@@ -122,8 +135,7 @@ async def app_set_flag(
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, Any]:
     user_id = authorize(x_telegram_init_data or body.init_data)
-    if not can_change_agent_mode(user_id):
-        raise HTTPException(status_code=403, detail="admin only")
+    _require_admin(user_id)
     if body.name not in ("streaming", "voice_reply"):
         raise HTTPException(status_code=400, detail="bad flag")
     await set_flag(request.app.state.redis, body.name, body.enabled)
@@ -142,9 +154,8 @@ async def app_set_mode(
         denied = agent_mode_denied_message(user_id)
         if denied:
             raise HTTPException(status_code=403, detail=denied)
-    if body.mode not in {"chat", "agent", "hybrid", "computer"}:
-        raise HTTPException(status_code=400, detail="bad mode")
-    res: dict[str, Any] = await request.app.state.svc.set_mode(body.mode)
+    mode = require_mode(body.mode, AGENT_MODES)
+    res: dict[str, Any] = await request.app.state.svc.set_mode(mode)
     return res
 
 
@@ -246,8 +257,7 @@ async def app_twin_versions(
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, Any]:
     user_id = authorize(x_telegram_init_data)
-    if not can_change_agent_mode(user_id):
-        raise HTTPException(status_code=403, detail="admin only")
+    _require_admin(user_id)
     return await request.app.state.svc.twin_lora_versions()
 
 
@@ -258,11 +268,8 @@ async def app_twin_promote(
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, Any]:
     user_id = authorize(x_telegram_init_data or body.init_data)
-    if not can_change_agent_mode(user_id):
-        raise HTTPException(status_code=403, detail="admin only")
-    version = (body.version or "").strip()
-    if not version:
-        raise HTTPException(status_code=400, detail="version required")
+    _require_admin(user_id)
+    version = require_text(body.version, field="version")
     return await request.app.state.svc.twin_promote_lora(version)
 
 
@@ -273,8 +280,7 @@ async def app_twin_rollback(
     n: int = 1,
 ) -> dict[str, Any]:
     user_id = authorize(x_telegram_init_data)
-    if not can_change_agent_mode(user_id):
-        raise HTTPException(status_code=403, detail="admin only")
+    _require_admin(user_id)
     return await request.app.state.svc.twin_rollback_lora(max(1, min(n, 5)))
 
 

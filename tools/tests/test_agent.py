@@ -95,6 +95,21 @@ def test_decide_mode_screen_region_without_kw_still_computer_when_computer_on(
     assert decide_mode("зроби скрін екран зараз", "hybrid", user_id=1) == "computer"
 
 
+def test_decide_mode_what_on_screen_routes_computer(monkeypatch: pytest.MonkeyPatch):
+    _enable_computer_for_owner(monkeypatch)
+    assert decide_mode("що на екрані зараз?", "hybrid", user_id=1) == "computer"
+
+
+def test_decide_mode_cursor_prefix_routes_computer(monkeypatch: pytest.MonkeyPatch):
+    _enable_computer_for_owner(monkeypatch)
+    assert decide_mode("cursor: додай тести", "hybrid", user_id=1) == "computer"
+
+
+def test_decide_mode_open_excel_routes_computer(monkeypatch: pytest.MonkeyPatch):
+    _enable_computer_for_owner(monkeypatch)
+    assert decide_mode("відкрий excel", "hybrid", user_id=1) == "computer"
+
+
 # --- фейки ---
 class FakeOllama:
     def __init__(

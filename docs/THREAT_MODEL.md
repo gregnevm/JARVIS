@@ -34,6 +34,26 @@ Self-hosted single-tenant. Фокус: **Telegram → gateway → tools → host
 - `browser_*` — ізольований headless Chromium у tools.
 - Uploads — `data/uploads/`, розмір лімітів Telegram/tools.
 
+### MCP Gateway (P5)
+
+- **Allowlist only** — сервери лише з `MCP_SERVERS_JSON` у `.env`; користувач/модель не задають `command`.
+- **stdio subprocess** — один процес на server; timeout 30s; результат обрізається.
+- **Admin config** — зміна MCP servers лише через `.env` + redeploy; Platform UI read-only.
+- **Untrusted tools** — MCP tools еквівалентні зовнішньому коду; не увімкнювати сторонні servers без review.
+- **Network** — MCP server сам керує egress; не додавати servers з arbitrary shell у prod.
+
+### Connectors (P6)
+
+- Integration tokens (`NOTION_TOKEN`, `SLACK_BOT_TOKEN`) — лише в `.env`, не в чаті.
+- OAuth flows — out of scope MVP; rotation вручну через `.env`.
+
+### OpenAI-compatible API (P11)
+
+- **Opt-in** — `ENABLE_OPENAI_API=true` + `OPENAI_API_KEY`; інакше `/v1/*` → 404.
+- **Bearer only** — без ключа в query string; не логувати Authorization.
+- **User binding** — `X-JARVIS-User-Id` або `OPENAI_DEFAULT_USER_ID`; інакше перший ALLOWED.
+- **Same tool surface** — той самий agent loop, що Telegram; не expose admin/computer без whitelist.
+
 ### Training / Twin
 
 - LoRA promote — `TWIN_MIN_EVAL_PROMOTE` + `training/eval/gate.py`.

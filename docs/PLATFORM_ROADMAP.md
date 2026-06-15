@@ -5,15 +5,23 @@
 > **Scope:** sovereign self-hosted personal AI — Telegram, RAG, voice, computer use,
 > LoRA fine-tuning, Edge USB, web console `/platform`.
 
+> **Місце в ієрархії:** цей файл — **трек** (web-консоль) під парасолькою [`docs/PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md).
+> Принципи й цілі — у [`AGENTS.md`](../AGENTS.md). Консоль `/platform` — дім для UI стовпів A (keys/usage/playground) і B (coding tab).
+
 **Пов'язані документи**
 
 | Документ | Роль |
 |----------|------|
+| [`AGENTS.md`](../AGENTS.md) | Статут: місія, принципи, 3 цілі-стовпи |
+| [`docs/PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md) | **Парасолька** повного продукту (фундамент + стовпи) |
+| [`docs/API_PLATFORM_ROADMAP.md`](API_PLATFORM_ROADMAP.md) | Стовп A — developer-console таби тут |
+| [`docs/CODING_AGENT_ROADMAP.md`](CODING_AGENT_ROADMAP.md) | Стовп B — coding tab тут (CA-6.5) |
+| [`docs/CLIENTS_ROADMAP.md`](CLIENTS_ROADMAP.md) | Стовп C — `/platform` → SPA/PWA (CL-2) |
 | [`ROADMAP.md`](../ROADMAP.md) | Короткий ops-backlog (M/N/E/S мітки) |
 | [`docs/DESIGN.md`](DESIGN.md) | Архітектура PortableAI (Edge + Twin + LoRA) |
 | [`docs/GAP_ANALYSIS.md`](GAP_ANALYSIS.md) | Що є vs що будувати |
-| [`docs/PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md) | Деталізовані фази 0–7 з чекбоксами |
 | [`docs/COMPUTER_USE.md`](COMPUTER_USE.md) | Computer Use C0–C6 |
+| [`docs/AGENT_MODE_ROADMAP.md`](AGENT_MODE_ROADMAP.md) | Agent Mode AM-0…AM-4 (Computer tab, planning) |
 
 ---
 
@@ -39,12 +47,9 @@
 
 | Пріоритет | Борг | Локація | Вплив |
 |-----------|------|---------|-------|
-| 🔴 **критично** | **M4 — Telegram-токен не ротований** (інцидент 2026-06-03) | `.env` | Security |
-| 🟡 важливо | LLM-as-judge у eval gate (зараз format-only) | `training/eval/gate.py` | Якість LoRA |
-| 🟡 важливо | Promote/rollback LoRA → Ollama live | `scripts/link_active_lora.ps1` | LoRA pipeline |
-| 🟡 важливо | Alembic migrations (версіонування embed dim) | `memory/app/db.py` | DB safety |
-| 🟢 nice | tok/s метрика → dashboard | `tools/app/metrics.py` | Observability |
+| 🟡 важливо | ~~Alembic migrations (версіонування embed dim)~~ | `memory/migrations/` | ✅ 3.3 |
 | 🟢 nice | C3 live TG smoke | ручне QA | Completeness |
+| 🟢 nice | Edge: покласти koboldcpp + GGUF на USB | `edge/models/`, `edge/engines/` | Manual |
 
 ---
 
@@ -54,8 +59,8 @@
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| **M4** | Ротувати Telegram-токен: @BotFather → `/revoke` → `.env` → `docker compose restart gateway` | Новий токен, старий revoked | **[ ] ВІДКРИТО** |
-| 0.1 | Reboot smoke: cold boot → бот відповідає < 5 хв без ручних дій | `verify_stack.ps1` green після ребуту | [ ] |
+| **M4** | Ротувати Telegram-токен: @BotFather → `/revoke` → `.env` → `docker compose restart gateway` | Новий токен, старий revoked | [x] |
+| 0.1 | Reboot smoke: cold boot → бот відповідає < 5 хв без ручних дій | `verify_stack.ps1` green після ребуту | [x] stack ~2.3 хв; autostart hostagent fix |
 
 **Вихід фази 0:** security debt закритий, autostart доведений.
 
@@ -77,7 +82,7 @@
 
 ---
 
-## Фаза 3 — Власний мозок: перша LoRA · **активна (~60%)**
+## Фаза 3 — Власний мозок: перша LoRA · **активна (~82%)**
 
 ### Що зроблено
 
@@ -87,7 +92,7 @@
 | SessionLogger | ✅ | `tools/app/session_ingest.py` |
 | dataset_export (filters + ShareGPT split) | ✅ | `tools/app/dataset_export.py` |
 | Eval harness skeleton | ✅ (format-only) | `training/eval/run_eval.py` + `gate.py` |
-| train_unsloth.py skeleton | ✅ (TODO SFTTrainer) | `training/runpod/train_unsloth.py` |
+| train_unsloth.py (Unsloth QLoRA + dry-run + GGUF) | ✅ | `training/runpod/train_unsloth.py` |
 | Modelfile.lora.template | ✅ | `training/ollama/` |
 | link_active_lora (Blue-Green) | ✅ | `scripts/link_active_lora.ps1` |
 
@@ -97,8 +102,8 @@
 ① Набір ~500 кураційних прикладів
      scripts/export_dataset.ps1 → ручна курація → sharegpt_train.jsonl
 
-② Доробити train_unsloth.py
-     # TODO: FastLanguageModel.from_pretrained + SFTTrainer block
+② ~~Доробити train_unsloth.py~~
+     FastLanguageModel + SFTTrainer + `--export-gguf` + `--dry-run`
      → model.save_pretrained_gguf("lora_v1", tokenizer, "q4_k_m")
 
 ③ RunPod burst (RTX 3060+ / A100, ~$2–5)
@@ -117,31 +122,31 @@
 
 | # | Задача | Вплив |
 |---|--------|-------|
-| 3.1 | **LLM-as-judge** в eval gate | Факти не дрейфують при self-improving loop |
-| 3.2 | Promote/rollback → Ollama live (wire end-to-end) | LoRA не активується автоматично |
-| 3.3 | Alembic перша міграція | Безпечна зміна embed dim |
+| 3.1 | **LLM-as-judge** в eval gate | ✅ `training/eval/judge.py`, `--with-judge` у gate |
+| 3.2 | Promote/rollback → Ollama live (wire end-to-end) | ✅ `tools/app/lora_deploy.py`, auto deploy з Platform |
+| 3.3 | Alembic перша міграція | ✅ `memory/migrations/` — schema_meta + projects, `scripts/memory_migrate.ps1` |
 
 **Вихід фази 3:** перша LoRA з eval score, rollback `registry.rollback()` за одну команду.
 
 ---
 
-## Фаза 4 — Edge USB · **не почата**
+## Фаза 4 — Edge USB · **активна (~70%)**
 
-> **Залежність:** LoRA v1 з фази 3 + KoboldCPP GGUF.
+> **Залежність:** LoRA v1 з фази 3 + KoboldCPP GGUF (модель/бінарник — вручну на USB).
 
 | # | Задача | Статус |
 |---|--------|--------|
-| 4.1 | KoboldCPP + qwen2.5-7b-q4_k_m.gguf на USB layout (`/PortableAI/`) | [ ] |
-| 4.2 | `KoboldAdapter(LLMInterface)` — той самий agent loop | [ ] |
-| 4.3 | SQLite-vec RAG (Edge offline, нульові залежності) | [ ] |
-| 4.4 | SyncAgent: mode-detect OFFLINE / LAN / VPN → push/pull delta | [ ] |
-| 4.5 | `run_win.bat` / `run_linux.sh` one-click | [ ] |
+| 4.1 | KoboldCPP + qwen2.5-7b-q4_k_m.gguf на USB layout (`edge/`) | [x] layout + `run_win.bat` / `run_linux.sh` |
+| 4.2 | `KoboldAdapter(LLMInterface)` — той самий agent loop | [x] `jarvis_core` + `LLM_BACKEND=kobold` у tools |
+| 4.3 | SQLite RAG (Edge offline) | [x] `edge/rag.py` |
+| 4.4 | SyncAgent: OFFLINE/LAN/VPN → push/pull delta | [x] `edge/edge_sync.py` + `GET /registry/lora/active/download` |
+| 4.5 | `run_win.bat` / `run_linux.sh` one-click | [x] |
 
 **Вихід фази 4:** флешка офлайн → LAN → проксі на Twin; LoRA sync автоматичний.
 
 ---
 
-## Фаза 5 — Якість і observability · **~70%**
+## Фаза 5 — Якість і observability · **~85%**
 
 | Статус | Задача |
 |--------|--------|
@@ -149,16 +154,18 @@
 | ✅ | Golden traces (`tools/tests/golden/`) |
 | ✅ | X-Request-ID middleware (gateway → tools) |
 | ✅ | Threat model + computer rollback runbook |
-| [ ] | **tok/s** у dashboard — ключова метрика GPU швидкості |
-| [ ] | Alembic migrations (версіонування embed dim) |
+| ✅ | **tok/s** у dashboard — ключова метрика GPU швидкості |
+| ✅ | Alembic migrations (`memory/migrations/`, schema_meta.embed_dim) |
 | [ ] | S1 Redis queue + workers (YAGNI — лише при реальному навантаженні) |
 
 ---
 
-## Фаза 6 — Platform Web Console · **~15%**
+## Фаза 6 — Platform Web Console · **P0–P12 done (100%)**
 
 **Мета:** єдиний `/platform` — бачиш стан системи, тестуєш агента, керуєш памʼяттю
 та проєктами, відстежуєш довгі задачі. Telegram — канал споживання; Platform — штаб.
+
+**Наступна фаза:** Phase 7 Advanced (eval pipeline, LoRA MoE) або ops backlog.
 
 ### P0 — Shell + Core tabs (1–2 тижні)
 
@@ -167,7 +174,7 @@
 | P0.1 | `gateway/app/platform/` router + `static/platform.html` | `/platform` відкривається, auth | [x] |
 | P0.2 | **Overview** — merge admin + dashboard metrics | Health, Ollama, models, p50/p95 | [x] |
 | P0.3 | **Workbench** — SSE `/agent/stream`, mode picker, tool trace | Prompt → streaming відповідь | [x] |
-| P0.4 | **Memory browser** — search pgvector, list notes, view profile | GET `/platform/api/memory/search` | [x] |
+| P0.4 | **Memory browser** — search pgvector, notes, profile, `project_id` filter | GET `/platform/api/memory/*` | [x] |
 | P0.5 | **Logs** — tail `data/logs/sessions/*.jsonl` | Фільтр user_id, mode, limit | [x] |
 | P0.6 | **Settings** — runtime flags + read-only .env | POST flags як `/app/flags` | [x] |
 | P0.7 | **Users** — перенести access з `/admin` | approve / deny / revoke | [x] |
@@ -198,15 +205,22 @@
 | P1.4 | System prompt per project | [x] |
 | P1.5 | Platform UI: project switcher, files attach | [x] |
 | P1.6 | Telegram: `/project` list/switch/create | [x] |
+| P1.7 | **Project files → agent context** (`include_content`, budget 12k) | [x] |
 
-### P2 — Background Jobs (1–2 тижні)
+### P2 — Background Jobs (1–2 тижні) · **done**
 
 | # | Задача | Статус |
 |---|--------|--------|
-| P2.1 | Redis job schema `jarvis:job:{id}` (status, progress, result) | [ ] |
-| P2.2 | Worker loop → notify Telegram при завершенні | [ ] |
-| P2.3 | API `POST /jobs`, `GET /jobs/{id}`, cancel | [ ] |
-| P2.4 | Platform Jobs tab — live progress + history 7d | [ ] |
+| P2.1 | Redis `jarvis:bgjob:{id}` + queue `jarvis:bgjob:queue` (окремо від macro ZSET) | [x] |
+| P2.2 | Worker loop (`bg_job_runner`) → notify Telegram | [x] |
+| P2.3 | API `POST/GET/DELETE /bgjobs` (+ `/platform/api/jobs`) | [x] |
+| P2.4 | Platform Jobs tab — create, list, cancel, auto-refresh | [x] |
+
+### Workbench extras (P0.3+)
+
+| # | Задача | Статус |
+|---|--------|--------|
+| WB.1 | Computer confirm flow (approve/deny/resume SSE) | [x] |
 
 ### P3 — Planning Mode (2 тижні)
 
@@ -214,33 +228,110 @@
 
 | # | Задача | Статус |
 |---|--------|--------|
-| P3.1 | `POST /agent/plan` → structured plan JSON (steps[], risks[]) | [ ] |
-| P3.2 | Plan storage Redis/DB + TTL | [ ] |
-| P3.3 | `POST /agent/plan/{id}/execute` — step-by-step з progress | [ ] |
-| P3.4 | Platform plan viewer + approve/deny | [ ] |
-| P3.5 | Telegram inline ✅/❌ на plan | [ ] |
+| P3.1 | `POST /agent/plan` → structured plan JSON (steps[], risks[]) | [x] |
+| P3.2 | Plan storage Redis/DB + TTL | [x] |
+| P3.3 | `POST /agent/plan/{id}/execute` — step-by-step з progress | [x] |
+| P3.4 | Platform plan viewer + approve/deny | [x] |
+| P3.5 | Telegram inline ✅/❌ на plan | [x] |
+
+### P4 — Deep Research · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P4.1 | Multi-hop orchestrator (`research.py`) + citations | [x] |
+| P4.2 | bg job type `deep_research` + worker dispatch | [x] |
+| P4.3 | Platform Research tab + Jobs type selector | [x] |
+
+### P5 — MCP Gateway MVP · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P5.1 | `mcp_gateway.py` stdio + allowlist (`MCP_SERVERS_JSON`) | [x] |
+| P5.2 | Agent tool `mcp_call` + `/mcp/*` API | [x] |
+| P5.3 | Platform MCP status tab + THREAT_MODEL update | [x] |
+
+### P6 — Connectors MVP · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P6.1 | Notion search/read (`NOTION_TOKEN`) | [x] |
+| P6.2 | Slack post/list channels (`SLACK_BOT_TOKEN`) | [x] |
+| P6.3 | Calendar ICS + reminders (`CALENDAR_ICS_URL`) | [x] |
+| P6.4 | Platform Connectors status tab | [x] |
+
+### P7 — Skills library · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P7.1 | `data/skills/*/SKILL.md` loader + budget | [x] |
+| P7.2 | Active skill Redis + agent inject | [x] |
+| P7.3 | Platform Skills tab | [x] |
+
+### P8 — Subagents · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P8.1 | spawn + budget_iters + Redis runs | [x] |
+| P8.2 | bg job type `subagent` + worker | [x] |
+| P8.3 | Agent tool `spawn_subagent` + Platform tab | [x] |
+
+### P10 — Hooks · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P10.1 | `data/hooks/` pre_turn / post_tool / on_error | [x] |
+| P10.2 | Wire у AgentRunner run + tool loop | [x] |
+| P10.3 | Platform Hooks status tab | [x] |
+
+### P9 — Agent Teams · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P9.1 | Researcher → Coder → Reviewer pipeline (`teams.py`) | [x] |
+| P9.2 | bg job `agent_team` + worker | [x] |
+| P9.3 | Platform Teams tab | [x] |
+
+### P11 — OpenAI-compatible API · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P11.1 | `POST /v1/chat/completions` (opt-in `ENABLE_OPENAI_API`) | [x] |
+| P11.2 | Bearer auth + stream SSE | [x] |
+| P11.3 | `GET /v1/models` | [x] |
+
+### P12 — Cursor tasks (Telegram + Computer Use) · **done**
+
+| # | Задача | Статус |
+|---|--------|--------|
+| P12.1 | `tools/app/cursor_tasks.py` — host CLI + cloud API fallback | [x] |
+| P12.2 | Telegram `/cursor` + reply keyboard 🧠 | [x] |
+| P12.3 | Computer Use fast path (`cursor:` prefix) + `cursor_task` tool | [x] |
+| P12.4 | bg job type `cursor_task` | [x] |
+
+> Потрібен `CURSOR_API_KEY` у `.env` для live cloud/host-agent path.
 
 ### P4+ — Майбутні можливості
 
 | Фаза | Можливість | Умова старту |
 |------|------------|--------------|
-| P4 | Deep Research (multi-hop + citations) | P2 Jobs |
-| P5 | MCP Gateway (stdio + SSE transport) | Threat model update |
-| P6 | Connectors (Calendar, Notion, Slack) | P5 MCP |
-| P7 | Skills library (`data/skills/`) | P1 Projects |
-| P8 | Subagents (spawn + budget) | P3 Planning |
-| P9 | Agent Teams (Researcher + Coder + Reviewer) | P8 |
-| P10 | Hooks (pre_turn / post_tool / on_error) | P1 Projects |
-| P11 | OpenAI-compatible API (opt-in) | Personal use confirmed |
+| P4 | Deep Research (multi-hop + citations) | [x] P2 Jobs |
+| P5 | MCP Gateway (stdio + SSE transport) | [x] Threat model updated |
+| P6 | Connectors (Calendar, Notion, Slack) | [x] native tools MVP |
+| P7 | Skills library (`data/skills/`) | [x] P1 Projects |
+| P8 | Subagents (spawn + budget) | [x] P3 Planning |
+| P9 | Agent Teams (Researcher + Coder + Reviewer) | [x] P8 |
+| P10 | Hooks (pre_turn / post_tool / on_error) | [x] P1 Projects |
+| P11 | OpenAI-compatible API (opt-in) | [x] |
+| P12 | Cursor tasks (Telegram + Computer Use) | [x] |
 
 ---
 
-## Фаза 7 — Advanced · **6+ місяців**
+## Фаза 7 — Advanced · **активна (~40%)**
 
-| # | Фіча | Умова старту |
-|---|------|--------------|
-| 7.1 | Multi-agent (Orchestrator + Critic) | Eval pipeline стабільний |
-| 7.2 | Self-improving loop (авто-датасет + human gate) | LLM-as-judge готовий |
+| # | Фіча | Статус |
+|---|------|--------|
+| 7.1 | Multi-agent (Orchestrator + Critic) | ✅ `tools/app/orchestrator.py`, bg job + Platform API |
+| 7.2 | Self-improving loop (авто-датасет + human gate) | ✅ `tools/app/self_improve.py`, judge → pending → review → export |
 | 7.3 | Domain LoRA swap (MoE-стиль) | 2+ LoRA в registry |
 | 7.4 | llama.cpp benchmark vs Ollama/Vulkan | Bottleneck підтверджений |
 | 7.5 | WireGuard замість cloudflared | Потрібен Edge з будь-якої точки |
@@ -261,8 +352,8 @@
 
 ```
 Тиждень 1 — security + stability
-  ① M4: ротувати Telegram-токен (15 хв, критично)
-  ② Reboot smoke end-to-end
+  ① ~~M4: ротувати Telegram-токен~~ ✅
+  ② ~~Reboot smoke end-to-end~~ ✅ (Forge опційно)
 
 Тиждень 2 — перший LoRA датасет
   ③ 200–300 кураційних прикладів (export_dataset.ps1 + курація)
@@ -270,11 +361,11 @@
 
 Тиждень 3 — перший training run
   ⑤ RunPod burst → QLoRA → lora_v1.gguf
-  ⑥ Eval gate: LLM-as-judge для holdout
+  ⑥ ~~Eval gate: LLM-as-judge для holdout~~ ✅
 
 Тиждень 4 — promote + metrics
-  ⑦ register → promote → Ollama Modelfile → live test у Telegram
-  ⑧ tok/s метрика → dashboard
+  ⑦ ~~register → promote → Ollama Modelfile → live test у Telegram~~ ✅ deploy wired
+  ⑧ ~~tok/s метрика → dashboard~~ ✅
 ```
 
 ---
@@ -283,12 +374,12 @@
 
 | KPI | Ціль | Стан (2026-06-05) |
 |-----|------|-------------------|
-| Uptime після ребуту | 100% без ручних кроків | ⚠️ не перевірено після cold boot |
+| Uptime після ребуту | 100% без ручних кроків | ✅ compose ~2.3 хв (2026-06-05) |
 | P95 chat (warm, GPU) | < 8 с | ✅ ~3–5 с (Vulkan, 29/29 layers) |
 | P95 agent + 1 tool | < 25 с | ✅ ~10–15 с |
 | Computer success (whitelist) | > 90% | ✅ C0–C6 реалізовані |
 | Eval після LoRA | ↑ vs baseline | 🔲 перший run попереду |
-| Security incidents | 0 | ⚠️ M4 токен відкритий |
+| Security incidents | 0 | ✅ M4 закрито (новий бот) |
 
 ---
 
@@ -313,8 +404,10 @@
 | ADR-002 | QLoRA r=16 (Unsloth) | RTX 3060 справляється, адаптер 80–200 MB |
 | ADR-003 | SQLite-vec для Edge RAG | Нульові залежності, один файл |
 | ADR-004 | Modular monolith для Twin | Один розробник, zero network overhead |
+| ADR-005 | Event Bus для внутрішньої координації Twin | Підписник додається без зміни publisher; уникає tight coupling прямих викликів і зайвої залежності від Redis Pub/Sub |
 | ADR-006 | Blue-Green через symlinks | Instant rollback, zero downtime |
 | ADR-007 | Training → RunPod (cloud-burst) | Unsloth CUDA-only; AMD ROCm RDNA1 Windows — НІ |
+| ADR-008 | Self-improve scan — навмисно ручний тригер (`POST /improve/scan`) | Human-in-the-loop: judge відбирає кандидатів, але людина мусить review'ити перед export у training set — авто-scan ризикує засмітити датасет неякісними прикладами без нагляду |
 | E2 | Ollama на ХОСТІ (не Docker) | AMD `/dev/dri`/`/dev/kfd` недоступні у WSL2 |
 
 ---
@@ -324,6 +417,11 @@
 | Дата | Версія | Зміна |
 |------|--------|-------|
 | 2026-06-05 | 1.0 | Початковий roadmap: 12 можливостей, Platform P0–P11 |
+| 2026-06-07 | 1.6 | P12 Cursor tasks (Telegram + Computer Use) — Фаза 6 закрита (P0–P12, 100%) |
+| 2026-06-05 | 1.5 | P9 Agent Teams, P11 OpenAI API |
+| 2026-06-05 | 1.4 | P7 Skills, P8 Subagents, P10 Hooks |
+| 2026-06-05 | 1.3 | P3 Planning, P4 Research, P5 MCP, P6 Connectors |
+| 2026-06-05 | 1.2 | P1.7 files inject, Memory notes/project_id, Workbench confirm, P2 bg jobs |
 | 2026-06-05 | 1.1 | Оновлено baseline (Vulkan GPU підтверджено), критичний борг, пріоритетна черга |
 
 ---

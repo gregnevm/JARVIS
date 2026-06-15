@@ -12,16 +12,22 @@ BTN_COMPUTER = "💻 Computer"
 BTN_SCREEN = "📸 Скрін"
 BTN_MENU = "🎛 Меню"
 BTN_CLIPBOARD = "📋 Буфер"
+BTN_CURSOR = "🧠 Cursor"
 BTN_HIDE = "⌨️ Сховати"
 
 
-def reply_keyboard(app_url: str | None = None, *, show_computer: bool = True) -> dict[str, Any]:
+def reply_keyboard(
+    app_url: str | None = None, *, show_computer: bool = True, show_cursor: bool = False
+) -> dict[str, Any]:
     """Reply Keyboard — постійні кнопки під полем вводу."""
     rows: list[list[dict[str, Any]]] = [
         [{"text": BTN_STATUS}, {"text": BTN_BRIEF}],
     ]
     if show_computer:
-        rows.append([{"text": BTN_REMINDERS}, {"text": BTN_SCREEN}])
+        row2: list[dict[str, Any]] = [{"text": BTN_REMINDERS}, {"text": BTN_SCREEN}]
+        if show_cursor:
+            row2.append({"text": BTN_CURSOR})
+        rows.append(row2)
         rows.append([{"text": BTN_CLIPBOARD}, {"text": BTN_COMPUTER}])
         rows.append([{"text": BTN_MENU}])
     else:
@@ -124,14 +130,26 @@ def admin_confirm_keyboard(action: str, code: str) -> dict[str, Any]:
     }
 
 
-def computer_confirm_keyboard(code: str) -> dict[str, Any]:
+def computer_confirm_keyboard(code: str, *, trust_minutes: int = 10) -> dict[str, Any]:
+    trust_label = f"✅ + Full trust {trust_minutes}х"
     return {
         "inline_keyboard": [
             [
                 {"text": "✅ Підтвердити", "callback_data": f"cmp:Y:{code}"},
-                {"text": "✅ + Trust 30х", "callback_data": f"cmp:YT:{code}"},
+                {"text": trust_label, "callback_data": f"cmp:YT:{code}"},
             ],
             [{"text": "❌ Скасувати", "callback_data": "cmp:N:0"}],
+        ]
+    }
+
+
+def plan_confirm_keyboard(plan_id: str) -> dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Схвалити план", "callback_data": f"pln:Y:{plan_id}"},
+                {"text": "❌ Відхилити", "callback_data": f"pln:N:{plan_id}"},
+            ],
         ]
     }
 
