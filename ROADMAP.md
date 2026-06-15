@@ -3,8 +3,12 @@
 Стек живий, Telegram E2E доведений, фази 1-7 (skeleton → polish) закриті, фаза 7.5
 (зміцнення без Docker: mypy strict + 76 тестів + CI) теж.
 
-**Продуктовий план (фази 0–7, KPI, editions):** [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).  
-**Platform (консоль `/platform`, Memory, Projects, MCP…):** [`docs/PLATFORM_ROADMAP.md`](docs/PLATFORM_ROADMAP.md).
+**Статут (місія, принципи, 3 цілі-стовпи):** [`AGENTS.md`](AGENTS.md) — читається першим.  
+**Парасолька повного продукту (фундамент + 3 стовпи, KPI, editions):** [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).  
+**Треки стовпів:** API [`docs/API_PLATFORM_ROADMAP.md`](docs/API_PLATFORM_ROADMAP.md) · Coding [`docs/CODING_AGENT_ROADMAP.md`](docs/CODING_AGENT_ROADMAP.md) · Clients [`docs/CLIENTS_ROADMAP.md`](docs/CLIENTS_ROADMAP.md).  
+**Platform (консоль `/platform`, Memory, Projects, MCP…):** [`docs/PLATFORM_ROADMAP.md`](docs/PLATFORM_ROADMAP.md).  
+**Agent Mode / Computer Use (повний план AM-0…AM-4):** [`docs/AGENT_MODE_ROADMAP.md`](docs/AGENT_MODE_ROADMAP.md).  
+**Мультитенант / SaaS (enabler для API + Clients):** [`docs/SAAS_DEEP_DIVE.md`](docs/SAAS_DEEP_DIVE.md).
 
 Цей файл — **короткий ops-backlog** (must / nice / explore), а не повний product roadmap.
 Історія зробленого — у `README.md` + `memory/`.
@@ -207,22 +211,22 @@ Toolkit має `calc, web_search, web_fetch, parse_file, code_exec`. Очеви�
 Архітектура агент-лупа (фаза 6) робить це питанням 50 рядків Python + JSON-схема
 кожен. Додати в `tools/app/toolkit.py` + `TOOL_SCHEMAS`.
 
-### E5. Computer Use (Agent Mode) — керування реальним комп'ютером
-**Ідея:** дати агентові керувати Windows-хостом (PowerShell, файли, браузер, GUI)
-з вшитим принципом «найшвидший шлях»: T0 PowerShell/CLI → T2 браузер по DOM →
-T3 UI Automation → T4 піксельний клік (лише як резерв, потребує vision-моделі).
+### E5. Computer Use (Agent Mode) — керування реальним комп'ютером ✅ інфра · ⏳ автономність
 
-**Архітектура:** новий **host-agent** (FastAPI на хості, поза Compose — контейнер не
-бачить десктоп/мишу/вікна), `tools/` кличе його через `host.docker.internal`; браузер
-(Playwright/CDP) можна тримати в контейнері. Надбудова над наявним тул-лупом —
-нові інструменти в `toolkit.py` + `AGENT_MODE=computer`.
+**Зроблено (C0–C6 інфра):** host-agent, toolkit T0–T4, confirm+audit, Playwright,
+UIA lite, admin gate, vision/screenshot, cursor_task, cascade routing.
+Деталі: [`docs/COMPUTER_USE.md`](docs/COMPUTER_USE.md), PRODUCT фаза 2.
 
-**Безпека:** усе за прапорами (`ENABLE_COMPUTER_USE=false`, `COMPUTER_ALLOW_ADMIN=false`
-дефолт), підтвердження дій inline-кнопками в Telegram, whitelist команд, аудит у
-`data/logs/computer.jsonl`. Дати LLM admin-shell = root на машині — обережно.
+**Наступний етап — «справжній Agent Mode»** (розриви G1–G11, фази AM-0…AM-4):
+- AM-0: динамічний промпт, `see_screen` у лупі, `COMPUTER_PROFILE`, session trust
+- AM-1: keyboard/hotkey/scroll, справжній UIA (pywinauto), vision-action loop
+- AM-2: computer planning (один ✅ на план), bg jobs, observation buffer
+- AM-3: Platform Computer tab, session replay
+- AM-4: policy engine, native bridges, edition matrix
 
-**Фази:** C0 каркас host-agent → C1 T0/T1 toolkit → C2 підтвердження+аудит →
-C3 браузер → C4 UIA → C5 admin → C6 vision (опц.). Повний план: `docs/COMPUTER_USE.md`.
+**Повний розгорнутий план:** [`docs/AGENT_MODE_ROADMAP.md`](docs/AGENT_MODE_ROADMAP.md).
+
+**Безпека (без змін):** дефолт вимкнено; admin — double confirm; audit `computer.jsonl`.
 
 ---
 

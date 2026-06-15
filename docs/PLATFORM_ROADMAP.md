@@ -5,15 +5,23 @@
 > **Scope:** sovereign self-hosted personal AI — Telegram, RAG, voice, computer use,
 > LoRA fine-tuning, Edge USB, web console `/platform`.
 
+> **Місце в ієрархії:** цей файл — **трек** (web-консоль) під парасолькою [`docs/PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md).
+> Принципи й цілі — у [`AGENTS.md`](../AGENTS.md). Консоль `/platform` — дім для UI стовпів A (keys/usage/playground) і B (coding tab).
+
 **Пов'язані документи**
 
 | Документ | Роль |
 |----------|------|
+| [`AGENTS.md`](../AGENTS.md) | Статут: місія, принципи, 3 цілі-стовпи |
+| [`docs/PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md) | **Парасолька** повного продукту (фундамент + стовпи) |
+| [`docs/API_PLATFORM_ROADMAP.md`](API_PLATFORM_ROADMAP.md) | Стовп A — developer-console таби тут |
+| [`docs/CODING_AGENT_ROADMAP.md`](CODING_AGENT_ROADMAP.md) | Стовп B — coding tab тут (CA-6.5) |
+| [`docs/CLIENTS_ROADMAP.md`](CLIENTS_ROADMAP.md) | Стовп C — `/platform` → SPA/PWA (CL-2) |
 | [`ROADMAP.md`](../ROADMAP.md) | Короткий ops-backlog (M/N/E/S мітки) |
 | [`docs/DESIGN.md`](DESIGN.md) | Архітектура PortableAI (Edge + Twin + LoRA) |
 | [`docs/GAP_ANALYSIS.md`](GAP_ANALYSIS.md) | Що є vs що будувати |
-| [`docs/PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md) | Деталізовані фази 0–7 з чекбоксами |
 | [`docs/COMPUTER_USE.md`](COMPUTER_USE.md) | Computer Use C0–C6 |
+| [`docs/AGENT_MODE_ROADMAP.md`](AGENT_MODE_ROADMAP.md) | Agent Mode AM-0…AM-4 (Computer tab, planning) |
 
 ---
 

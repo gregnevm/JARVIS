@@ -2,6 +2,10 @@
 
 Після merge residual-фіксів перевір `.env` на хості (не комітити секрети).
 
+> **Дисципліна флагів** ([`AGENTS.md`](../AGENTS.md) §5): нова фіча → новий `ENABLE_*` із безпечним
+> дефолтом (`false`) + рядок тут і в `.env.example`. Майбутні змінні стовпів (SaaS `SAAS_MODE`/`JWT_SECRET`,
+> API per-org keys) — у [`API_PLATFORM_ROADMAP.md`](API_PLATFORM_ROADMAP.md) і [`SAAS_DEEP_DIVE.md`](SAAS_DEEP_DIVE.md) §13.3.
+
 ## Обовʼязково для Computer Use + FS
 
 | Змінна | Приклад | Навіщо |
@@ -17,8 +21,12 @@ Hostagent читає `HOSTAGENT_FS_ROOTS` як `fs_roots` у `hostagent/.env` а
 | Змінна | Приклад | Навіщо |
 |--------|---------|--------|
 | `ENABLE_BROWSER` | `true` | `browser_*` у computer mode (потрібен rebuild `tools` з Chromium) |
+| `COMPUTER_PROFILE` | `standard` | `safe` (T0/T1) · `standard` (+browser, UIA, see_screen) · `full` (+screen_click) |
+| `COMPUTER_SESSION_TRUST_MINUTES` | `10` | Після ✅ — без confirm для T0/T1; `0` = вимк. Кнопка «Full trust» = усі tier |
+| `COMPUTER_MAX_ITERS` | `12` | Ітерації тул-лупа в `AGENT_MODE=computer` |
 
 Профіль браузера: [`docs/adr/C3-browser-profile.md`](adr/C3-browser-profile.md).
+Повний план Agent Mode: [`AGENT_MODE_ROADMAP.md`](AGENT_MODE_ROADMAP.md).
 
 | `COMPUTER_RATE_LIMIT_PER_HOUR` | `120` | Мутуючі computer-дії на годину; `0` = вимкнено |
 

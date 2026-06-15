@@ -3,6 +3,9 @@
 > Як `DESIGN.md` (PortableAI: Edge+Twin+fine-tuning) співвідноситься з тим,
 > що **вже збудовано** (microservices Telegram-бот, PR #1). Що реюзабельне,
 > що з нуля, що викинути, у якому порядку будувати.
+>
+> **Контекст:** цей gap стосується **фундаменту** (Twin/Edge/LoRA). Продуктові стовпи над ним —
+> [`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md); принципи — [`AGENTS.md`](../AGENTS.md).
 
 ## TL;DR
 

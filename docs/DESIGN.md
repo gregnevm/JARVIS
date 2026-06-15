@@ -7,6 +7,11 @@
 > архітектуру PortableAI. Аналіз того, як поточний стек (microservices Telegram-бот)
 > співвідноситься з нею — у `docs/GAP_ANALYSIS.md`. Коротко: поточний стек ≈ «Twin».
 
+> **Місце в ієрархії документів:** DESIGN — **архітектурний шар** (Edge + Twin + fine-tuning).
+> Продуктове бачення (3 стовпи: API-платформа · coding-агент · мультиплатформа) і фази —
+> у [`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md); місія й принципи — у [`AGENTS.md`](../AGENTS.md).
+> PortableAI (Edge/Twin/LoRA) лишається фундаментом, на якому стоять стовпи.
+
 ---
 ## Table of Contents
 1. [Vision & Principles](#1-vision--principles)

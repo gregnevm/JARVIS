@@ -1,390 +1,218 @@
-# JARVIS — Product Roadmap (AIO self-hosted personal AGI)
+# JARVIS — Product Roadmap (повноцінна платформа)
 
-> **Версія:** 1.0 (2026-06-04)  
-> **Статус:** Living document — оновлюється з прогресом.  
-> **Скоуп:** комерційна якість для **personal use**, повністю self-hosted.
+> **Версія:** 2.0 (2026-06-15) — *перевизначено зі «self-hosted personal AGI» на повноцінний продукт.*
+> **Статус:** Living document — парасолька над усіма трек-roadmap-ами.
+> **Скоуп:** суверенна AI-платформа = **API-платформа розробника** + **агент кодування рівня Claude Code** + **мультиплатформа** (web · Telegram · mobile).
 
-**Пов’язані документи**
+**Цей файл — стратегічна парасолька.** Принципи й цілі — у [`AGENTS.md`](../AGENTS.md). Task-level
+чекбокси — у трек-roadmap-ах (нижче). Тут — **фазовий** статус і послідовність.
 
 | Документ | Роль |
 |----------|------|
-| [`ROADMAP.md`](../ROADMAP.md) | Короткий ops-backlog (M1–M4, N*, E*, S1) |
-| [`docs/DESIGN.md`](DESIGN.md) | Цільова архітектура PortableAI (Edge + Twin + LoRA) |
-| [`docs/GAP_ANALYSIS.md`](GAP_ANALYSIS.md) | Що вже є vs що будувати |
-| [`docs/COMPUTER_USE.md`](COMPUTER_USE.md) | Computer Use C0–C6 |
-| [`docs/ENV_CHECKLIST.md`](ENV_CHECKLIST.md) | Операційний чеклист `.env` |
-| [`docs/SMOKE_TEST.md`](SMOKE_TEST.md) | Регресійний smoke |
-| [`docs/PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) | Веб-консоль `/platform` + 13 агентних можливостей (P0–P12) |
+| [`AGENTS.md`](../AGENTS.md) | **Конституція**: місія, принципи, 3 цілі-стовпи |
+| [`docs/CODING_AGENT_ROADMAP.md`](CODING_AGENT_ROADMAP.md) | Стовп B — агент кодування (CA-0…CA-6) |
+| [`docs/API_PLATFORM_ROADMAP.md`](API_PLATFORM_ROADMAP.md) | Стовп A — API-платформа (AP-0…AP-6) |
+| [`docs/CLIENTS_ROADMAP.md`](CLIENTS_ROADMAP.md) | Стовп C — клієнти web/TG/mobile (CL-0…CL-5) |
+| [`docs/PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) | Web-консоль `/platform` P0–P12 + Phase 7 |
+| [`docs/AGENT_MODE_ROADMAP.md`](AGENT_MODE_ROADMAP.md) | Computer Use / desktop AM-0…AM-4 |
+| [`docs/SAAS_DEEP_DIVE.md`](SAAS_DEEP_DIVE.md) | Мультитенант enabler (PR#0…#7) |
+| [`ROADMAP.md`](../ROADMAP.md) · [`docs/DESIGN.md`](DESIGN.md) · [`docs/GAP_ANALYSIS.md`](GAP_ANALYSIS.md) | Ops · архітектура · gap |
 
 ---
 
-## 1. Позиціонування продукту
+## 1. Позиціонування
 
-### 1.1 Обіцянка
+### 1.1 Обіцянка (оновлена)
 
-**JARVIS** — один суверенний асистент: Telegram-чат, довготривала памʼять (RAG),
-голос (STT/TTS), нагадування, керування Windows-хостом, генерація зображень — без
-зовнішніх LLM API для inference.
+**JARVIS** — суверенна платформа, яку можна споживати трьома способами одночасно:
+- 🅰 **як API** (`Bearer sk-jarvis-…`) — розробник підключає свій код/агентів, як до OpenAI/Anthropic;
+- 🅱 **як агент кодування** — repo-aware, diff-edit, тест-луп, рев'ю; рівень Claude Code, але локально;
+- 🅲 **як асистент** — Telegram-чат, web-штаб `/platform`, мобільний застосунок.
+
+Inference локальний (Ollama/Vulkan, Edge/Kobold). Зовнішні AI-API — лише явний opt-in.
 
 ### 1.2 Диференціатори
 
-- Ollama на хості з **Vulkan** (AMD RDNA1+), не в Docker на Windows
-- **Long polling** — бот без публічного URL для ingest
-- **Computer Use** з підтвердженням у Telegram і аудитом
-- Шлях **PortableAI**: Twin (поточний стек) → Edge (USB) → персональна LoRA
+- **Sovereignty:** $0 inference, дані не виходять із машини, повний контроль (vs cloud-only платформи).
+- **Один бекенд — три способи споживання** (API / coding-agent / асистент) під спільною auth.
+- **Computer Use з аудитом** — агент реально керує Windows-хостом (PS/CLI/browser/UIA), tier-ladder.
+- **PortableAI:** Twin (домашній стек) → Edge (USB) → персональна LoRA з твоїх діалогів.
 
 ### 1.3 Чесні обмеження
 
 | Теза | Реальність |
 |------|------------|
-| «Як GPT-4» | Ні — компенсація: privacy, $0 inference, повний контроль |
-| «AGI» | Ні — ReAct-агент + інструменти + (опц.) fine-tune |
-| «Privacy абсолютна» | Inference — так; **training** — ephemeral RunPod (ADR-007) |
-| QLoRA локально на RX 5700 XT | Ні — лише cloud-burst або окрема NVIDIA |
+| «Якість як frontier (GPT-4/Claude)» | Ні на локальній 7B — компенсація: privacy, $0, контроль, fine-tune під себе |
+| «Privacy абсолютна» | Inference — так; **training** — ephemeral RunPod (ADR-007), датасет тимчасово залишає машину |
+| «Claude Code з коробки» | Ціль, не поточний стан — Стовп B на старті (мости cursor/continue → рідний агент) |
+| QLoRA локально на RX 5700 XT | Ні — cloud-burst або окрема NVIDIA |
 
 ### 1.4 North Star (12 місяців)
 
-> Після ребуту Windows через ~2 хвилини пишу в Telegram — JARVIS памʼятає контекст,
-> може скріншот/PS/макрос, стрімить відповідь; раз на місяць підтягує нову LoRA з Twin.
+> Розробник додає `base_url=https://my-jarvis/v1` і ганяє агентів на своєму залізі за $0/токен.
+> З телефона пише: «полагодь падіння тестів у репо X» — JARVIS-агент читає репо, править диффом,
+> ганяє pytest, шле PR, звітує. Усе на власній машині; раз на місяць підтягує свіжу LoRA з Twin.
 
 ---
 
-## 2. Baseline (стан на 2026-06-04)
+## 2. Архітектура продукту (фундамент + 3 стовпи)
 
-### 2.1 Готово
-
-- [x] Microservices: gateway, tools, memory, whisper, tts, postgres, redis
-- [x] Ollama на хості (Vulkan + keep_alive), фази 1–7 + polish (mypy, CI)
-- [x] Агент-луп, hybrid routing, streaming (`editMessageText`)
-- [x] RAG (pgvector), STT, TTS (piper), embedding cache
-- [x] Notes, reminders (Redis ZSET + gateway poller)
-- [x] Multi-user whitelist + `/allow` + per-user isolation
-- [x] Telegram Mini App (`/app`), initData HMAC
-- [x] Twin: ModelRegistry, SessionLogger, Sync API (`twin/`)
-- [x] Computer Use **C0–C2** (host-agent, T0/T1, confirm + audit)
-- [x] Post-audit: streaming parity, `agent_turn`, origin confirm, `/start canvas`
-
-### 2.2 WIP (незакомічено / в роботі)
-
-- [x] `health_watch` — проактивні алерти в Telegram (+ тести)
-- [x] `remote` — `/file`, `/macro`, `/tasks`, `/see` (+ тести)
-- [x] `jobs` + `macros` — cron-макроси без LLM (+ тести)
-- [ ] `jarvis_core` facade + pipeline
-- [ ] SD Forge / `image_gen` (локальна генерація)
-- [x] `browser.py` — Playwright C3 (+ тести)
-
-### 2.3 Свідомо не робимо
-
-Див. [`ROADMAP.md` § «Що НЕ робити`](../ROADMAP.md): зміна embed dim без міграції,
-`ENABLE_CODE_EXEC` без sandbox, Ollama-in-Docker на AMD Windows, n8n як оркестратор,
-передчасний Celery/FastStream.
-
----
-
-## 3. Фази продукту
-
-```mermaid
-flowchart TB
-  P0[Фаза 0: Daily driver ops]
-  P1[Фаза 1: UX + Mini App]
-  P2[Фаза 2: Computer Use C3-C6]
-  P3[Фаза 3: Twin + LoRA]
-  P4[Фаза 4: Edge USB]
-  P5[Фаза 5: Quality + observability]
-  P6[Фаза 6: Commercial packaging]
-  P7[Фаза 7: Advanced AGI]
-  P0 --> P1 --> P2
-  P1 --> P3
-  P3 --> P4
-  P2 --> P5
-  P3 --> P5
-  P5 --> P6
-  P6 --> P7
+```
+        🅰 API Platform        🅱 Coding Agent         🅲 Clients (web·TG·mobile)
+        (OpenAI-style)         (Claude Code-style)     (один бекенд, багато каналів)
+              └───────────────────────┼───────────────────────┘
+                                       ▼
+              ФУНДАМЕНТ (готовий ~90%): мікросервіси · Ollama/Vulkan · агент-луп ·
+              RAG · STT/TTS · Computer Use C0–C6 · Platform P0–P12 · Twin/LoRA · Edge
 ```
 
----
-
-## Фаза 0 — «Можна жити щодня» (1–2 тижні)
-
-**Мета:** стабільність після ребуту, безпека, один сценарій «все підняти».
-
-### 0.1 Операційний контур
-
-| # | Задача | DoD | Статус |
-|---|--------|-----|--------|
-| 0.1.1 | **M4** — ротація `TELEGRAM_BOT_TOKEN` (інцидент у логах) | Новий токен у `.env`, старий revoked | [x] |
-| 0.1.2 | Єдиний autostart: `scripts/autostart.ps1` + `verify_stack.ps1` | Ребут → smoke < 5 хв | [x] |
-| 0.1.3 | Пройти [`ENV_CHECKLIST.md`](ENV_CHECKLIST.md); `WEBAPP_DEV_OPEN=false` у проді | Немає витоку токенів у логах | [x] `verify_stack -StrictProd` |
-| 0.1.4 | Бекапи: `data/`, postgres volume, `data/twin/`, `computer.jsonl` | Runbook відновлення | [x] [`BACKUP.md`](BACKUP.md) |
-
-### 0.2 Закрити WIP
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 0.2.1 | Стабілізувати `health_watch` + тести | [x] |
-| 0.2.2 | Стабілізувати `remote` + `macros` + `jobs` | [x] |
-| 0.2.3 | `agent_turn` — єдиний turn-path, паритет stream/deliver | [x] |
-| 0.2.4 | CI green на нових модулях | [x] pytest gateway/tools (нові тести) |
-
-### 0.3 Smoke як продукт
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 0.3.1 | Розширити [`SMOKE_TEST.md`](SMOKE_TEST.md) до щоденного чеклиста (15+ пунктів) | [x] |
-| 0.3.2 | 2 тижні щоденного використання без ручного Ollama/Docker | [ ] |
-
-**Вихід фази 0:** daily driver без сюрпризів після ребуту.
+Стовпи **не починаються з нуля** — вони добудовуються над зрілим фундаментом (фази 0–7 нижче).
 
 ---
 
-## Фаза 1 — UX «як комерційний асистент» (2–4 тижні)
+## 3. Фундамент — фази 0–7 (статус)
 
-**Мета:** відчуття «як ChatGPT», довіра, зрозумілий онбординг.
+Деталі задач — у трек-roadmap-ах; тут лише фазовий підсумок.
 
-### 1.1 Діалог і контекст
+| Фаза | Зміст | Статус | Детальний трек |
+|------|-------|--------|----------------|
+| **0** | Daily-driver ops: autostart, security, backup, smoke | ✅ done | [`ROADMAP.md`](../ROADMAP.md) |
+| **1** | UX: профіль, summarization, voice E2E, streaming, Mini App | ✅ done | [`PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) |
+| **2** | Computer Use C0–C6 (PS/CLI/browser/UIA/vision) | ✅ інфра / ⏳ автономність | [`AGENT_MODE_ROADMAP.md`](AGENT_MODE_ROADMAP.md) |
+| **3** | Twin + перша LoRA (registry, dataset, eval, RunPod) | 🟡 ~82% | [`PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) §Фаза 3 |
+| **4** | Edge USB (KoboldCPP, SQLite-vec, sync) | 🟡 ~70% | [`PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) §Фаза 4 |
+| **5** | Якість + observability (contract/golden tests, метрики, Alembic) | ✅ ~90% | [`PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) §Фаза 5 |
+| **6** | Web-консоль `/platform` P0–P12 (13 можливостей) | ✅ 100% | [`PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) §Фаза 6 |
+| **7** | Advanced: Orchestrator, Self-improve, MoE LoRA | 🟡 ~40% | [`PLATFORM_ROADMAP.md`](PLATFORM_ROADMAP.md) §Фаза 7 |
 
-| # | Задача | Статус |
-|---|--------|--------|
-| 1.1.1 | Персональний профіль у промпті / memory (стиль, мова, табу) | [x] `data/profiles/{id}.json` |
-| 1.1.2 | Summarization довгих тредів перед RAG (DESIGN §4.8) | [x] thread context (12 msgs) |
-| 1.1.3 | Стабільний шлях файлів/фото → `parse_file` / `ocr_image` у hybrid | [x] `_FILE_RE` → agent |
-| 1.1.4 | Голос E2E: STT → agent → TTS за замовч.; toggle у Mini App | [x] runtime flag + checkbox |
-
-### 1.2 Mini App — центр керування
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 1.2.1 | Статус: Ollama, моделі, host-agent, Docker, останні помилки | [x] vision + image_gen cards |
-| 1.2.2 | Перемикачі: `AGENT_MODE`, streaming, voice reply | [x] `/app/flags` |
-| 1.2.3 | Read-only: останні N сесій з postgres | [x] `/app/sessions` |
-| 1.2.4 | Named tunnel **лише для `/app`** (опц.); бот лишається на polling | [ ] |
-
-### 1.3 Інструменти (без Computer)
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 1.3.1 | Покращений `web_fetch` (таймаути, readability) | [x] article/main, content-type |
-| 1.3.2 | Експорт нагадувань / ICS (опц.) | [x] `/reminders ics` |
-| 1.3.3 | `code_exec` — лишати вимкненим до sandbox | [x] default off |
-
-### 1.4 Мультимодальність (локально)
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 1.4.1 | SD Forge: `setup_sd_forge.ps1`, `start_sd_forge.ps1`, `IMAGE_GEN_URL` | [x] [`IMAGE_GEN.md`](IMAGE_GEN.md) |
-| 1.4.2 | Horde/pollinations — лише явний opt-in | [x] `.env.example` |
-| 1.4.3 | VRAM policy: image gen не вбиває agent model (черга / «зайнято») | [x] `image_gen_lock` |
-
-**Вихід фази 1:** ви + 1–2 друзі (E3) користуєтесь без README.
+**Фундамент дає стовпам:** агент-луп (`tools/app/agent.py`), `jarvis_core` (facade/pipeline/routing),
+OpenAI-сумісний `/v1` (зародок API), Platform-консоль (зародок web-app), host-agent (Computer Use),
+multi-user/whitelist (зародок auth), bg jobs / subagents / teams (паралелізм агента).
 
 ---
 
-## Фаза 2 — Computer Use «продуктовий» (4–8 тижнів)
+## 4. 🅰 Трек A — API-платформа розробника
 
-**База:** [`COMPUTER_USE.md`](COMPUTER_USE.md) — C0–C2 ✅.
+**Мета:** з «один глобальний ключ» → повноцінний developer platform як OpenAI/Anthropic.
+**Деталі:** [`docs/API_PLATFORM_ROADMAP.md`](API_PLATFORM_ROADMAP.md) · enabler: [`SAAS_DEEP_DIVE.md`](SAAS_DEEP_DIVE.md).
 
-### 2.1 C3 — Браузер (T2) — найвищий ROI
+| Фаза | Зміст | Старт-умова | Статус |
+|------|-------|-------------|--------|
+| AP-0 | `/v1` baseline: chat+models, bearer, SSE | — | ✅ done |
+| AP-1 | API-ключі: per-org keys, scopes, prefix-hash, revoke | PR#0 IDOR + tenant context | ⏳ |
+| AP-2 | `/v1` повнота: `embeddings`, `responses`, tool-use, `usage` | AP-1 | ⏳ |
+| AP-3 | Developer console: keys UI, usage charts, **playground**, logs | AP-1 + Platform | ⏳ |
+| AP-4 | Ліміти й метеринг: rate-limit/key, plan limits, usage_events | AP-2 | ⏳ |
+| AP-5 | SDK + docs: Python/JS клієнти, OpenAPI, quickstart | AP-2 | ⏳ |
+| AP-6 | Білінг (cloud-only): Stripe, plans, overage | SaaS PR#5 | ⏳ |
 
-| Крок | Задача | DoD | Статус |
-|------|--------|-----|--------|
-| C3.1 | Playwright у tools + `browser_*` у toolkit | Інструменти в agent loop | [x] |
-| C3.2 | ADR: Chrome profile (чистий vs logged-in) | [`docs/adr/C3-browser-profile.md`](adr/C3-browser-profile.md) | [x] |
-| C3.3 | Confirm для mutating browser actions | Inline ✅/❌ | [x] |
-| C3.4 | Smoke: URL → заголовок/текст у Telegram | E2E pass | [x] API smoke у `verify_stack` + [`smoke_c3_browser.ps1`](../scripts/smoke_c3_browser.ps1); [ ] live TG |
-
-### 2.2 C4 — UI Automation (T3)
-
-| Крок | Задача | Статус |
-|------|--------|--------|
-| C4.1 | host-agent: `/uia/*`, `/window/*` | [x] |
-| C4.2 | Toolkit: `uia_invoke`, `window_focus` | [x] |
-| C4.3 | UX для `computer_learned` (довірені cmdlet/exe) | [x] Mini App + `/computer/learned` |
-
-### 2.3 C5 — Admin (обмежено)
-
-| Крок | Задача | Статус |
-|------|--------|--------|
-| C5.1 | `COMPUTER_ALLOW_ADMIN` лише `ADMIN_USER_IDS` | [x] |
-| C5.2 | Подвійне підтвердження + audit tier `admin` | [x] `cmpA:Y` |
-| C5.3 | Runbook відкату шкоди | [x] [`COMPUTER_ROLLBACK.md`](COMPUTER_ROLLBACK.md) |
-
-### 2.4 C6 — Vision (T4) — опційно
-
-| Крок | Задача | Статус |
-|------|--------|--------|
-| C6.1 | On-demand vision model / unload 7B | [x] `OLLAMA_VISION_ON_DEMAND` + `ollama_vram.py` |
-| C6.2 | `screen_click` з координат — останній резерв | [x] host-agent `/screen/click` |
-
-### 2.5 Trust model
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 2.5.1 | Owner vs guest для computer (`computer_access.py`) | [x] |
-| 2.5.2 | Макроси без LLM — safe path для рутини | [x] `/macro run`, Mini App ⚡ |
-| 2.5.3 | Rate limit computer actions / годину | [x] `COMPUTER_RATE_LIMIT_PER_HOUR` |
-| 2.5.4 | Mini App: tail `computer.jsonl` | [x] audit у `/app/remote` |
-
-**Вихід фази 2:** ≥80% Windows-задач через PS/CLI/браузер без піксельного кліку.
+**Вихід треку A:** сторонній розробник реєструє ключ у консолі, бачить usage, ганяє свій застосунок
+проти `/v1` — без знання внутрішньої кухні.
 
 ---
 
-## Фаза 3 — PortableAI Twin: «свій мозок» (2–3 місяці)
+## 5. 🅱 Трек B — Агент кодування (Claude Code analog)
 
-**Gap:** [`GAP_ANALYSIS.md`](GAP_ANALYSIS.md) — поточний стек ≈ Twin HQ.
+**Мета:** з «мости cursor_task/continue_dev» → рідний repo-aware coding-агент.
+**Деталі:** [`docs/CODING_AGENT_ROADMAP.md`](CODING_AGENT_ROADMAP.md) · desktop: [`AGENT_MODE_ROADMAP.md`](AGENT_MODE_ROADMAP.md).
 
-### 3.1 Етап A — Twin-ізація
+| Фаза | Зміст | Старт-умова | Статус |
+|------|-------|-------------|--------|
+| CA-0 | Bridges baseline: `cursor_task`, `continue_dev`, computer PS/CLI | — | ✅ done |
+| CA-1 | Рідний file-edit: read/diff/apply, workspace-скоуп, git-aware | Computer Use FS | ⏳ |
+| CA-2 | Repo-context: дерево файлів, symbol-граф, scoped RAG по проєкту | P1 Projects | ⏳ |
+| CA-3 | Test/build loop: запусти→прочитай fail→виправ→повтори | CA-1 | ⏳ |
+| CA-4 | Plan→approve→execute для коду; multi-file рефактор | P3 Planning + CA-2 | ⏳ |
+| CA-5 | Self-review + субагенти (Coder/Reviewer/Tester pipeline) | P8/P9 Teams | ⏳ |
+| CA-6 | CLI (`jarvis code …`) + IDE-режим (LSP/extension) | CA-3 | ⏳ |
 
-| # | Компонент | Статус | Далі |
-|---|-----------|--------|------|
-| A.1 | ModelRegistry (`twin/app/registry.py`) | [x] є | [x] Mini App promote/rollback |
-| A.2 | SessionLogger JSONL | [x] є | [x] `session_ingest` → `data/logs/sessions/` + Twin |
-| A.3 | Sync API | [x] є | [x] [`dataset_export`](../tools/app/dataset_export.py) + `export_dataset.ps1` |
-| A.4 | n8n → legacy, не default | [x] | [x] [`N8N_LEGACY.md`](N8N_LEGACY.md) |
-
-### 3.2 Етап C — Дані (critical path)
-
-| Крок | Задача | Обсяг | Статус |
-|------|--------|-------|--------|
-| C.1 | SessionLogger → курація найкращих діалогів | ручний + фільтри | [x] фільтри в `dataset_export` |
-| C.2 | ShareGPT JSONL | 500 train / 50 holdout | [x] train/holdout split |
-| C.3 | Eval harness (format + LLM-as-judge) | локально | [x] скелет [`training/eval/run_eval.py`](../training/eval/run_eval.py) |
-| C.4 | Correctness gate перед promote LoRA | smoke + eval ↑ | [x] `gate.py` + `TWIN_MIN_EVAL_PROMOTE` |
-
-### 3.3 Етап D — Training (cloud-burst, ADR-007)
-
-| Крок | Задача | Статус |
-|------|--------|--------|
-| D.1 | `training/` — RunPod + Unsloth скрипт | [x] skeleton [`train_unsloth.py`](../training/runpod/train_unsloth.py) |
-| D.2 | LoRA → registry → Blue-Green symlink | [x] `link_active_lora.ps1` |
-| D.3 | Ollama Modelfile / adapter load | [x] `training/ollama/Modelfile.lora.template` |
-| D.4 | Scheduler: retrain кожні +200 якісних прикладів | [x] `train_scheduler` + `TRAIN_RETRAIN_MIN_CURATED` |
-
-### 3.4 Архітектура коду
-
-| # | Задача | Статус |
-|---|--------|--------|
-| 3.4.1 | `jarvis_core` — gateway/tools = транспорт, логіка в facade | [x] JARVIS facade + pipeline |
-| 3.4.2 | `OllamaAdapter` + майбутній `KoboldAdapter` | [x] Ollama; [ ] Kobold |
-| 3.4.3 | Cascade routing (classify → chat/agent/computer) | [x] `jarvis_core.routing.cascade` |
-
-**Вихід фази 3:** перша LoRA з eval, rollback за 1 команду.
+**Вихід треку B:** «полагодь тести в репо» з Telegram/CLI → агент сам редагує файли диффами,
+ганяє pytest у лупі, рев'ювить, звітує. Tier-ladder і audit — як у Computer Use.
 
 ---
 
-## Фаза 4 — Edge MVP (USB) (1–2 місяці після 3.2) · **активна (~70%)**
+## 6. 🅲 Трек C — Мультиплатформа (клієнти)
 
-DESIGN Phase 1–3.
+**Мета:** один бекенд, багато каналів; Telegram primary, web-штаб, mobile APK.
+**Деталі:** [`docs/CLIENTS_ROADMAP.md`](CLIENTS_ROADMAP.md).
 
-| # | Задача | Статус |
-|---|--------|--------|
-| 4.1 | KoboldCPP + Qwen 7B Q4 на USB layout | [x] layout + `run_win.bat` / `run_linux.sh` |
-| 4.2 | `KoboldAdapter` — той самий agent loop | [x] `jarvis_core` + `LLM_BACKEND=kobold` у tools |
-| 4.3 | SQLite-vec RAG на Edge | [x] `edge/rag.py` |
-| 4.4 | SyncAgent: OFFLINE / LAN / VPN | [x] `edge/edge_sync.py` + `GET /registry/lora/active/download` |
-| 4.5 | `run_win.bat` / `run_linux.sh` one-click | [x] |
+| Фаза | Зміст | Старт-умова | Статус |
+|------|-------|-------------|--------|
+| CL-0 | Baseline: Telegram bot + Mini App + `/platform` HTML | — | ✅ done |
+| CL-1 | Спільний client-API контракт (`/api/v1/*`), єдина auth (JWT+initData) | AP-1 | ⏳ |
+| CL-2 | Web-app v2: `/platform` HTML → SPA/PWA (offline shell, push) | CL-1 | ⏳ |
+| CL-3 | Mobile APK (Android): чат, voice, workbench, computer-confirm, push | CL-1 | ⏳ |
+| CL-4 | Telegram parity з web (єдиний feature-set, deep links) | CL-1 | 🟡 частково |
+| CL-5 | Desktop/tray (опційно) + крос-клієнт sync | CL-2/3 | ⏳ |
 
-**Вихід фази 4:** флешка офлайн → LAN → проксі на Twin; LoRA sync автоматичний.
-
-> Деталі та поточний % — `docs/PLATFORM_ROADMAP.md` → "Фаза 4 — Edge USB"
-> (тут і там — той самий перелік 4.1–4.5; тримайте чекбокси в синхроні).
-
----
-
-## Фаза 5 — Якість і observability (паралельно 3–4)
-
-| # | Напрям | Задачі | Статус |
-|---|--------|--------|--------|
-| 5.1 | Тести | Contract host-agent ↔ tools; golden traces | [x] contract + `tools/tests/golden/` |
-| 5.2 | Логи | structlog JSON; `request_id` gateway→tools | [x] `X-Request-ID` middleware |
-| 5.3 | Метрики | tok/s, tool latency, RAG hit → Mini App | [x] turn/tool/RAG у `/dashboard`; [ ] tok/s |
-| 5.4 | S1 черга | Redis queue + workers — лише при навантаженні | [ ] |
-| 5.5 | Threat model | computer, web_fetch, uploads | [x] [`THREAT_MODEL.md`](THREAT_MODEL.md) |
-| 5.6 | Міграції БД | Alembic; версіонування embed dim | [ ] |
+**Вихід треку C:** з телефона (APK), браузера (PWA) чи Telegram — той самий агент, та сама пам'ять,
+той самий computer-confirm.
 
 ---
 
-## Фаза 6 — Комерційна упаковка
+## 7. Послідовність (як стовпи зчіпляються)
 
-| # | Артефакт | Статус |
-|---|----------|--------|
-| 6.1 | `Install-JARVIS.ps1` (Docker, Ollama, models, host-agent) | [x] skeleton [`scripts/Install-JARVIS.ps1`](../scripts/Install-JARVIS.ps1) |
-| 6.2 | Ліцензія + EULA (computer disclaimer) | [ ] |
-| 6.3 | Quick Start 10 хв + Troubleshooting AMD Vulkan | [ ] |
-| 6.4 | Edition matrix: Core / Pro (+computer) / Studio (+training) | [ ] |
-| 6.5 | Semver, CHANGELOG, оновлення compose | [ ] |
-| 6.6 | Positioning: self-hosted only (без обовʼязкового SaaS) | [ ] |
+```
+СПІЛЬНИЙ ENABLER (розблоковує A і C):
+  SaaS PR#0 (IDOR fix) → PR#1 jarvis_core/context + tenant headers → AP-1 keys → CL-1 client-API
 
----
+Паралельні треки після enabler:
+  A: AP-2 /v1 повнота → AP-3 console/playground → AP-4 limits → AP-5 SDK → AP-6 billing(cloud)
+  B: CA-1 file-edit → CA-2 repo-context → CA-3 test-loop → CA-4 plan/refactor → CA-5 review → CA-6 CLI/IDE
+  C: CL-2 web SPA/PWA → CL-3 mobile APK → CL-4 TG parity → CL-5 desktop
 
-## Фаза 7 — Advanced (6+ місяців, лише з use case)
+Фундамент паралельно: дотиснути Фазу 3 (перша LoRA) і Фазу 4 (Edge) за наявності датасету/USB.
+```
 
-| # | Фіча | Умова старту | Статус |
-|---|------|----------------|--------|
-| 7.1 | Multi-agent (Orchestrator + Critic) | Eval pipeline | [ ] |
-| 7.2 | Self-improving loop (авто-датасет) | Human review gate | [ ] |
-| 7.3 | Domain LoRA swap (MoE-стиль) | 2+ LoRA в registry | [ ] |
-| 7.4 | llama.cpp benchmark (ROADMAP E1) | Bottleneck підтверджений | [ ] |
-| 7.5 | WireGuard замість cloudflared | Потрібен віддалений Edge | [ ] |
+**Найближчий критичний шлях:** `SaaS PR#0/PR#1` (tenant-фундамент) — він спільний для A і C,
+і його варто зробити **до** будь-якого нового стовпа, бо потім дешевше.
 
 ---
 
-## 4. Пріоритетна черга (наступні кроки)
+## 8. Editions (цільова матриця)
 
-### Тиждень 1–2
+| Edition | Канал | Включено |
+|---------|-------|----------|
+| **Core** | self-hosted | Chat, RAG, STT/TTS, streaming, Mini App, `/platform` базовий, `/v1` (1 ключ) |
+| **Pro** | self-hosted | + Computer Use (standard), coding-агент CA-1..CA-3, image gen, Platform повний |
+| **Studio** | self-hosted | + Twin/LoRA, Edge USB, coding CA-4..CA-6, Orchestrator/Teams, eval dashboard |
+| **Cloud** | SaaS | Pro/Studio як сервіс: per-org keys, білінг, члени команди, hybrid connector |
 
-1. [x] M4 — rotate Telegram token  
-2. [x] `autostart.ps1` + `verify_stack.ps1` на ребуті  
-3. [ ] Стабілізувати health_watch, remote, macros, jobs  
-4. [ ] Smoke після кожної зміни `.env`
-
-### Тиждень 3–4
-
-5. [ ] Mini App: режими + health + computer log  
-6. [ ] SD Forge stable path  
-7. [ ] Перші 50 кураційних прикладів → ShareGPT
-
-### Місяць 2
-
-8. [ ] C3 Playwright E2E  
-9. [ ] Eval harness + holdout  
-10. [ ] RunPod — перший QLoRA experiment  
-
-### Місяць 3
-
-11. [ ] Promote/rollback LoRA в Ollama  
-12. [ ] Edge KoboldCPP (якщо потрібна USB)
+Edition gating технічно лягає на plan limits (SAAS §7) + feature-флаги. Self-hosted = `SAAS_MODE=false`.
 
 ---
 
-## 5. KPI (щомісячний огляд)
+## 9. KPI (щомісячний огляд)
 
-| KPI | Ціль |
-|-----|------|
-| Uptime після ребуту | 100% без ручних кроків |
-| P95 відповіді (chat, warm model) | < 8 с |
-| P95 agent + 1 tool | < 25 с |
-| Computer success (whitelist tasks) | > 90% |
-| Eval після LoRA | ↑ vs baseline, без smoke-регресії |
-| Security incidents | 0 неавторизованих computer/admin |
-
----
-
-## 6. Edition matrix (цільова)
-
-| Edition | Включено |
-|---------|----------|
-| **Core** | Chat, RAG, STT, streaming, Mini App, multi-user |
-| **Pro** | + Computer Use C0–C5, macros, health_watch, image gen local |
-| **Studio** | + Twin training sync, LoRA deploy, Edge USB, eval dashboard |
+| KPI | Ціль | Стовп |
+|-----|------|-------|
+| Uptime після ребуту | 100% без ручних кроків | Фундамент |
+| P95 chat (warm, GPU) | < 8 с | Фундамент |
+| P95 agent + 1 tool | < 25 с | Фундамент |
+| Computer task success (whitelist) | > 90% | B |
+| Coding task: «полагодь тест» E2E success | > 70% → 90% | B |
+| `/v1` сумісність (OpenAI SDK drop-in) | 100% chat/embeddings/models | A |
+| Час від signup до першого API-виклику | < 5 хв | A |
+| Крос-клієнт parity (фічі web vs mobile vs TG) | > 90% | C |
+| Eval після LoRA | ↑ vs baseline | Фундамент/3 |
+| Security incidents (auth/IDOR/computer) | 0 | усі |
 
 ---
 
-## 7. Історія оновлень документа
+## 10. Свідомо не робимо
 
-| Дата | Зміна |
-|------|-------|
-| 2026-06-04 | v1.0 — початкова версія з baseline + фази 0–7 |
+Консолідовано в [`AGENTS.md` §6](../AGENTS.md). Ключове: зовнішній AI-API не дефолт; `ENABLE_CODE_EXEC`
+без sandbox — ні; SaaS не ламає self-hosted; agent-loop не переписуємо на LangGraph/CrewAI; n8n — legacy.
 
 ---
 
-*JARVIS Product Roadmap — оновлюйте чекбокси при закритті задач; ops-деталі — у [`ROADMAP.md`](../ROADMAP.md).*
+## 11. Історія оновлень
+
+| Дата | Версія | Зміна |
+|------|--------|-------|
+| 2026-06-04 | 1.0 | Початкова версія: self-hosted personal AGI, фази 0–7 |
+| 2026-06-15 | 2.0 | Перевизначення на повноцінний продукт: 3 стовпи (API/Coding/Clients) над фундаментом; синхронізація з [`AGENTS.md`](../AGENTS.md) і трек-roadmap-ами |
+
+---
+
+*Парасолька. Принципи — у [`AGENTS.md`](../AGENTS.md); деталі задач — у трек-roadmap-ах; ops — у [`ROADMAP.md`](../ROADMAP.md).*
