@@ -77,9 +77,9 @@ async def test_repo_tree_builds_tree(coding_enabled: None) -> None:
     stdout = "app/main.py\napp/config.py\nREADME.md\n"
     with _patch_request({"stdout": stdout, "stderr": "", "code": 0}) as req:
         out = await coding_tools.repo_tree(r"O:\JARVIS", max_depth=3, user_id=1)
-    # cwd=root, exe=rg --files
+    # cwd=root, exe=rg, перший арг --files (далі — deny-глоби)
     args = req.await_args.kwargs["json"]
-    assert args["exe"] == "rg" and args["args"] == ["--files"] and args["cwd"] == r"O:\JARVIS"
+    assert args["exe"] == "rg" and args["args"][0] == "--files" and args["cwd"] == r"O:\JARVIS"
     assert "файлів: 3" in out
     assert "app/" in out
     assert "main.py" in out
@@ -116,6 +116,26 @@ async def test_repo_grep_glob_filter(coding_enabled: None) -> None:
         await coding_tools.repo_grep("hit", glob="*.py", user_id=1)
     sent = req.await_args.kwargs["json"]["args"]
     assert "-g" in sent and "*.py" in sent
+
+
+async def test_repo_grep_appends_secret_deny_after_user_glob(coding_enabled: None) -> None:
+    # Захист від витоку: навіть якщо user передасть glob '.env', трейлінг '!.env'
+    # (deny) має йти ПІСЛЯ нього (у ripgrep останній glob виграє).
+    with _patch_request({"stdout": "", "code": 1}) as req:
+        await coding_tools.repo_grep("KEY", glob=".env", user_id=1)
+    sent = req.await_args.kwargs["json"]["args"]
+    assert "!.env" in sent
+    # user-glob '.env' має передувати deny '!.env'
+    assert sent.index(".env") < sent.index("!.env")
+    # і весь deny-блок — перед роздільником '--'
+    assert sent.index("!.env") < sent.index("--")
+
+
+async def test_repo_tree_excludes_secrets(coding_enabled: None) -> None:
+    with _patch_request({"stdout": "app/main.py", "code": 0}) as req:
+        await coding_tools.repo_tree(r"O:\repo", user_id=1)
+    sent = req.await_args.kwargs["json"]["args"]
+    assert sent[0] == "--files" and "!.env" in sent
 
 
 async def test_repo_grep_no_matches(coding_enabled: None) -> None:

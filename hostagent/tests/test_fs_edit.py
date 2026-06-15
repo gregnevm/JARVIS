@@ -71,6 +71,61 @@ def test_apply_diff_context_not_found() -> None:
     assert exc.value.status_code == 422
 
 
+def test_diff_line_anchored_no_midline_splice() -> None:
+    # Регресія: '-export = 80' НЕ має сплайснутись у середину 'reexport = 80'.
+    diff = "@@ -1 +1 @@\n-export = 80\n+export = 9090\n"
+    with pytest.raises(HTTPException) as exc:
+        _apply_unified_diff("  reexport = 80\n", diff)
+    assert exc.value.status_code == 422  # whole-line не знайдено → відмова, не корупція
+
+
+def test_diff_substring_line_not_falsely_ambiguous() -> None:
+    # Регресія: 'port = 80' як хвіст 'export = 80' не має давати 'not unique'.
+    content = "port = 80\nexport = 80\n"
+    out = _apply_unified_diff(content, "@@ -1 +1 @@\n-port = 80\n+port = 8080\n")
+    assert out == "port = 8080\nexport = 80\n"
+
+
+def test_diff_multi_hunk_repeated_context() -> None:
+    # Регресія: hunk#1 створює дубль контексту для hunk#2 — @@-офсет розрулює.
+    content = "alpha\nbeta\ngamma\n"
+    diff = "@@ -1 +1 @@\n-alpha\n+beta\n@@ -2 +2 @@\n-beta\n+BETA\n"
+    out = _apply_unified_diff(content, diff)
+    assert out == "beta\nBETA\ngamma\n"
+
+
+def test_diff_pure_insertion() -> None:
+    # Чиста вставка (before порожній) якориться на @@-позицію.
+    content = "a\nc\n"
+    out = _apply_unified_diff(content, "@@ -1,0 +2,1 @@\n+b\n")
+    assert out == "a\nb\nc\n"
+
+
+def test_diff_repeated_line_disambiguated_by_offset() -> None:
+    content = "x\nx\nx\n"
+    # Редагуємо саме другий 'x' (@@ -2).
+    out = _apply_unified_diff(content, "@@ -2 +2 @@\n-x\n+Y\n")
+    assert out == "x\nY\nx\n"
+
+
+def test_fs_edit_large_file_above_max_bytes(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # max_bytes малий (6 KB), edit_max_bytes великий → 10 KB файл редагується.
+    monkeypatch.setattr(settings, "max_bytes", 6000)
+    monkeypatch.setattr(settings, "edit_max_bytes", 2_000_000)
+    f = tmp_path / "big.py"
+    body = "# pad line\n" * 1000  # ~10 KB > max_bytes
+    f.write_text(body + "TARGET = 1\n", encoding="utf-8")
+    r = client.post(
+        "/fs/edit",
+        headers=H,
+        json={"path": str(f), "old_string": "TARGET = 1", "new_string": "TARGET = 2"},
+    )
+    assert r.status_code == 200, r.text
+    assert "TARGET = 2" in f.read_text(encoding="utf-8")
+
+
 # --- endpoint ----------------------------------------------------------------
 
 def test_fs_edit_requires_token(client: TestClient) -> None:

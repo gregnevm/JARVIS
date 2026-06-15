@@ -9,8 +9,9 @@ Read-only інтелект про репозиторій поверх host-agent
 **Безпека.** Усі три рідуть на тому самому trust-кордоні, що `run_cli`/`fs_read`:
 owner-gate (`COMPUTER_OWNER_USER_IDS`) + `ENABLE_COMPUTER_USE` — перевіряється у
 `toolkit.dispatch` (набір `_CODING_TOOLS`). Додатково за прапором `ENABLE_CODING_TOOLS`
-(нова фіча за прапором, дефолт false — AGENTS.md §5). `rg --files`/`rg` за дефолтом
-**пропускають hidden і .gitignore**, тож `.env`/`.git` не потрапляють у вивід.
+(нова фіча за прапором, дефолт false — AGENTS.md §5). `rg` за дефолтом пропускає
+hidden/.gitignore, АЛЕ `rg -g '.env'` РЕ-ВКЛЮЧАЄ ignored-файл — тож проти витоку
+секретів додаємо трейлінг deny-глоби (`_SECRET_DENY`), які user-glob не може перебити.
 
 `repo_tree`/`repo_grep` ходять через host-agent `/cli` (owner-trusted, як `run_cli`);
 `code_read` — через `/fs/read` (скоупиться `HOSTAGENT_FS_ROOTS`).
@@ -40,6 +41,26 @@ async def _cli(exe: str, args: list[str], cwd: str | None) -> dict[str, Any]:
     from ..computer import _request
 
     return await _request("POST", "/cli", json={"exe": exe, "args": args, "cwd": cwd})
+
+
+# Захист від витоку секретів: `rg -g '<name>'` РЕ-ВКЛЮЧАЄ навіть .gitignore-файл
+# (перевірено емпірично). Тож після будь-якого user-glob додаємо ці exclude-глоби —
+# у ripgrep останній glob виграє, отже user не може їх перебити.
+_SECRET_DENY: tuple[str, ...] = (
+    ".env", ".env.*", "*.env",
+    ".git", ".jarvis_backup",
+    "*.pem", "*.key", "*.pfx", "*.p12", "*.crt",
+    "id_rsa", "id_rsa.*", "id_ed25519", "id_ed25519.*",
+    "*.secret", "*secrets*",
+    "*.pyc",
+)
+
+
+def _deny_globs() -> list[str]:
+    out: list[str] = []
+    for pat in _SECRET_DENY:
+        out += ["-g", f"!{pat}"]
+    return out
 
 
 def _clip(text: str) -> str:
@@ -97,7 +118,7 @@ async def repo_tree(path: str, *, max_depth: int = 3, user_id: int = 0) -> str:
         return "path обов'язковий для repo_tree."
     depth = max(1, min(int(max_depth or 3), 8))
 
-    data = await _cli("rg", ["--files"], root)
+    data = await _cli("rg", ["--files", *_deny_globs()], root)
     if "error" in data:
         return str(data["error"])
     code = int(data.get("code", -1))
@@ -144,6 +165,7 @@ async def repo_grep(
     g = (glob or "").strip()
     if g:
         args += ["-g", g]
+    args += _deny_globs()  # після user-glob → виграє (немає витоку .env/ключів)
     args += ["--", pat]
 
     data = await _cli("rg", args, root)

@@ -9,6 +9,7 @@ import difflib
 import hmac
 import json
 import logging
+import re
 import subprocess
 import sys
 import tempfile
@@ -378,58 +379,82 @@ def _apply_search_replace(
     return content.replace(old, new, 1), 1
 
 
-def _parse_hunks(diff: str) -> list[tuple[str, str]]:
-    """Розбиває unified-diff на пари (before_block, after_block) у LF-просторі."""
+_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+def _parse_hunks(diff: str) -> list[dict[str, Any]]:
+    """Unified-diff → список hunks {old_start, before:[lines], after:[lines]} (LF-простір).
+
+    Рядки-блоки тримаємо СПИСКАМИ (не joined-рядком) — застосування заякорене на цілі
+    рядки + офсет із `@@`, тож немає підрядкового сплайсу в середину довшого рядка."""
     lines = diff.replace("\r\n", "\n").split("\n")
-    hunks: list[tuple[list[str], list[str]]] = []
-    before: list[str] = []
-    after: list[str] = []
-    in_hunk = False
+    if lines and lines[-1] == "":
+        lines.pop()  # хвостовий артефакт split на trailing newline
+    hunks: list[dict[str, Any]] = []
+    cur: dict[str, Any] | None = None
     for ln in lines:
-        if ln.startswith("@@"):
-            if in_hunk:
-                hunks.append((before, after))
-            before, after, in_hunk = [], [], True
+        m = _HUNK_RE.match(ln)
+        if m:
+            cur = {"old_start": int(m.group(1)), "before": [], "after": []}
+            hunks.append(cur)
             continue
-        if not in_hunk:
-            continue  # пропускаємо ---/+++ заголовки
+        if cur is None:
+            continue  # ---/+++ заголовки до першого hunk
         if ln.startswith("+"):
-            after.append(ln[1:])
+            cur["after"].append(ln[1:])
         elif ln.startswith("-"):
-            before.append(ln[1:])
+            cur["before"].append(ln[1:])
         elif ln.startswith(" "):
-            before.append(ln[1:])
-            after.append(ln[1:])
-        elif ln.startswith("\\"):
-            continue  # "\ No newline at end of file"
-        else:  # порожній рядок діфу = контекст-порожній
-            before.append(ln)
-            after.append(ln)
-    if in_hunk:
-        hunks.append((before, after))
-    return [("\n".join(b), "\n".join(a)) for b, a in hunks]
+            cur["before"].append(ln[1:])
+            cur["after"].append(ln[1:])
+        # "\ No newline…" та рядки без префікса ігноруємо (не контекст)
+    return hunks
+
+
+def _find_block(lines: list[str], block: list[str], near: int) -> int:
+    """Індекс унікального whole-line збігу `block`; перевага позиції `near` з @@-офсету.
+
+    -1 = не знайдено; -2 = неоднозначно (кілька збігів, жоден не на `near`)."""
+    n = len(block)
+    if n == 0:  # чиста вставка — якоримо на задекларовану позицію
+        return max(0, min(near, len(lines)))
+    hits = [i for i in range(0, len(lines) - n + 1) if lines[i : i + n] == block]
+    if not hits:
+        return -1
+    if near in hits:
+        return near
+    if len(hits) > 1:
+        return -2
+    return hits[0]
 
 
 def _apply_unified_diff(content: str, diff: str) -> str:
-    """Аплає кожен hunk як search-replace його контекстного блоку (стійко до зсуву рядків)."""
+    """Аплає unified-diff по рядках, заякорено на @@-офсети (стійко до зсуву й повторів)."""
     hunks = _parse_hunks(diff)
     if not hunks:
         raise HTTPException(status_code=400, detail="no hunks parsed from diff")
-    out = content
-    for i, (before, after) in enumerate(hunks):
+    file_lines = content.split("\n")
+    offset = 0
+    for i, h in enumerate(hunks):
+        before: list[str] = h["before"]
+        after: list[str] = h["after"]
         if before == after:
             continue
-        occ = out.count(before)
-        if occ == 0:
-            raise HTTPException(
-                status_code=422, detail=f"hunk #{i + 1} context not found in file"
-            )
-        if occ > 1:
-            raise HTTPException(
-                status_code=422, detail=f"hunk #{i + 1} context not unique ({occ})"
-            )
-        out = out.replace(before, after, 1)
-    return out
+        if not before:
+            # Чиста вставка: git `@@ -L,0 …` → вставити ПІСЛЯ old-рядка L (індекс L).
+            at = max(0, min(h["old_start"] + offset, len(file_lines)))
+            file_lines[at:at] = after
+            offset += len(after)
+            continue
+        near = h["old_start"] - 1 + offset
+        idx = _find_block(file_lines, before, near)
+        if idx == -1:
+            raise HTTPException(status_code=422, detail=f"hunk #{i + 1} context not found")
+        if idx == -2:
+            raise HTTPException(status_code=422, detail=f"hunk #{i + 1} context ambiguous")
+        file_lines[idx : idx + len(before)] = after
+        offset += len(after) - len(before)
+    return "\n".join(file_lines)
 
 
 def _backup_original(p: Path, original: str) -> str:
@@ -475,7 +500,7 @@ async def fs_edit(
 
     if new_lf == base:
         raise HTTPException(status_code=422, detail="edit produced no change")
-    if len(new_lf.encode("utf-8")) > settings.max_bytes:
+    if len(new_lf.encode("utf-8")) > settings.edit_max_bytes:
         raise HTTPException(status_code=400, detail="result too large")
 
     preview = "".join(

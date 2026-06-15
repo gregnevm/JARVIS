@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     port: int = 8400
     exec_timeout: float = 30.0
     max_bytes: int = 6000
+    # Окремий, більший ліміт для code_edit (CA-1.x): 6 KB замало навіть для одного
+    # модуля. Читання/запис правки використовують цей ліміт, не max_bytes.
+    edit_max_bytes: int = 2 * 1024 * 1024
     max_download_bytes: int = 48 * 1024 * 1024
     # Comma-separated absolute paths; FS API only allows paths under these roots.
     fs_roots: str = ""
