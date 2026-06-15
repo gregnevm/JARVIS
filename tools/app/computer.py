@@ -196,6 +196,40 @@ async def _fs_write_impl(path: str, content: str) -> str:
     return f"Записано: {data.get('path', path)} ✅"
 
 
+async def _code_edit_impl(
+    path: str,
+    *,
+    mode: str = "search_replace",
+    old_string: str = "",
+    new_string: str = "",
+    diff: str = "",
+    replace_all: bool = False,
+) -> str:
+    if not settings.enable_computer_use:
+        return "Computer Use вимкнено (ENABLE_COMPUTER_USE=false)."
+    payload = {
+        "path": path,
+        "mode": mode,
+        "old_string": old_string,
+        "new_string": new_string,
+        "diff": diff,
+        "replace_all": replace_all,
+    }
+    data = await _request("POST", "/fs/edit", json=payload)
+    if "error" in data:
+        return str(data["error"])
+    occ = data.get("occurrences", 1)
+    backup = data.get("backup", "")
+    preview = str(data.get("diff", "")).strip()
+    head = f"Правку застосовано: {data.get('path', path)} (×{occ}) ✅"
+    parts = [head]
+    if preview:
+        parts.append(f"```diff\n{preview}\n```")
+    if backup:
+        parts.append(f"backup: {backup}")
+    return _truncate("\n".join(parts))
+
+
 async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = False) -> str:
     """Виконує computer-дію. trusted=True після ✅ у Telegram."""
     if tool == "run_powershell":
@@ -217,6 +251,15 @@ async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = F
         return await _fs_read_impl(str(args.get("path", "")))
     if tool == "fs_write":
         return await _fs_write_impl(str(args.get("path", "")), str(args.get("content", "")))
+    if tool == "code_edit":
+        return await _code_edit_impl(
+            str(args.get("path", "")),
+            mode=str(args.get("mode", "search_replace")),
+            old_string=str(args.get("old_string", "")),
+            new_string=str(args.get("new_string", "")),
+            diff=str(args.get("diff", "")),
+            replace_all=bool(args.get("replace_all", False)),
+        )
     if tool == "capture_screenshot":
         return await _capture_screenshot_impl()
     if tool == "clipboard_write":
@@ -335,6 +378,39 @@ async def fs_read(path: str, *, user_id: int = 0) -> str:
 async def fs_write(path: str, content: str, *, user_id: int = 0) -> str:
     args = {"path": path, "content": content}
     return await wrap_execute(user_id, "fs_write", args, lambda: _fs_write_impl(path, content))
+
+
+async def code_edit(
+    path: str,
+    *,
+    mode: str = "search_replace",
+    old_string: str = "",
+    new_string: str = "",
+    diff: str = "",
+    replace_all: bool = False,
+    user_id: int = 0,
+) -> str:
+    args = {
+        "path": path,
+        "mode": mode,
+        "old_string": old_string,
+        "new_string": new_string,
+        "diff": diff,
+        "replace_all": replace_all,
+    }
+    return await wrap_execute(
+        user_id,
+        "code_edit",
+        args,
+        lambda: _code_edit_impl(
+            path,
+            mode=mode,
+            old_string=old_string,
+            new_string=new_string,
+            diff=diff,
+            replace_all=replace_all,
+        ),
+    )
 
 
 async def _request_raw(method: str, path: str, **kwargs: Any) -> tuple[int, bytes, str]:

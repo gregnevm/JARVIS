@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import base64
+import difflib
 import hmac
 import json
 import logging
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -59,6 +61,17 @@ class FsWriteRequest(BaseModel):
 class FsWriteBytesRequest(BaseModel):
     path: str
     data_b64: str
+
+
+class FsEditRequest(BaseModel):
+    """Атомарна правка файлу: search-replace АБО unified-diff (CODING_AGENT CA-1.1)."""
+
+    path: str
+    mode: str = "search_replace"  # "search_replace" | "diff"
+    old_string: str = ""
+    new_string: str = ""
+    replace_all: bool = False
+    diff: str = ""
 
 
 class ClipboardWriteRequest(BaseModel):
@@ -341,6 +354,153 @@ async def fs_write(
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"path": str(p), "status": "ok"}
+
+
+def _apply_search_replace(
+    content: str, old: str, new: str, *, replace_all: bool
+) -> tuple[str, int]:
+    """Search-replace у LF-просторі; вимагає унікального збігу, якщо не replace_all.
+
+    Повертає (новий_вміст, кількість_замін). 4xx при відсутності/неоднозначності.
+    """
+    if not old:
+        raise HTTPException(status_code=400, detail="old_string required for search_replace")
+    count = content.count(old)
+    if count == 0:
+        raise HTTPException(status_code=422, detail="old_string not found")
+    if count > 1 and not replace_all:
+        raise HTTPException(
+            status_code=422,
+            detail=f"old_string not unique ({count} matches); add context or set replace_all",
+        )
+    if replace_all:
+        return content.replace(old, new), count
+    return content.replace(old, new, 1), 1
+
+
+def _parse_hunks(diff: str) -> list[tuple[str, str]]:
+    """Розбиває unified-diff на пари (before_block, after_block) у LF-просторі."""
+    lines = diff.replace("\r\n", "\n").split("\n")
+    hunks: list[tuple[list[str], list[str]]] = []
+    before: list[str] = []
+    after: list[str] = []
+    in_hunk = False
+    for ln in lines:
+        if ln.startswith("@@"):
+            if in_hunk:
+                hunks.append((before, after))
+            before, after, in_hunk = [], [], True
+            continue
+        if not in_hunk:
+            continue  # пропускаємо ---/+++ заголовки
+        if ln.startswith("+"):
+            after.append(ln[1:])
+        elif ln.startswith("-"):
+            before.append(ln[1:])
+        elif ln.startswith(" "):
+            before.append(ln[1:])
+            after.append(ln[1:])
+        elif ln.startswith("\\"):
+            continue  # "\ No newline at end of file"
+        else:  # порожній рядок діфу = контекст-порожній
+            before.append(ln)
+            after.append(ln)
+    if in_hunk:
+        hunks.append((before, after))
+    return [("\n".join(b), "\n".join(a)) for b, a in hunks]
+
+
+def _apply_unified_diff(content: str, diff: str) -> str:
+    """Аплає кожен hunk як search-replace його контекстного блоку (стійко до зсуву рядків)."""
+    hunks = _parse_hunks(diff)
+    if not hunks:
+        raise HTTPException(status_code=400, detail="no hunks parsed from diff")
+    out = content
+    for i, (before, after) in enumerate(hunks):
+        if before == after:
+            continue
+        occ = out.count(before)
+        if occ == 0:
+            raise HTTPException(
+                status_code=422, detail=f"hunk #{i + 1} context not found in file"
+            )
+        if occ > 1:
+            raise HTTPException(
+                status_code=422, detail=f"hunk #{i + 1} context not unique ({occ})"
+            )
+        out = out.replace(before, after, 1)
+    return out
+
+
+def _backup_original(p: Path, original: str) -> str:
+    """Зберігає оригінал у <parent>/.jarvis_backup/<name>.<ts>.bak (git-safety CA-1.3)."""
+    stamp = f"{time.strftime('%Y%m%d_%H%M%S')}_{time.time_ns() % 100000:05d}"
+    backup_dir = p.parent / ".jarvis_backup"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    dest = backup_dir / f"{p.name}.{stamp}.bak"
+    dest.write_text(original, encoding="utf-8")
+    return str(dest)
+
+
+@app.post("/fs/edit")
+async def fs_edit(
+    req: FsEditRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, Any]:
+    """Атомарна правка коду: search-replace / unified-diff + .jarvis_backup перед записом."""
+    p = _resolve_path(req.path)
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="not a file")
+    try:
+        original = p.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # CRLF → працюємо у LF-просторі, відновлюємо стиль на запис.
+    crlf = "\r\n" in original
+    base = original.replace("\r\n", "\n")
+
+    mode = (req.mode or "search_replace").strip().lower()
+    if mode == "diff":
+        if not req.diff.strip():
+            raise HTTPException(status_code=400, detail="diff required for mode=diff")
+        new_lf = _apply_unified_diff(base, req.diff)
+        occurrences = 1
+    elif mode == "search_replace":
+        old = req.old_string.replace("\r\n", "\n")
+        new = req.new_string.replace("\r\n", "\n")
+        new_lf, occurrences = _apply_search_replace(base, old, new, replace_all=req.replace_all)
+    else:
+        raise HTTPException(status_code=400, detail=f"unknown mode {mode!r}")
+
+    if new_lf == base:
+        raise HTTPException(status_code=422, detail="edit produced no change")
+    if len(new_lf.encode("utf-8")) > settings.max_bytes:
+        raise HTTPException(status_code=400, detail="result too large")
+
+    preview = "".join(
+        difflib.unified_diff(
+            base.splitlines(keepends=True),
+            new_lf.splitlines(keepends=True),
+            fromfile=p.name,
+            tofile=p.name,
+            n=2,
+        )
+    )
+    new_content = new_lf.replace("\n", "\r\n") if crlf else new_lf
+    try:
+        backup = _backup_original(p, original)
+        p.write_text(new_content, encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "path": str(p),
+        "status": "ok",
+        "mode": mode,
+        "occurrences": occurrences,
+        "backup": backup,
+        "diff": preview[:4000],
+    }
 
 
 def _screen_click_ps(x: int, y: int) -> str:

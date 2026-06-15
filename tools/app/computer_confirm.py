@@ -41,6 +41,7 @@ _TIER = {
     "fs_read": "T0",
     "fs_write": "T0",
     "fs_write_bytes": "T0",
+    "code_edit": "T1",
     "capture_screenshot": "T0",
     "clipboard_read": "T0",
     "clipboard_write": "T0",
@@ -120,6 +121,8 @@ def is_mutating(tool: str, args: dict[str, Any]) -> bool:
         return True
     if tool == "fs_write" or tool == "fs_write_bytes":
         return True
+    if tool == "code_edit":
+        return True
     if tool == "clipboard_write":
         return True
     if tool == "power_action":
@@ -160,6 +163,15 @@ def describe_action(tool: str, args: dict[str, Any]) -> str:
         path = args.get("path", "")
         preview = str(args.get("content", ""))[:80]
         return f"Запис у файл {path}: {preview}…"
+    if tool == "code_edit":
+        path = args.get("path", "")
+        mode = str(args.get("mode", "search_replace"))
+        if mode == "diff":
+            return f"code_edit {path} [diff]:\n{str(args.get('diff', ''))[:300]}"
+        old = str(args.get("old_string", ""))[:120]
+        new = str(args.get("new_string", ""))[:120]
+        scope = " [усі збіги]" if args.get("replace_all") else ""
+        return f"code_edit {path}{scope}:\n- {old}\n+ {new}"
     if tool == "browser_click":
         return f"Browser click: {args.get('selector', '')}"
     if tool == "browser_fill":

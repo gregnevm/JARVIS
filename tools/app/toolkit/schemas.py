@@ -326,6 +326,26 @@ _CODE_READ_SCHEMA = _schema(
     ["path"],
 )
 
+_CODE_EDIT_SCHEMA = _schema(
+    "code_edit",
+    "Відредагувати файл коду диффом (БЕЗ повного перезапису). Показує diff і чекає "
+    "підтвердження. mode='search_replace': old_string→new_string (old_string має бути "
+    "унікальним, інакше додай контекст або replace_all). mode='diff': unified diff.",
+    {
+        "path": {**_STR, "description": "абсолютний шлях до файлу на хості"},
+        "mode": {
+            "type": "string",
+            "enum": ["search_replace", "diff"],
+            "description": "search_replace (default) | diff",
+        },
+        "old_string": {**_STR, "description": "точний фрагмент для заміни (search_replace)"},
+        "new_string": {**_STR, "description": "новий фрагмент (search_replace)"},
+        "diff": {**_STR, "description": "unified diff (mode=diff)"},
+        "replace_all": {"type": "boolean", "description": "замінити всі збіги (default false)"},
+    },
+    ["path"],
+)
+
 _CODING_SCHEMAS = [_REPO_TREE_SCHEMA, _REPO_GREP_SCHEMA, _CODE_READ_SCHEMA]
 
 _MCP_CALL_SCHEMA = _schema(
@@ -407,6 +427,7 @@ def agent_tool_schemas(*, computer: bool = False, allow_computer: bool = True) -
                 schemas.append(_CONTINUE_DEV_SCHEMA)
             if settings.enable_coding_tools:
                 schemas.extend(_CODING_SCHEMAS)
+                schemas.append(_CODE_EDIT_SCHEMA)
             schemas.extend(_COMPUTER_SCHEMAS)
             schemas.append(_CLIPBOARD_READ_SCHEMA)
             schemas.append(_CLIPBOARD_WRITE_SCHEMA)
@@ -450,6 +471,7 @@ COMPUTER_TOOL_NAMES = frozenset(
         "fs_list",
         "fs_read",
         "fs_write",
+        "code_edit",
         "capture_screenshot",
         "see_screen",
         "clipboard_read",

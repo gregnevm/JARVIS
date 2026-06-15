@@ -34,3 +34,5 @@ data/*.ogg
 data/game_mode.state.json
 data/gm_status.txt
 .env.bak*
+# code_edit git-safety backups (CA-1.3) — створюються host-agent поряд із файлом
+.jarvis_backup/

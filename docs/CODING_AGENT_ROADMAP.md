@@ -73,7 +73,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
 | Виконання команд/тестів | **7/10** | computer mode PS/CLI працює; немає coding-специфічного тест-лупа |
-| Редагування файлів | **3/10** | лише `fs_write` (повний файл); немає diff/apply, немає git-safety |
+| Редагування файлів | **7/10** | `code_edit` diff/apply (search_replace+unified diff) + git-safety `.jarvis_backup`; бракує лише транзакційного multi-file (CA-4.3) |
 | Repo-контекст | **4/10** | scoped RAG по project_id; немає дерева/symbol-графа |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
 | Self-review | **4/10** | P9 teams (Reviewer) є як bg job, не в coding-лупі |
@@ -85,8 +85,8 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 
 | # | Gap | Вплив |
 |---|-----|-------|
-| CB1 | Немає `code_edit` (diff/apply) — лише повний `fs_write` | Небезпечні правки, немає огляду diff |
-| CB2 | Немає git-safety (branch/stash/checkpoint перед мутацією) | Втрата коду при помилці агента |
+| ~~CB1~~ ✅ | ~~Немає `code_edit` (diff/apply)~~ → `code_edit` (search_replace+diff, confirm, diff-preview) | Закрито (CA-1.1/1.2) |
+| ~~CB2~~ ✅ | ~~Немає git-safety~~ → `.jarvis_backup/<name>.<ts>.bak` перед кожним записом | Закрито (CA-1.3) |
 | CB3 | Repo-контекст плоский (RAG), немає дерева/symbol-графа | Агент «не бачить» структуру проєкту |
 | CB4 | Тест-луп не первинна операція (через generic PS) | Немає структурованого fail→fix циклу |
 | CB5 | Planning не coding-специфічний (немає file-targets у кроках) | План не прив'язаний до файлів |
@@ -125,11 +125,11 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Пріоритет | Статус |
 |---|--------|-----|-----------|--------|
-| CA-1.1 | host-agent `POST /fs/edit` — apply unified-diff / search-replace block | Атомарний запис, повертає новий diff | P0 | [ ] |
-| CA-1.2 | Toolkit `code_edit` (схема: path, diff/old→new) + dispatch + confirm tier | Diff показується перед apply | P0 | [ ] |
-| CA-1.3 | Git-safety: auto-branch або stash перед першою мутацією в repo | `.jarvis_backup/` або `git stash` | P0 | [ ] |
+| CA-1.1 | host-agent `POST /fs/edit` — apply unified-diff / search-replace block | Атомарний запис, повертає новий diff | P0 | [x] `hostagent` `/fs/edit` (search_replace + diff, .jarvis_backup) |
+| CA-1.2 | Toolkit `code_edit` (схема: path, diff/old→new) + dispatch + confirm tier | Diff показується перед apply | P0 | [x] `computer.code_edit` (T1, mutating → confirm, diff у describe) |
+| CA-1.3 | Git-safety: auto-branch або stash перед першою мутацією в repo | `.jarvis_backup/` або `git stash` | P0 | [x] `.jarvis_backup/<name>.<ts>.bak` перед кожним записом |
 | CA-1.4 | `code_read` з line-ranges + контекст навколо матчу | Економія токенів vs повний файл | P1 | [x] `tools/app/tools/coding_tools.py` (`ENABLE_CODING_TOOLS`) |
-| CA-1.5 | Workspace-скоуп: правки лише в `HOSTAGENT_FS_ROOTS`/project root | Deny поза скоупом | P0 | [ ] |
+| CA-1.5 | Workspace-скоуп: правки лише в `HOSTAGENT_FS_ROOTS`/project root | Deny поза скоупом | P0 | [x] `/fs/edit` через `_resolve_path` (FS_ROOTS scoping) |
 | CA-1.6 | Golden trace: «додай docstring у функцію X» — diff apply + revert | `tools/tests/golden/` | P1 | [ ] |
 
 **Вихід CA-1:** «додай тест до `agent.py`» → агент показує diff → апрув → apply, з можливістю revert.
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-15 | 1.2 | CA-1.1/1.2/1.3/1.5 done — `code_edit` (search_replace+diff) через host-agent `/fs/edit`, confirm-tier T1, git-safety `.jarvis_backup/` |
 | 2026-06-15 | 1.1 | CA-1.4/CA-2.1/CA-2.2 done — `coding_tools.py` (repo_tree/repo_grep/code_read), read-only, `ENABLE_CODING_TOOLS` |
 | 2026-06-15 | 1.0 | Початковий roadmap Стовпа B (CA-0…CA-6) після аудиту фундаменту |
 

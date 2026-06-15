@@ -20,12 +20,14 @@ Hostagent читає `HOSTAGENT_FS_ROOTS` як `fs_roots` у `hostagent/.env` а
 
 | Змінна | Приклад | Навіщо |
 |--------|---------|--------|
-| `ENABLE_CODING_TOOLS` | `true` | `repo_tree`/`repo_grep`/`code_read` у computer mode (read-only repo-інтелект). Owner-gate + `ENABLE_COMPUTER_USE` |
+| `ENABLE_CODING_TOOLS` | `true` | read-only `repo_tree`/`repo_grep`/`code_read` + мутуючий `code_edit` у computer mode. Owner-gate + `ENABLE_COMPUTER_USE` |
 | `CODING_TREE_MAX_ENTRIES` | `300` | Стеля рядків дерева `repo_tree` |
 | `CODING_GREP_MAX_RESULTS` | `60` | Стеля результатів `repo_grep` (можна перебити аргументом, до 500) |
 
 Залежність на хості: `ripgrep` (`rg`). `repo_tree`/`repo_grep` за дефолтом пропускають
-`.git`/hidden/`.gitignore` (тож `.env` не потрапляє у вивід). Деталі: [`CODING_AGENT_ROADMAP.md`](CODING_AGENT_ROADMAP.md) CA-1.4/2.1/2.2.
+`.git`/hidden/`.gitignore` (тож `.env` не потрапляє у вивід). `code_edit` — мутуючий (T1):
+показує diff → confirm у Telegram (як `fs_write`), перед записом зберігає
+`.jarvis_backup/<name>.<ts>.bak`. Деталі: [`CODING_AGENT_ROADMAP.md`](CODING_AGENT_ROADMAP.md) CA-1.x/2.x.
 
 ## C3 Browser (Playwright)
 

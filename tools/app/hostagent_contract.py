@@ -24,6 +24,7 @@ TOOLS_HOSTAGENT_ROUTES: tuple[HostagentRoute, ...] = (
     HostagentRoute("GET", "/fs/download", query_params=True),
     HostagentRoute("POST", "/fs/write", json_body=True),
     HostagentRoute("POST", "/fs/write_bytes", json_body=True),
+    HostagentRoute("POST", "/fs/edit", json_body=True),
     HostagentRoute("POST", "/screen/capture"),
     HostagentRoute("POST", "/screen/click", json_body=True),
     HostagentRoute("POST", "/screen/type", json_body=True),

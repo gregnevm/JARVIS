@@ -137,6 +137,20 @@ async def _h_fs_write(args: dict[str, Any], uid: int) -> str:
     )
 
 
+async def _h_code_edit(args: dict[str, Any], uid: int) -> str:
+    from .. import computer
+
+    return await computer.code_edit(
+        str(args.get("path", "")),
+        mode=str(args.get("mode", "search_replace")),
+        old_string=str(args.get("old_string", "")),
+        new_string=str(args.get("new_string", "")),
+        diff=str(args.get("diff", "")),
+        replace_all=bool(args.get("replace_all", False)),
+        user_id=uid,
+    )
+
+
 async def _h_capture_screenshot(_args: dict[str, Any], uid: int) -> str:
     from .. import computer
 
@@ -419,6 +433,7 @@ _HANDLERS: dict[str, Handler] = {
     "fs_list": _h_fs_list,
     "fs_read": _h_fs_read,
     "fs_write": _h_fs_write,
+    "code_edit": _h_code_edit,
     "capture_screenshot": _h_capture_screenshot,
     "see_screen": _h_see_screen,
     "clipboard_read": _h_clipboard_read,

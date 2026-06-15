@@ -13,6 +13,7 @@ _TIER_BY_TOOL: dict[str, str] = {
     "fs_list": "T0",
     "fs_read": "T0",
     "fs_write": "T0",
+    "code_edit": "T1",
     "capture_screenshot": "T0",
     "see_screen": "T0",
     "clipboard_read": "T0",
@@ -96,6 +97,8 @@ def computer_tool_names(*, computer: bool = True) -> set[str]:
         names.add("cursor_task")
     if settings.enable_continue_dev:
         names.add("continue_dev")
+    if settings.enable_coding_tools:
+        names.add("code_edit")
     if allows_see_screen():
         names.add("see_screen")
     if allows_uia():
