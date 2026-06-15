@@ -115,3 +115,58 @@ async def test_check_tools_in_schema(coding_enabled: None) -> None:
 async def test_run_tests_denied_for_non_owner(coding_enabled: None) -> None:
     out = await toolkit.dispatch("run_tests", {"exe": "pytest"}, user_id=99)
     assert "власник" in out.lower()
+
+
+# --- no-progress detection (CA-3.4) ------------------------------------------
+
+def test_failure_signature_pass_is_none() -> None:
+    assert check_tools.failure_signature("pytest ✅ PASS — passed=12 (exit 0)") is None
+
+
+def test_failure_signature_non_check_is_none() -> None:
+    # помилка раннера / disabled-меседж — не fail, не рахуємо
+    assert check_tools.failure_signature("exe обов'язковий (напр. 'pytest').") is None
+    assert check_tools.failure_signature("ENABLE_CODING_TOOLS вимкнено") is None
+
+
+def test_failure_signature_pytest_uses_failed_names() -> None:
+    res = check_tools._summarize_pytest(_PYTEST_FAIL, "", 1)
+    sig = check_tools.failure_signature(res)
+    assert sig is not None and sig.startswith("fail:")
+    assert "test_a.py::test_one" in sig and "test_b.py::test_two" in sig
+
+
+def test_failure_signature_stable_across_timing() -> None:
+    a = check_tools._summarize_pytest(_PYTEST_FAIL, "", 1)
+    # той самий fail, інший таймінг у хвості → та сама сигнатура
+    b = check_tools._summarize_pytest(_PYTEST_FAIL.replace("1.23s", "9.99s"), "", 1)
+    assert check_tools.failure_signature(a) == check_tools.failure_signature(b)
+
+
+def test_failure_signature_lint_verdict() -> None:
+    res = check_tools._summarize_lint("mypy", "Found 3 errors in 2 files\n", "", 1)
+    assert check_tools.failure_signature(res) == "verdict:mypy ❌ 3 errors (exit 1)"
+
+
+def test_progress_guard_trips_on_repeat() -> None:
+    g = check_tools.ProgressGuard(2)
+    assert g.observe("fail:x") is False  # перший fail
+    assert g.observe("fail:x") is True   # той самий вдруге → застрягли
+
+
+def test_progress_guard_resets_on_change_and_pass() -> None:
+    g = check_tools.ProgressGuard(2)
+    assert g.observe("fail:x") is False
+    assert g.observe("fail:y") is False  # інший fail → прогрес, скидання
+    assert g.observe("fail:y") is True
+    g2 = check_tools.ProgressGuard(2)
+    assert g2.observe("fail:x") is False
+    assert g2.observe(None) is False     # green між fail → скидання
+    assert g2.observe("fail:x") is False
+
+
+def test_progress_guard_disabled() -> None:
+    g = check_tools.ProgressGuard(0)
+    assert g.enabled is False
+    for _ in range(5):
+        assert g.observe("fail:x") is False

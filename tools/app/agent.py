@@ -13,7 +13,10 @@ import re
 import time
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .tools.check_tools import ProgressGuard
 
 from .config import settings
 from .memory_client import MemoryClient
@@ -261,6 +264,33 @@ def _max_iters(*, computer: bool = False, override: int | None = None) -> int:
     return settings.max_agent_iters
 
 
+_STOP_NO_PROGRESS = (
+    "Тести/лінт двічі поспіль впали з тим самим результатом — прогресу немає. "
+    "Зупини fix-цикл і чесно звітуй користувачу: що саме падає, що ти вже пробував "
+    "і чому застряг. Без подальших інструментів."
+)
+_STOP_MAX_ITERS = "Дай фінальну відповідь користувачу без інструментів."
+
+
+def _stop_note(*, no_progress: bool) -> str:
+    return _STOP_NO_PROGRESS if no_progress else _STOP_MAX_ITERS
+
+
+def _progress_guard() -> "ProgressGuard":
+    from .tools.check_tools import ProgressGuard
+
+    return ProgressGuard(settings.coding_no_progress_repeats)
+
+
+def _observe_check(guard: "ProgressGuard", name: str, result: str) -> bool:
+    """True, якщо check-tool (run_tests/run_lint) дав той самий fail N разів поспіль."""
+    from .tools.check_tools import CHECK_TOOLS, failure_signature
+
+    if name not in CHECK_TOOLS:
+        return False
+    return guard.observe(failure_signature(result))
+
+
 def _assistant_msg(msg: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {"role": "assistant", "content": msg.get("content") or ""}
     if msg.get("tool_calls"):
@@ -494,6 +524,8 @@ class AgentRunner:
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
         limit = _max_iters(computer=computer, override=max_iters_override)
+        guard = _progress_guard()
+        stuck_at = 0
         for i in range(1, limit + 1):
             msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
             messages.append(_assistant_msg(msg))
@@ -537,13 +569,15 @@ class AgentRunner:
                     )
                 logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
                 messages.append({"role": "tool", "content": f"[{name}] {result}"})
+                if _observe_check(guard, name, result):
+                    stuck_at = i
+            if stuck_at:
+                break
 
-        messages.append(
-            {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
-        )
+        messages.append({"role": "system", "content": _stop_note(no_progress=bool(stuck_at))})
         async for delta in self._llm.chat_stream(settings.ollama_model_agent, messages):
             yield {"delta": delta}
-        yield {"iters": limit}
+        yield {"iters": stuck_at or limit}
 
     async def _chat(self, text: str, ctx: str, profile: str = "") -> str:
         msg = await self._llm.chat(
@@ -572,6 +606,8 @@ class AgentRunner:
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
         limit = _max_iters(computer=computer, override=max_iters_override)
+        guard = _progress_guard()
+        stuck_at = 0
         for i in range(1, limit + 1):
             msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
             messages.append(_assistant_msg(msg))
@@ -609,13 +645,15 @@ class AgentRunner:
                     )
                 logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
                 messages.append({"role": "tool", "content": f"[{name}] {result}"})
+                if _observe_check(guard, name, result):
+                    stuck_at = i
+            if stuck_at:
+                break
 
-        # Ітерації вичерпано — змусимо модель дати текстову відповідь без тулів.
-        messages.append(
-            {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
-        )
+        # Стоп: no-progress (CA-3.4) або вичерпані ітерації — змусимо текстову відповідь.
+        messages.append({"role": "system", "content": _stop_note(no_progress=bool(stuck_at))})
         final = await self._llm.chat(settings.ollama_model_agent, messages)
-        return _ensure_tool_media((final.get("content") or "").strip(), messages), limit
+        return _ensure_tool_media((final.get("content") or "").strip(), messages), (stuck_at or limit)
 
     async def plan(self, user_id: int, text: str) -> dict[str, Any]:
         """Structured plan JSON → Redis (status pending) + marker для Telegram."""

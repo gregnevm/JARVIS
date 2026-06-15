@@ -250,3 +250,65 @@ async def test_run_agent_handles_inline_tool_call(monkeypatch):
     out = await AgentRunner(ollama, FakeMemory()).run(1, "скільки буде 2+2")
     assert out["text"] == "Відповідь: 4"
     assert out["iters"] == 2  # inline-виклик оброблено як справжній
+
+
+# --- no-progress stop-condition у fix-лупі (CA-3.4) --------------------------
+
+class RecordingOllama(FakeOllama):
+    """FakeOllama, що зберігає messages кожного chat-виклику (для перевірки stop-note)."""
+
+    async def chat(self, model, messages, tools=None, num_predict=1024):
+        self.calls.append(
+            {"model": model, "tools": tools, "messages": [dict(m) for m in messages]}
+        )
+        return self._responses.pop(0)
+
+
+def _run_tests_call() -> dict[str, Any]:
+    return {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{"function": {"name": "run_tests", "arguments": {"exe": "pytest"}}}],
+    }
+
+
+async def test_agent_stops_on_no_progress(monkeypatch):
+    """run_tests двічі поспіль з тим самим fail → луп зупиняється, не крутиться до limit."""
+    monkeypatch.setattr(settings, "agent_mode", "agent")
+    monkeypatch.setattr(settings, "coding_no_progress_repeats", 2)
+    same_fail = "pytest ❌ FAIL — passed=0 failed=1 (exit 1)\nfailed:\n  test_x.py::test_a"
+
+    async def fake_dispatch(name, args, user_id, allow_computer=True):
+        return same_fail
+
+    monkeypatch.setattr(agent, "dispatch", fake_dispatch)
+    ollama = RecordingOllama(
+        [_run_tests_call(), _run_tests_call(), {"role": "assistant", "content": "Застряг: test_a падає."}]
+    )
+    out = await AgentRunner(ollama, FakeMemory()).run(1, "полагодь тести")
+    assert out["text"] == "Застряг: test_a падає."
+    assert out["iters"] == 2  # стоп після 2-го fail, не до max_agent_iters
+    # фінальний (форс) виклик отримав no-progress stop-note
+    final_msgs = ollama.calls[-1]["messages"]
+    assert any("прогресу немає" in str(m.get("content", "")) for m in final_msgs)
+
+
+async def test_agent_no_stop_when_progress(monkeypatch):
+    """Різні fail щоразу → прогрес є, no-progress не спрацьовує (крутиться як звичайно)."""
+    monkeypatch.setattr(settings, "agent_mode", "agent")
+    monkeypatch.setattr(settings, "coding_no_progress_repeats", 2)
+    results = iter([
+        "pytest ❌ FAIL\nfailed:\n  test_x.py::test_a",
+        "pytest ❌ FAIL\nfailed:\n  test_x.py::test_b",
+    ])
+
+    async def fake_dispatch(name, args, user_id, allow_computer=True):
+        return next(results)
+
+    monkeypatch.setattr(agent, "dispatch", fake_dispatch)
+    ollama = RecordingOllama(
+        [_run_tests_call(), _run_tests_call(), {"role": "assistant", "content": "Виправив."}]
+    )
+    out = await AgentRunner(ollama, FakeMemory()).run(1, "полагодь тести")
+    assert out["text"] == "Виправив."
+    assert out["iters"] == 3  # дійшло до природного фіналу, no-progress не зупинив

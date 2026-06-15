@@ -92,6 +92,64 @@ def _summarize_lint(tool: str, stdout: str, stderr: str, code: int) -> str:
     return f"{tool} {verdict} (exit {code})\n---\n{_tail(blob)}"
 
 
+# --- no-progress detection (CA-3.4) ------------------------------------------
+#
+# Перша-класна stop-condition для fix-циклу: коли run_tests/run_lint двічі поспіль
+# повертають той самий fail, прогресу немає → агент-луп зупиняється й чесно звітує
+# (а не крутиться до max_agent_iters). Сигнатура будується з детермінованих частин
+# структурованого виводу (failed-імена або verdict-рядок) без таймінгів/хвоста.
+
+CHECK_TOOLS = frozenset({"run_tests", "run_lint"})
+
+
+def failure_signature(result: str) -> str | None:
+    """Стабільна сигнатура fail-результату check-tool, або None якщо це не fail.
+
+    None означає «не рахувати» — green (✅ PASS), помилка раннера чи disabled-меседж;
+    у таких разах прогрес-лічильник скидається. Для pytest — відсортовані імена
+    впалих тестів; інакше — verdict-рядок (напр. `mypy ❌ 3 errors (exit 1)`).
+    """
+    r = (result or "").strip()
+    if not r or "✅ PASS" in r:
+        return None
+    if "❌" not in r and "FAIL" not in r:
+        return None
+    if "failed:" in r:
+        block = r.split("failed:", 1)[1].split("---", 1)[0]
+        names = sorted(ln.strip() for ln in block.splitlines() if ln.strip())
+        if names:
+            return "fail:" + "|".join(names)
+    return "verdict:" + r.splitlines()[0].strip()
+
+
+class ProgressGuard:
+    """Лічильник однакових поспіль fail-сигнатур (CA-3.4).
+
+    `observe(sig)` → True, коли та сама ненульова сигнатура повторилась `repeats`
+    разів поспіль (no-progress). None або зміна сигнатури = прогрес → скидання.
+    `repeats <= 1` вимикає детектор (ніколи не True).
+    """
+
+    def __init__(self, repeats: int) -> None:
+        self._repeats = int(repeats)
+        self._last: str | None = None
+        self._count = 0
+
+    @property
+    def enabled(self) -> bool:
+        return self._repeats >= 2
+
+    def observe(self, signature: str | None) -> bool:
+        if not self.enabled or signature is None:
+            self._last, self._count = None, 0
+            return False
+        if signature == self._last:
+            self._count += 1
+        else:
+            self._last, self._count = signature, 1
+        return self._count >= self._repeats
+
+
 def _detect(exe: str, args: list[str], hint: str) -> str:
     if hint and hint != "auto":
         return hint

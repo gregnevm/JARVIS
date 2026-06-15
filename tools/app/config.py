@@ -157,6 +157,9 @@ class Settings(BaseSettings):
     # Стелі для repo-інструментів (захист контексту/хоста).
     coding_tree_max_entries: int = 300
     coding_grep_max_results: int = 60
+    # CA-3.4 stop-condition: N однакових поспіль fail від run_tests/run_lint → no-progress,
+    # агент зупиняє fix-цикл і чесно звітує (замість крутитися до max_agent_iters). 0 = вимкнено.
+    coding_no_progress_repeats: int = 2
 
 
 settings = Settings()

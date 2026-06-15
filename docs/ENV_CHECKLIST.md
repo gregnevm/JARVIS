@@ -23,6 +23,7 @@ Hostagent читає `HOSTAGENT_FS_ROOTS` як `fs_roots` у `hostagent/.env` а
 | `ENABLE_CODING_TOOLS` | `true` | read-only `repo_tree`/`repo_grep`/`code_read`/`repo_symbols`, тест/лінт `run_tests`/`run_lint`, мутуючий `code_edit` (computer mode). Owner-gate + `ENABLE_COMPUTER_USE` |
 | `CODING_TREE_MAX_ENTRIES` | `300` | Стеля рядків дерева `repo_tree` |
 | `CODING_GREP_MAX_RESULTS` | `60` | Стеля результатів `repo_grep` (можна перебити аргументом, до 500) |
+| `CODING_NO_PROGRESS_REPEATS` | `2` | CA-3.4 stop-condition: N однакових поспіль fail від `run_tests`/`run_lint` → агент зупиняє fix-цикл і чесно звітує. `0` = вимкнено |
 
 Залежність на хості: `ripgrep` (`rg`). `repo_tree`/`repo_grep` за дефолтом пропускають
 `.git`/hidden/`.gitignore` (тож `.env` не потрапляє у вивід). `code_edit` — мутуючий (T1):

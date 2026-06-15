@@ -72,7 +72,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
-| Виконання команд/тестів | **8/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); fix-цикл через ReAct-луп; бракує виділеної fix-orchestration (CA-3.2) |
+| Виконання команд/тестів | **9/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); fix-цикл через ReAct-луп + no-progress stop-guard (CA-3.2/3.4); бракує лише live-fix eval (CA-3.5) |
 | Редагування файлів | **7/10** | `code_edit` diff/apply (search_replace+unified diff) + git-safety `.jarvis_backup`; бракує лише транзакційного multi-file (CA-4.3) |
 | Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
@@ -88,7 +88,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | ~~CB1~~ ✅ | ~~Немає `code_edit` (diff/apply)~~ → `code_edit` (search_replace+diff, confirm, diff-preview) | Закрито (CA-1.1/1.2) |
 | ~~CB2~~ ✅ | ~~Немає git-safety~~ → `.jarvis_backup/<name>.<ts>.bak` перед кожним записом | Закрито (CA-1.3) |
 | CB3↓ | Repo-контекст: дерево/grep/symbol-outline + scoped-RAG індекс project-файлів є; лишається крос-файловий symbol-граф (CA-4.5) | Структура файлу видима; крос-файлові залежності — ще ні |
-| CB4 | Тест-луп не первинна операція (через generic PS) | Немає структурованого fail→fix циклу |
+| ~~CB4~~ ✅ | ~~Тест-луп не первинна операція~~ → `run_tests`/`run_lint` структуровані + no-progress stop-guard | Закрито (CA-3.1/3.2/3.3/3.4); лишається live-fix eval (CA-3.5) |
 | CB5 | Planning не coding-специфічний (немає file-targets у кроках) | План не прив'язаний до файлів |
 | CB6 | Немає diff-viewer / repo-tree / test-panel у Platform | Огляд правок лише через текст |
 | CB7 | Немає `jarvis code` CLI та IDE-режиму | Не drop-in для розробника за клавіатурою |
@@ -159,9 +159,9 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
 | CA-3.1 | `run_tests` tool — обгортка (pytest/npm/…) з парсингом fail-summary | Структурований `{passed, failed[], output_tail}` | [x] `check_tools.run_tests` (runner-allowlist, pytest-парсер) |
-| CA-3.2 | Fix-loop у `AgentRunner`: fail → локалізація файлу → `code_edit` → re-run | Max N ітерацій (config) | [~] вмикається наявним ReAct-лупом (run_tests→code_edit→run_tests); виділеної orchestration-петлі ще нема |
+| CA-3.2 | Fix-loop у `AgentRunner`: fail → локалізація файлу → `code_edit` → re-run | Max N ітерацій (config) | [x] ReAct-луп (run_tests→code_edit→run_tests) + виділена stop-orchestration (`ProgressGuard`) у `_agent`/`_agent_events` |
 | CA-3.3 | Build/lint tool (mypy/ruff/tsc) з тим самим патерном | Структурований вивід | [x] `check_tools.run_lint` (mypy/ruff/generic парсер) |
-| CA-3.4 | Stop-conditions: green / max-iters / no-progress (однаковий fail двічі) | Graceful звіт | [~] max-iters є в агент-лупі; no-progress детектор — ще ні |
+| CA-3.4 | Stop-conditions: green / max-iters / no-progress (однаковий fail двічі) | Graceful звіт | [x] `failure_signature`+`ProgressGuard` (CHECK_TOOLS); 2× той самий fail → stop-note + чесний звіт; `CODING_NO_PROGRESS_REPEATS` |
 | CA-3.5 | Golden trace: навмисно зламаний тест → агент полагодив до green | `tools/tests/golden/` | [~] детермінований golden парсингу (`check_output.json`); live-fix eval — попереду |
 
 **Вихід CA-3:** «полагодь падіння в `tests/`» → агент ітерує до green або чесно звітує, що застряг.
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-15 | 1.6 | CA-3.2 + CA-3.4 done — no-progress stop-guard (`failure_signature`+`ProgressGuard`) у `_agent`/`_agent_events`; 2× той самий fail → graceful звіт; `CODING_NO_PROGRESS_REPEATS` |
 | 2026-06-15 | 1.5 | CA-3.1 `run_tests` + CA-3.3 `run_lint` (структуровані раннери, `check_tools.py`) + golden парсингу |
 | 2026-06-15 | 1.4 | CA-2.4 scoped-RAG індекс project-файлів (embed+reindex) + CA-2.5 token-бюджет (`budget.py`) |
 | 2026-06-15 | 1.3 | CA-2.3 `repo_symbols` (Python ast + regex-фолбек) + CA-1.6 golden trace (apply/revert) |
