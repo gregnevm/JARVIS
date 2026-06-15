@@ -28,3 +28,9 @@ vendor/sd-forge/
 # Логи / тимчасові
 *.log
 .DS_Store
+
+# Рантайм-артефакти: тест-аудіо TTS, game-mode стейт, бекапи .env
+data/*.ogg
+data/game_mode.state.json
+data/gm_status.txt
+.env.bak*
