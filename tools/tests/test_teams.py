@@ -46,3 +46,39 @@ async def test_create_team(monkeypatch: pytest.MonkeyPatch):
 
 async def test_role_prompts():
     assert "Researcher" in teams.role_system_prompt("researcher")
+
+
+# --- CA-5.2 coding pipeline (Coder→Reviewer→Tester) --------------------------
+
+async def test_create_coding_team_preserves_roles(monkeypatch: pytest.MonkeyPatch):
+    _inject(monkeypatch)
+    rec = await teams.create_team(1, "fix bug", roles=list(teams.CODING_ROLES))
+    assert rec["roles"] == ["coder", "reviewer", "tester"]
+
+
+def test_tester_role_prompt_mentions_run_tests():
+    p = teams.role_system_prompt("tester")
+    assert "Tester" in p and "run_tests" in p
+
+
+class _FakeAgent:
+    def __init__(self) -> None:
+        self.roles_seen: list[str] = []
+
+    async def run(self, user_id, prompt, *, mode="agent", max_iters_override=None):  # noqa: ANN001
+        # однозначний маркер ролі у промпті: "Твій внесок як {role}:"
+        for role in ("coder", "reviewer", "tester"):
+            if f"внесок як {role}" in prompt:
+                self.roles_seen.append(role)
+                break
+        return {"text": f"output-{len(self.roles_seen)}", "iters": 1}
+
+
+async def test_coding_pipeline_runs_roles_in_order(monkeypatch: pytest.MonkeyPatch):
+    _inject(monkeypatch)
+    rec = await teams.create_team(1, "fix bug", roles=list(teams.CODING_ROLES))
+    agent = _FakeAgent()
+    out = await teams.run_team_pipeline(agent, 1, rec["id"])
+    assert agent.roles_seen == ["coder", "reviewer", "tester"]
+    assert len(out["steps"]) == 3
+    assert [s["role"] for s in out["steps"]] == ["coder", "reviewer", "tester"]
