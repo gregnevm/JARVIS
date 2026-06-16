@@ -34,6 +34,7 @@ from .media import (
     extract_file_attachment,
     message_context,
 )
+from jarvis_core.routing import is_screenshot_request
 from .outbound import deliver
 from .ratelimit import RateLimiter
 from .services import ServicesClient
@@ -51,14 +52,6 @@ _INLINE_TEXT_EXT = frozenset(
     {".txt", ".md", ".csv", ".json", ".log", ".py", ".ini", ".yaml", ".yml", ".xml", ".html"}
 )
 _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
-_SCREENSHOT_RE = re.compile(
-    r"скріншот|screenshot|скрін\s*екран|зроби\s+скрін",
-    re.IGNORECASE,
-)
-
-
-def _is_screenshot_request(text: str) -> bool:
-    return bool(_SCREENSHOT_RE.search(text or ""))
 
 
 def _extract_message(update: dict[str, Any]) -> dict[str, Any] | None:
@@ -279,7 +272,7 @@ async def handle_update(
         ):
             return
 
-    if _is_screenshot_request(text):
+    if is_screenshot_request(text):
         from .auth import computer_denied_message
 
         denied = computer_denied_message(int(user_id))
