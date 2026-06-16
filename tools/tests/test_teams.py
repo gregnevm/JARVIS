@@ -46,3 +46,14 @@ async def test_create_team(monkeypatch: pytest.MonkeyPatch):
 
 async def test_role_prompts():
     assert "Researcher" in teams.role_system_prompt("researcher")
+
+
+async def test_create_coding_team_roles(monkeypatch: pytest.MonkeyPatch):
+    _inject(monkeypatch)
+    rec = await teams.create_team(1, "fix bug", roles=list(teams.CODING_ROLES))
+    assert rec["roles"] == ["coder", "reviewer", "tester"]
+
+
+def test_tester_role_prompt():
+    assert "Tester" in teams.role_system_prompt("tester")
+    assert teams.CODING_ROLES == ("coder", "reviewer", "tester")

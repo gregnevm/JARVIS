@@ -29,6 +29,36 @@ FALLBACK = "Не зміг сформувати відповідь. Спробу�
 
 PLAN_MARKER = "[[PLAN_CONFIRM:{id}]]"
 _PLAN_MAX_STEPS = 8
+
+# CA-3.2 fix-orchestration: вузький набір coding-інструментів для петлі «тест→правка→тест».
+_FIX_TOOLS = frozenset(
+    {
+        "code_read", "repo_grep", "repo_tree", "repo_symbols", "repo_refs",
+        "code_edit", "run_tests", "run_lint",
+    }
+)
+_FIX_INNER_STEPS = 4  # модельних кроків (read/grep/edit) у межах одного раунду
+
+
+def _fix_system() -> str:
+    return (
+        "Ти JARVIS — інженер, що лагодить падіння тестів. Працюй вузько: 1) прочитай "
+        "вивід тестів і локалізуй причину (code_read/repo_grep/repo_symbols); 2) внеси "
+        "мінімальну правку через code_edit (diff), не переписуй файл цілком; 3) НЕ вгадуй — "
+        "спирайся на текст помилки. Після твоєї правки систему тестів буде перезапущено "
+        "автоматично. Якщо причина неясна — спершу читай код, не редагуй наосліп. "
+        "Відповідай українською, стисло."
+    )
+
+
+def _fix_user_prompt(task: str, exe: str, args: list[str], path: str, verdict: str) -> str:
+    cmd = (exe + " " + " ".join(args)).strip()
+    where = f" у {path}" if path else ""
+    extra = f"\nКонтекст задачі: {task}" if task else ""
+    return (
+        f"Падають тести (команда: `{cmd}`{where}). Локалізуй і виправ диффом, "
+        f"мінімально.{extra}\n\nПоточний вивід:\n{verdict}"
+    )
 _TOOL_MEDIA_RE = re.compile(
     r"\[\[\s*(?:photo|image|document|file)\s*:\s*[^\]]+\]\]",
     re.IGNORECASE,
@@ -174,10 +204,12 @@ _TOOL_STATUS = {
     "fs_read": "📄 читаю файл…",
     "fs_write": "✍️ записую файл…",
     "code_edit": "🩹 редагую код (diff)…",
+    "code_edit_batch": "🩹 правлю кілька файлів (diff)…",
     "repo_tree": "🌳 дерево репо…",
     "repo_grep": "🔎 шукаю в коді…",
     "code_read": "📄 читаю рядки…",
     "repo_symbols": "🧭 символи файлу…",
+    "repo_refs": "🔗 шукаю посилання…",
     "run_tests": "🧪 ганяю тести…",
     "run_lint": "🔬 лінт/типи…",
     "capture_screenshot": "📸 знімаю екран…",
@@ -649,6 +681,111 @@ class AgentRunner:
         rec["marker"] = PLAN_MARKER.format(id=rec["id"])
         return rec
 
+    async def code_plan(self, user_id: int, text: str) -> dict[str, Any]:
+        """Code-specific план (CA-4.1): кроки з file-targets {file, action, rationale, risk}.
+
+        Один апрув на весь план (CA-4.2) — через звичайний approve-flow P3 (маркер).
+        """
+        from . import plans
+
+        prompt = (
+            "Склади план зміни коду під запит. Поверни ЛИШЕ JSON без пояснень:\n"
+            '{"summary":"короткий опис","steps":[{"file":"відносний/шлях.py",'
+            '"action":"що зробити у файлі","rationale":"чому","risk":"low|medium|high"}],'
+            '"risks":["загальні ризики"]}\n'
+            f"Максимум {_PLAN_MAX_STEPS} кроків, кожен прив'язаний до конкретного файлу. "
+            f"Запит: {text}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Ти планувальник змін коду JARVIS. Кожен крок прив'язаний до файлу. "
+                        "Відповідай лише валідним JSON."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = (msg.get("content") or "").strip()
+        parsed = extract_json_object(content)
+        if not parsed:
+            parsed = {
+                "summary": content[:500] or text[:200],
+                "steps": [{"file": "", "action": text[:200], "rationale": text, "risk": "medium"}],
+                "risks": [],
+            }
+        rec = await plans.create_plan(
+            user_id,
+            summary=str(parsed.get("summary") or text[:500]),
+            steps=parsed.get("steps") or [],
+            risks=parsed.get("risks") if isinstance(parsed.get("risks"), list) else [],
+            source_text=text,
+            status="pending",
+        )
+        rec["marker"] = PLAN_MARKER.format(id=rec["id"])
+        rec["kind"] = "code"
+        return rec
+
+    async def code_review(
+        self, user_id: int, *, diff: str = "", context: str = ""
+    ) -> dict[str, Any]:
+        """Self-review pass (CA-5.1): unified diff → структуровані зауваження.
+
+        Повертає {summary, verdict: approve|changes_requested, findings:[{severity,
+        file, line, comment}]}. Будівельний блок для «fix перед звітом» і P9 Reviewer.
+        """
+        if not (diff or "").strip():
+            return {"summary": "Порожній diff — нема що рев'ювити.", "verdict": "skip", "findings": []}
+        ctx = f"\nКонтекст: {context}" if context else ""
+        prompt = (
+            "Зроби код-рев'ю наведеного unified diff. Шукай: баги, регресії, edge-cases, "
+            "відсутні перевірки, безпеку, читабельність. Поверни ЛИШЕ JSON:\n"
+            '{"summary":"...","verdict":"approve|changes_requested",'
+            '"findings":[{"severity":"low|medium|high","file":"шлях","line":0,"comment":"..."}]}'
+            f"{ctx}\n\nDiff:\n{diff[:8000]}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": "Ти прискіпливий код-рев'юер JARVIS. Відповідай лише валідним JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = (msg.get("content") or "").strip()
+        parsed = extract_json_object(content) or {}
+        raw = parsed.get("findings")
+        findings: list[dict[str, Any]] = []
+        for f in (raw if isinstance(raw, list) else [])[:30]:
+            if not isinstance(f, dict):
+                continue
+            try:
+                line = int(f.get("line") or 0)
+            except (TypeError, ValueError):
+                line = 0
+            sev = str(f.get("severity") or "medium").lower()
+            findings.append(
+                {
+                    "severity": sev if sev in ("low", "medium", "high") else "medium",
+                    "file": str(f.get("file") or "")[:200],
+                    "line": line,
+                    "comment": str(f.get("comment") or "")[:500],
+                }
+            )
+        verdict = str(parsed.get("verdict") or "").lower()
+        if verdict not in ("approve", "changes_requested"):
+            verdict = "changes_requested" if findings else "approve"
+        return {
+            "summary": str(parsed.get("summary") or content[:300] or "—"),
+            "verdict": verdict,
+            "findings": findings,
+        }
+
     async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:
         """Покрокове виконання схваленого плану (sync MVP, max 8 steps)."""
         from . import plans
@@ -686,3 +823,85 @@ class AgentRunner:
         await plans.finish_plan(plan_id, result=result, status="done")
         final = await plans.get_plan(plan_id)
         return {"plan": final, "result": result}
+
+    async def _fix_round_edit(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], user_id: int
+    ) -> None:
+        """Один раунд «локалізуй+прав»: до _FIX_INNER_STEPS модельних кроків з тулами.
+
+        Перезапуск тестів — НЕ тут (його робить fix_tests як авторитетний гейт);
+        тут модель читає код і вносить правку через code_edit.
+        """
+        for _ in range(_FIX_INNER_STEPS):
+            msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
+            messages.append(_assistant_msg(msg))
+            content = msg.get("content") or ""
+            calls = msg.get("tool_calls") or _parse_inline_tool_calls(content)
+            if not calls:
+                return
+            for call in calls:
+                fn = call.get("function") or {}
+                name = str(fn.get("name", ""))
+                args = coerce_args(fn.get("arguments"))
+                result = await dispatch(name, args, user_id, allow_computer=True)
+                logger.info("fix.tool[%s] -> %.80s", name, result.replace("\n", " "))
+                messages.append({"role": "tool", "content": f"[{name}] {result}"})
+
+    async def fix_tests(
+        self,
+        user_id: int,
+        *,
+        exe: str,
+        args: list[str] | None = None,
+        path: str = "",
+        task: str = "",
+        max_rounds: int | None = None,
+    ) -> dict[str, Any]:
+        """Виділена fix-orchestration (CA-3.2): тест → локалізація → code_edit → re-test.
+
+        Стоп-умови: green / max-rounds (config `coding_fix_max_rounds`) / no-progress
+        (той самий набір впалих тестів двічі поспіль). code_edit лишається за confirm/
+        session-trust — петля нічого не обходить (S4).
+
+        Повертає {status, rounds, report}: status ∈ already_green|fixed|no_progress|stuck.
+        """
+        from .tools import check_tools, fix_loop
+
+        arglist = list(args or [])
+        rounds = max(1, max_rounds if max_rounds is not None else settings.coding_fix_max_rounds)
+
+        async def _run() -> str:
+            return await check_tools.run_tests(exe, args=arglist, path=path, user_id=user_id)
+
+        baseline = await _run()
+        if "✅ PASS" in baseline:
+            return {"status": "already_green", "rounds": 0, "report": baseline}
+
+        tools = [
+            s
+            for s in agent_tool_schemas(computer=True, allow_computer=True)
+            if s.get("function", {}).get("name") in _FIX_TOOLS
+        ]
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": _fix_system()},
+            {"role": "user", "content": _fix_user_prompt(task, exe, arglist, path, baseline)},
+        ]
+
+        prev_sig = fix_loop.summary_signature(baseline)
+        verdict = baseline
+        for rnd in range(1, rounds + 1):
+            await self._fix_round_edit(messages, tools, user_id)
+            verdict = await _run()
+            if "✅ PASS" in verdict:
+                return {"status": "fixed", "rounds": rnd, "report": verdict}
+            sig = fix_loop.summary_signature(verdict)
+            if sig == prev_sig:
+                return {"status": "no_progress", "rounds": rnd, "report": verdict}
+            prev_sig = sig
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Тести все ще падають — спробуй інший підхід:\n{verdict}",
+                }
+            )
+        return {"status": "stuck", "rounds": rounds, "report": verdict}

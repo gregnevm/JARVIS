@@ -62,6 +62,21 @@ class PlanUserRequest(BaseModel):
     user_id: int
 
 
+class CodeReviewRequest(BaseModel):
+    user_id: int
+    diff: str
+    context: str = ""
+
+
+class CodeFixRequest(BaseModel):
+    user_id: int
+    exe: str
+    args: list[str] | None = None
+    path: str = ""
+    task: str = ""
+    max_rounds: int | None = None
+
+
 class FilePathRequest(BaseModel):
     user_id: int
     path: str
@@ -149,6 +164,7 @@ class TeamSpawnBody(BaseModel):
     task: str
     budget_per_role: int = 3
     roles: list[str] | None = None
+    kind: str = ""  # "coding" → пресет Coder→Reviewer→Tester (CA-5.2)
     async_mode: bool = True
 
 

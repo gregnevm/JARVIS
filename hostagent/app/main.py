@@ -75,6 +75,13 @@ class FsEditRequest(BaseModel):
     diff: str = ""
 
 
+class FsEditBatchRequest(BaseModel):
+    """Транзакційна multi-file правка (CA-4.3) + dry-run (CA-4.4)."""
+
+    edits: list[FsEditRequest] = Field(default_factory=list)
+    dry_run: bool = False
+
+
 class ClipboardWriteRequest(BaseModel):
     text: str
 
@@ -379,6 +386,26 @@ def _apply_search_replace(
     return content.replace(old, new, 1), 1
 
 
+# Ідентифікатор — без regex-метасимволів (rename word-boundary безпечний).
+_RENAME_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _apply_rename_symbol(content: str, old: str, new: str) -> tuple[str, int]:
+    """Word-boundary заміна ідентифікатора (CA-4.5): `\\bOLD\\b`→NEW, усі збіги.
+
+    Безпечніше за search_replace для перейменувань: не псує довші ідентифікатори
+    (``Agent`` не зачепить ``AgentRunner``). Вимагає валідних ідентифікаторів."""
+    o, n = old.strip(), new.strip()
+    if not _RENAME_IDENT_RE.match(o) or not _RENAME_IDENT_RE.match(n):
+        raise HTTPException(
+            status_code=400, detail="rename_symbol requires identifier old/new strings"
+        )
+    new_content, count = re.subn(rf"\b{re.escape(o)}\b", n, content)
+    if count == 0:
+        raise HTTPException(status_code=422, detail=f"symbol {o!r} not found")
+    return new_content, count
+
+
 _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 
@@ -463,21 +490,24 @@ def _backup_original(p: Path, original: str) -> str:
     backup_dir = p.parent / ".jarvis_backup"
     backup_dir.mkdir(parents=True, exist_ok=True)
     dest = backup_dir / f"{p.name}.{stamp}.bak"
-    dest.write_text(original, encoding="utf-8")
+    # newline="" → бекап байт-у-байт (зберігає сирі \r\n оригіналу).
+    dest.write_text(original, encoding="utf-8", newline="")
     return str(dest)
 
 
-@app.post("/fs/edit")
-async def fs_edit(
-    req: FsEditRequest,
-    _: Annotated[None, Depends(_check_token)],
-) -> dict[str, Any]:
-    """Атомарна правка коду: search-replace / unified-diff + .jarvis_backup перед записом."""
+def _plan_edit(req: FsEditRequest) -> dict[str, Any]:
+    """Готує правку БЕЗ запису (спільна логіка fs_edit + fs_edit_batch).
+
+    Повертає {p, original, new_content, preview, mode, occurrences}; 4xx при
+    відсутності файлу / no-op / занадто великому результаті."""
     p = _resolve_path(req.path)
     if not p.is_file():
-        raise HTTPException(status_code=404, detail="not a file")
+        raise HTTPException(status_code=404, detail=f"not a file: {req.path}")
     try:
-        original = p.read_text(encoding="utf-8")
+        # newline="" вимикає universal-newlines: сирі \r\n зберігаються, тож
+        # детект стилю нижче коректний (read_text без цього перетворив би \r\n→\n).
+        with p.open("r", encoding="utf-8", newline="") as fh:
+            original = fh.read()
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -495,13 +525,15 @@ async def fs_edit(
         old = req.old_string.replace("\r\n", "\n")
         new = req.new_string.replace("\r\n", "\n")
         new_lf, occurrences = _apply_search_replace(base, old, new, replace_all=req.replace_all)
+    elif mode == "rename_symbol":
+        new_lf, occurrences = _apply_rename_symbol(base, req.old_string, req.new_string)
     else:
         raise HTTPException(status_code=400, detail=f"unknown mode {mode!r}")
 
     if new_lf == base:
-        raise HTTPException(status_code=422, detail="edit produced no change")
+        raise HTTPException(status_code=422, detail=f"edit produced no change: {req.path}")
     if len(new_lf.encode("utf-8")) > settings.edit_max_bytes:
-        raise HTTPException(status_code=400, detail="result too large")
+        raise HTTPException(status_code=400, detail=f"result too large: {req.path}")
 
     preview = "".join(
         difflib.unified_diff(
@@ -513,19 +545,106 @@ async def fs_edit(
         )
     )
     new_content = new_lf.replace("\n", "\r\n") if crlf else new_lf
+    return {
+        "p": p,
+        "original": original,
+        "new_content": new_content,
+        "preview": preview,
+        "mode": mode,
+        "occurrences": occurrences,
+    }
+
+
+def _write_planned(p: Path, original: str, new_content: str) -> str:
+    """Бекап оригіналу + запис нового вмісту (newline="" → байти як є). Повертає backup-шлях."""
+    backup = _backup_original(p, original)
+    p.write_text(new_content, encoding="utf-8", newline="")
+    return backup
+
+
+@app.post("/fs/edit")
+async def fs_edit(
+    req: FsEditRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, Any]:
+    """Атомарна правка коду: search-replace / unified-diff + .jarvis_backup перед записом."""
+    plan = _plan_edit(req)
+    p = plan["p"]
     try:
-        backup = _backup_original(p, original)
-        p.write_text(new_content, encoding="utf-8")
+        backup = _write_planned(p, plan["original"], plan["new_content"])
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {
         "path": str(p),
         "status": "ok",
-        "mode": mode,
-        "occurrences": occurrences,
+        "mode": plan["mode"],
+        "occurrences": plan["occurrences"],
         "backup": backup,
-        "diff": preview[:4000],
+        "diff": plan["preview"][:4000],
     }
+
+
+@app.post("/fs/edit_batch")
+async def fs_edit_batch(
+    req: FsEditBatchRequest,
+    _: Annotated[None, Depends(_check_token)],
+) -> dict[str, Any]:
+    """Транзакційна multi-file правка (CA-4.3) + dry-run (CA-4.4).
+
+    Усі правки спершу плануються (валідація без запису). dry_run → лише diff-и.
+    Інакше — запис усіх; при будь-якій помилці запису відкочуємо вже записані
+    файли з пам'яті (все-або-нічого)."""
+    if not req.edits:
+        raise HTTPException(status_code=400, detail="edits required")
+    if len(req.edits) > settings.edit_batch_max:
+        raise HTTPException(
+            status_code=400,
+            detail=f"too many edits ({len(req.edits)} > {settings.edit_batch_max})",
+        )
+
+    # 1) Планування всіх правок (будь-яка 4xx валить весь батч до першого запису).
+    plans = [_plan_edit(e) for e in req.edits]
+    seen: set[str] = set()
+    for pl in plans:
+        rp = str(pl["p"])
+        if rp in seen:
+            # дублікат шляху: другий план рахований зі стану ДО першого запису → відкинути.
+            raise HTTPException(status_code=422, detail=f"duplicate path in batch: {rp}")
+        seen.add(rp)
+
+    results = [
+        {
+            "path": str(pl["p"]),
+            "mode": pl["mode"],
+            "occurrences": pl["occurrences"],
+            "diff": pl["preview"][:4000],
+        }
+        for pl in plans
+    ]
+    if req.dry_run:
+        return {"status": "dry_run", "count": len(plans), "edits": results}
+
+    # 2) Транзакційний запис із відкатом на помилці.
+    written: list[dict[str, Any]] = []
+    try:
+        for pl in plans:
+            backup = _write_planned(pl["p"], pl["original"], pl["new_content"])
+            written.append({"p": pl["p"], "original": pl["original"], "backup": backup})
+    except OSError as exc:
+        for w in reversed(written):  # відкат у зворотному порядку
+            try:
+                w["p"].write_text(w["original"], encoding="utf-8", newline="")
+            except OSError:
+                pass
+        raise HTTPException(
+            status_code=500,
+            detail=f"batch write failed after {len(written)} file(s), rolled back: {exc}",
+        ) from exc
+
+    for r, w in zip(results, written):
+        r["backup"] = w["backup"]
+        r["status"] = "ok"
+    return {"status": "ok", "count": len(written), "edits": results}
 
 
 def _screen_click_ps(x: int, y: int) -> str:

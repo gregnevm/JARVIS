@@ -23,6 +23,9 @@ async def get_plan(plan_id: str, user_id: int | None = None) -> dict[str, Any] |
     return await _STORE.get(plan_id, owner_user_id=user_id)
 
 
+_CODE_FIELDS = ("file", "action", "rationale", "risk")
+
+
 def _normalize_steps(steps: list[Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for i, step in enumerate(steps[:_MAX_STEPS], start=1):
@@ -31,9 +34,19 @@ def _normalize_steps(steps: list[Any]) -> list[dict[str, Any]]:
             continue
         if not isinstance(step, dict):
             continue
-        title = str(step.get("title") or step.get("name") or f"Крок {i}")[:200]
-        detail = str(step.get("detail") or step.get("description") or title)[:2000]
-        out.append({"id": int(step.get("id") or i), "title": title, "detail": detail, "status": "pending"})
+        title = str(step.get("title") or step.get("name") or step.get("action") or f"Крок {i}")[:200]
+        detail = str(step.get("detail") or step.get("description") or step.get("rationale") or title)[:2000]
+        rec: dict[str, Any] = {
+            "id": int(step.get("id") or i),
+            "title": title,
+            "detail": detail,
+            "status": "pending",
+        }
+        # Code-plan поля (CA-4.1) — зберігаємо лише якщо присутні, не ламаючи P3.
+        for key in _CODE_FIELDS:
+            if step.get(key) not in (None, ""):
+                rec[key] = str(step[key])[:500]
+        out.append(rec)
     return out
 
 

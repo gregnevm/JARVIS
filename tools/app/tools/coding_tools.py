@@ -188,6 +188,84 @@ async def repo_grep(
     return _clip(f"{header}\n" + "\n".join(shown))
 
 
+# --- repo_refs (CA-4.5 foundation / CB3) -------------------------------------
+
+# Ідентифікатор або dotted-модуль (tools.app.agent) — без regex-метасимволів,
+# тож безпечно віддати ripgrep як -w слово.
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
+_IMPORT_LINE_RE = re.compile(r"^\s*(?:from\s+\S+\s+import\b|import\s+)")
+
+
+def _split_grep_row(row: str) -> tuple[str, str]:
+    """'path:line:content' → (locator='path:line', content). Стійко до ':' у вмісті."""
+    parts = row.split(":", 2)
+    if len(parts) == 3:
+        return f"{parts[0]}:{parts[1]}", parts[2]
+    return row, row
+
+
+async def repo_refs(
+    name: str,
+    *,
+    path: str = "",
+    glob: str = "",
+    max_results: int = 0,
+    user_id: int = 0,
+) -> str:
+    """Крос-файлові посилання на символ/модуль (read-only). Розділяє import-рядки
+    й usage-рядки — основа для rename/move рефактора (CA-4.5) та огляду залежностей."""
+    msg = _disabled_message()
+    if msg:
+        return msg
+    ident = (name or "").strip()
+    if not ident or not _IDENT_RE.match(ident):
+        return (
+            "repo_refs: name має бути ідентифікатором або dotted-модулем "
+            "(напр. AgentRunner або tools.app.agent)."
+        )
+    seg = ident.split(".")[-1]  # останній сегмент ловить `mod.attr` і `from mod import attr`
+    root = (path or "").strip() or "."
+    limit = int(max_results) if max_results else settings.coding_grep_max_results
+    limit = max(1, min(limit, 500))
+
+    args = ["--line-number", "--no-heading", "--color", "never", "--max-columns", "200", "-w"]
+    g = (glob or "").strip()
+    args += ["-g", g] if g else ["-g", "*.py"]  # дефолт — Python
+    args += _deny_globs()
+    args += ["--", seg]
+
+    data = await _cli("rg", args, root)
+    if "error" in data:
+        return str(data["error"])
+    code = int(data.get("code", -1))
+    stdout = str(data.get("stdout", ""))
+    if code == 1 and not stdout.strip():
+        return f"repo_refs: посилань на {ident!r} не знайдено у {root}."
+    if code not in (0, 1) and not stdout.strip():
+        stderr = str(data.get("stderr", "")).strip()
+        return f"repo_refs: rg помилка (code={code}). {stderr[:200]}"
+
+    rows = [ln for ln in stdout.splitlines() if ln.strip()]
+    imports: list[str] = []
+    usages: list[str] = []
+    for ln in rows:
+        _loc, content = _split_grep_row(ln)
+        (imports if _IMPORT_LINE_RE.match(content) else usages).append(ln)
+
+    parts_out: list[str] = [
+        f"repo_refs {ident!r} у {root}: {len(rows)} посилань "
+        f"(import={len(imports)}, usage={len(usages)})"
+    ]
+    if imports:
+        parts_out.append("— import-сайти:")
+        parts_out += [f"  {ln}" for ln in imports[:limit]]
+    if usages:
+        shown = usages[: max(0, limit - len(imports[:limit]))]
+        parts_out.append(f"— usage-сайти{' (зрізано)' if len(usages) > len(shown) else ''}:")
+        parts_out += [f"  {ln}" for ln in shown]
+    return _clip("\n".join(parts_out))
+
+
 # --- code_read (CA-1.4) ------------------------------------------------------
 
 async def code_read(
