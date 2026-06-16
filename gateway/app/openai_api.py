@@ -7,6 +7,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -26,6 +27,13 @@ class ChatCompletionRequest(BaseModel):
     messages: list[ChatMessage]
     stream: bool = False
     user: str | None = None
+
+
+class EmbeddingsRequest(BaseModel):
+    model: str = "nomic-embed-text"
+    input: str | list[str]
+    user: str | None = None
+    encoding_format: str | None = None  # лише 'float' підтримується; поле ігнорується
 
 
 def _auth_bearer(request: Request) -> None:
@@ -149,6 +157,43 @@ async def chat_completions(
     }
 
 
+async def _memory_embed(text: str) -> list[float]:
+    """Ембединг через memory-сервіс (nomic-embed-text). Викидає httpx.HTTPError на збій."""
+    url = f"{settings.memory_url.rstrip('/')}/embed"
+    async with httpx.AsyncClient(timeout=settings.agent_timeout) as client:
+        resp = await client.post(url, json={"text": text})
+        resp.raise_for_status()
+        data = resp.json()
+    return [float(x) for x in (data.get("embedding") or [])]
+
+
+@router.post("/embeddings")
+async def embeddings(
+    request: Request,
+    body: EmbeddingsRequest,
+    _: None = Depends(_auth_bearer),
+) -> dict[str, Any]:
+    """OpenAI-сумісні embeddings (AP-2.1) → nomic-embed-text у memory-сервісі."""
+    raw = body.input
+    inputs = [raw] if isinstance(raw, str) else list(raw)
+    inputs = [str(t) for t in inputs if str(t).strip()]
+    if not inputs:
+        raise HTTPException(status_code=400, detail="input required")
+    data: list[dict[str, Any]] = []
+    for i, text in enumerate(inputs):
+        try:
+            vec = await _memory_embed(text)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"embedding backend error: {exc}") from exc
+        data.append({"object": "embedding", "index": i, "embedding": vec})
+    return {
+        "object": "list",
+        "data": data,
+        "model": body.model or "nomic-embed-text",
+        "usage": {"prompt_tokens": 0, "total_tokens": 0},
+    }
+
+
 @router.get("/models")
 async def list_models(request: Request, _: None = Depends(_auth_bearer)) -> dict[str, Any]:
     return {
@@ -156,5 +201,6 @@ async def list_models(request: Request, _: None = Depends(_auth_bearer)) -> dict
         "data": [
             {"id": "jarvis", "object": "model", "owned_by": "jarvis"},
             {"id": "jarvis-agent", "object": "model", "owned_by": "jarvis"},
+            {"id": "nomic-embed-text", "object": "model", "owned_by": "jarvis"},
         ],
     }

@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.0 (2026-06-15)
+> **Версія:** 1.1 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -72,7 +72,7 @@ tenant-фундаменті з SAAS_DEEP_DIVE.
 
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
-| `/v1` сумісність | **5/10** | chat+models є; немає embeddings/responses/usage |
+| `/v1` сумісність | **6/10** | chat+models+embeddings є (AP-0, AP-2.1); немає responses/usage |
 | Identity / keys | **2/10** | один глобальний ключ; немає org/scopes/revoke |
 | Developer console | **2/10** | немає keys/usage/playground UI |
 | Метеринг / ліміти | **3/10** | rate-limit глобальний; немає per-key usage |
@@ -135,7 +135,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [ ] |
+| AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [x] `gateway/app/openai_api.py` → memory `/embed`; str|list[str] input, OpenAI list-формат, 502 на backend-збій |
 | AP-2.2 | `POST /v1/responses` (агентний, tool-use) — мапа на `AgentRunner` | tools[] + tool_calls | [ ] |
 | AP-2.3 | `GET /v1/models` із реальним каталогом (CHAT/AGENT/VISION/EMBED/LoRA) | tags із Ollama | [ ] |
 | AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [ ] |
@@ -211,7 +211,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 ```
 POST /v1/chat/completions     ✅ (AP-0)        — chat, stream
-POST /v1/embeddings           ⏳ (AP-2.1)      — nomic-embed-text
+POST /v1/embeddings           ✅ (AP-2.1)      — nomic-embed-text
 POST /v1/responses            ⏳ (AP-2.2)      — агентний, tool-use
 GET  /v1/models               ✅→⏳ (AP-2.3)   — реальний каталог
 GET  /v1/usage                ⏳ (AP-2.4)      — per-key метеринг
@@ -260,6 +260,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 | Дата | Версія | Зміна |
 |------|--------|-------|
 | 2026-06-15 | 1.0 | Початковий roadmap Стовпа A (AP-0…AP-6); продуктовий шар над SAAS_DEEP_DIVE |
+| 2026-06-16 | 1.1 | AP-2.1 `/v1/embeddings` (gateway → memory nomic-embed-text, OpenAI-формат) |
 
 ---
 

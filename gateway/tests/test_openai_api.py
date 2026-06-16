@@ -48,3 +48,78 @@ def test_bad_key(client):
         headers={"Authorization": "Bearer wrong"},
     )
     assert r.status_code == 401
+
+
+# --- /v1/embeddings (AP-2.1) -------------------------------------------------
+
+def test_embeddings_single_input(client, monkeypatch):
+    async def _fake_embed(text):
+        return [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr("app.openai_api._memory_embed", _fake_embed)
+    r = client.post(
+        "/v1/embeddings",
+        json={"input": "hello", "model": "nomic-embed-text"},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["object"] == "list" and body["model"] == "nomic-embed-text"
+    assert len(body["data"]) == 1
+    assert body["data"][0]["embedding"] == [0.1, 0.2, 0.3]
+    assert body["data"][0]["index"] == 0
+
+
+def test_embeddings_batch_input(client, monkeypatch):
+    async def _fake_embed(text):
+        return [float(len(text))]
+
+    monkeypatch.setattr("app.openai_api._memory_embed", _fake_embed)
+    r = client.post(
+        "/v1/embeddings",
+        json={"input": ["a", "bbb"]},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert [d["index"] for d in data] == [0, 1]
+    assert data[0]["embedding"] == [1.0] and data[1]["embedding"] == [3.0]
+
+
+def test_embeddings_empty_input_400(client):
+    r = client.post(
+        "/v1/embeddings",
+        json={"input": "   "},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 400
+
+
+def test_embeddings_requires_auth(client):
+    r = client.post(
+        "/v1/embeddings",
+        json={"input": "hi"},
+        headers={"Authorization": "Bearer wrong"},
+    )
+    assert r.status_code == 401
+
+
+def test_embeddings_backend_error_502(client, monkeypatch):
+    import httpx
+
+    async def _boom(text):
+        raise httpx.ConnectError("memory down")
+
+    monkeypatch.setattr("app.openai_api._memory_embed", _boom)
+    r = client.post(
+        "/v1/embeddings",
+        json={"input": "hi"},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 502
+
+
+def test_models_lists_embed_model(client):
+    r = client.get("/v1/models", headers={"Authorization": "Bearer sk-test"})
+    ids = [m["id"] for m in r.json()["data"]]
+    assert "nomic-embed-text" in ids
