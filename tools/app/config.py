@@ -159,6 +159,13 @@ class Settings(BaseSettings):
     coding_grep_max_results: int = 60
     # CA-3.2 fix-orchestration: стеля раундів виділеної петлі «тест→правка→тест».
     coding_fix_max_rounds: int = 4
+    # CA-5.5 pre-commit gate: після кожної правки коду (code_edit/…) автоматично
+    # прогнати lint і дописати підсумок до результату (проблеми спливають до commit).
+    # Turnkey built-in P10 post_tool-хук; вмикається лише цим прапором. Дефолт false.
+    coding_precommit_gate: bool = False
+    coding_precommit_lint_exe: str = "ruff"       # раннер лінтера для гейта
+    coding_precommit_lint_args: str = "check"     # аргументи (через пробіл)
+    coding_precommit_path: str = ""               # cwd лінтера (repo root); порожньо = дефолт
 
 
 settings = Settings()

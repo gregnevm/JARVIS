@@ -194,7 +194,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | CA-5.2 | Coder→Reviewer→Tester team-pipeline для coding-задач | Reuse `teams.py` | [x] `teams.CODING_ROLES` + `tester` роль; `/teams/spawn {kind:"coding"}` → Coder→Reviewer→Tester |
 | CA-5.3 | bg job type `coding_task` — довгі задачі з progress/cancel | Reuse `bg_jobs.py` + AM-2.2 | [~] job type `coding_task` (jarvis_core) + `bg_jobs.create_coding_job` + виконавець `POST /agent/code/fix` (fix_tests); лишається dispatch у gateway-воркері |
 | CA-5.4 | Subagent на під-задачу (напр. окремий файл) з budget_iters | Reuse `subagents.py` | [x] `spawn_subagent` tool (P8): делегує під-задачу з `budget_iters` 1–8 → `create_subagent_job` |
-| CA-5.5 | Hooks: pre-commit lint/test gate (P10 hooks) | `data/hooks/` post_tool | [~] механізм є — P10 `post_tool` хук (`run_post_tool`) бачить `{tool,args,result}` і може гейтити code_edit; turnkey coding-пресет — попереду |
+| CA-5.5 | Hooks: pre-commit lint/test gate (P10 hooks) | `data/hooks/` post_tool | [x] turnkey built-in `precommit_gate.run` (post_tool) — після code_edit/code_edit_batch/rename_symbol авто-lint, підсумок дописується до результату; вмикається `CODING_PRECOMMIT_GATE` (без копіювання файлів) |
 
 **Вихід CA-5:** велика задача йде як фоновий job; Reviewer ловить баги до звіту; видно progress.
 
