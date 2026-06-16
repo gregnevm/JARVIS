@@ -230,6 +230,68 @@ async def _code_edit_impl(
     return _truncate("\n".join(parts))
 
 
+def _coerce_edits(raw: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    if not isinstance(raw, list):
+        return out
+    for e in raw:
+        if not isinstance(e, dict) or not str(e.get("path", "")).strip():
+            continue
+        out.append(
+            {
+                "path": str(e.get("path", "")),
+                "mode": str(e.get("mode", "search_replace")),
+                "old_string": str(e.get("old_string", "")),
+                "new_string": str(e.get("new_string", "")),
+                "diff": str(e.get("diff", "")),
+                "replace_all": bool(e.get("replace_all", False)),
+            }
+        )
+    return out
+
+
+async def _code_edit_batch_impl(edits: list[dict[str, Any]], *, dry_run: bool = False) -> str:
+    if not settings.enable_computer_use:
+        return "Computer Use вимкнено (ENABLE_COMPUTER_USE=false)."
+    if not edits:
+        return "code_edit_batch: список edits порожній."
+    data = await _request("POST", "/fs/edit_batch", json={"edits": edits, "dry_run": dry_run})
+    if "error" in data:
+        return str(data["error"])
+    results = data.get("edits") or []
+    status = str(data.get("status", ""))
+    head = (
+        f"Dry-run: {len(results)} файл(ів), diff без запису 👀"
+        if status == "dry_run"
+        else f"Транзакційно застосовано {data.get('count', len(results))} файл(ів) ✅"
+    )
+    parts = [head]
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        preview = str(r.get("diff", "")).strip()
+        parts.append(f"— {r.get('path', '?')}")
+        if preview:
+            parts.append(f"```diff\n{preview}\n```")
+    return _truncate("\n".join(parts))
+
+
+async def code_edit_batch(
+    edits: Any,
+    *,
+    dry_run: bool = False,
+    user_id: int = 0,
+) -> str:
+    coerced = _coerce_edits(edits)
+    args = {"edits": coerced, "dry_run": dry_run}
+    return await wrap_execute(
+        user_id,
+        "code_edit_batch",
+        args,
+        lambda: _code_edit_batch_impl(coerced, dry_run=dry_run),
+    )
+
+
 async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = False) -> str:
     """Виконує computer-дію. trusted=True після ✅ у Telegram."""
     if tool == "run_powershell":
@@ -259,6 +321,11 @@ async def execute_internal(tool: str, args: dict[str, Any], *, trusted: bool = F
             new_string=str(args.get("new_string", "")),
             diff=str(args.get("diff", "")),
             replace_all=bool(args.get("replace_all", False)),
+        )
+    if tool == "code_edit_batch":
+        return await _code_edit_batch_impl(
+            _coerce_edits(args.get("edits")),
+            dry_run=bool(args.get("dry_run", False)),
         )
     if tool == "capture_screenshot":
         return await _capture_screenshot_impl()

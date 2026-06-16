@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.8 (2026-06-16)
+> **Версія:** 1.9 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -73,7 +73,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
 | Виконання команд/тестів | **9/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); виділена fix-orchestration `fix_tests` (CA-3.2) + no-progress stop (CA-3.4); лишається live-fix eval (CA-3.5) |
-| Редагування файлів | **7/10** | `code_edit` diff/apply (search_replace+unified diff) + git-safety `.jarvis_backup`; бракує лише транзакційного multi-file (CA-4.3) |
+| Редагування файлів | **8/10** | `code_edit` diff/apply + git-safety `.jarvis_backup` + транзакційний multi-file `code_edit_batch` (усе-або-нічого, dry-run) (CA-4.3/4.4); лишається rename/move з оновленням імпортів (CA-4.5) |
 | Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
 | Self-review | **4/10** | P9 teams (Reviewer) є як bg job, не в coding-лупі |
@@ -176,8 +176,8 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 |---|--------|-----|--------|
 | CA-4.1 | `POST /agent/code/plan` — кроки з `{file, action, rationale, risk}` | JSON schema (розширення P3) | [ ] |
 | CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [ ] |
-| CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [~] host-agent `/fs/edit_batch` — план-усіх→запис-усіх, відкат із пам'яті на помилці, дедуп шляхів, `edit_batch_max`; лишається toolkit-обгортка + confirm-tier |
-| CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [~] `/fs/edit_batch {dry_run:true}` повертає всі diff-и без запису; лишається toolkit-обгортка |
+| CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [x] host-agent `/fs/edit_batch` (план-усіх→запис-усіх, відкат із пам'яті, дедуп, `edit_batch_max`) + tool `code_edit_batch` (T1, mutating→confirm, owner-gated) |
+| CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [x] `code_edit_batch(dry_run=true)` — усі diff-и без запису, read-only (без confirm) |
 | CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [ ] |
 
 **Вихід CA-4:** «винеси `_helpers` у `jarvis_core`» → план на 5 файлів → один апрув → консистентний apply.
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.9 | CA-4.3/4.4 завершено: tool `code_edit_batch` (T1, confirm на запис, dry-run read-only) поверх `/fs/edit_batch` — повний контур транзакційної multi-file правки |
 | 2026-06-16 | 1.8 | CA-4.3/4.4 (host-side) транзакційний `/fs/edit_batch` (усе-або-нічого, dry-run, дедуп, `edit_batch_max`) + рефактор `_plan_edit`/`_write_planned` |
 | 2026-06-16 | 1.7 | CA-3.2 виділена fix-orchestration `AgentRunner.fix_tests` (петля тест→правка→тест, `coding_fix_max_rounds`, стоп green/max/no-progress) |
 | 2026-06-16 | 1.6 | CA-3.4 no-progress детектор (`fix_loop.py` — per-user fail-сигнатура в Redis, повтор → підказка стоп/зміна підходу) + крос-платформний `_basename` (PureWindowsPath) |

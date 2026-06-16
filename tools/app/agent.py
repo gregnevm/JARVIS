@@ -201,6 +201,7 @@ _TOOL_STATUS = {
     "fs_read": "📄 читаю файл…",
     "fs_write": "✍️ записую файл…",
     "code_edit": "🩹 редагую код (diff)…",
+    "code_edit_batch": "🩹 правлю кілька файлів (diff)…",
     "repo_tree": "🌳 дерево репо…",
     "repo_grep": "🔎 шукаю в коді…",
     "code_read": "📄 читаю рядки…",

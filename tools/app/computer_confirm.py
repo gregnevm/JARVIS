@@ -42,6 +42,7 @@ _TIER = {
     "fs_write": "T0",
     "fs_write_bytes": "T0",
     "code_edit": "T1",
+    "code_edit_batch": "T1",
     "capture_screenshot": "T0",
     "clipboard_read": "T0",
     "clipboard_write": "T0",
@@ -123,6 +124,9 @@ def is_mutating(tool: str, args: dict[str, Any]) -> bool:
         return True
     if tool == "code_edit":
         return True
+    if tool == "code_edit_batch":
+        # dry_run — лише прев'ю diff-ів, нічого не пише → не вимагає confirm.
+        return not bool(args.get("dry_run"))
     if tool == "clipboard_write":
         return True
     if tool == "power_action":
@@ -172,6 +176,12 @@ def describe_action(tool: str, args: dict[str, Any]) -> str:
         new = str(args.get("new_string", ""))[:120]
         scope = " [усі збіги]" if args.get("replace_all") else ""
         return f"code_edit {path}{scope}:\n- {old}\n+ {new}"
+    if tool == "code_edit_batch":
+        edits = args.get("edits") or []
+        paths = [str(e.get("path", "?")) for e in edits if isinstance(e, dict)]
+        listing = "\n".join(f"  • {p}" for p in paths[:10])
+        more = f"\n  …(+{len(paths) - 10})" if len(paths) > 10 else ""
+        return f"code_edit_batch — {len(paths)} файл(ів) транзакційно:\n{listing}{more}"
     if tool == "browser_click":
         return f"Browser click: {args.get('selector', '')}"
     if tool == "browser_fill":
