@@ -18,6 +18,8 @@ class FakeRedis:
     def __init__(self) -> None:
         self.kv: dict[str, str] = {}
         self.sets: dict[str, set[str]] = {}
+        self.counters: dict[str, int] = {}
+        self.h: dict[str, dict[str, int]] = {}
 
     async def set(self, key: str, value: str) -> None:
         self.kv[key] = value
@@ -37,6 +39,20 @@ class FakeRedis:
 
     async def smembers(self, key: str) -> set[str]:
         return set(self.sets.get(key, set()))
+
+    async def incr(self, key: str) -> int:
+        self.counters[key] = self.counters.get(key, 0) + 1
+        return self.counters[key]
+
+    async def expire(self, key: str, ttl: int) -> None:
+        return None
+
+    async def hincrby(self, key: str, field: str, amount: int) -> int:
+        self.h.setdefault(key, {})[field] = self.h.setdefault(key, {}).get(field, 0) + amount
+        return self.h[key][field]
+
+    async def hgetall(self, key: str) -> dict[str, str]:
+        return {k: str(v) for k, v in self.h.get(key, {}).items()}
 
     async def aclose(self) -> None:  # lifespan shutdown
         return None
@@ -108,3 +124,21 @@ def test_root_key_bypasses_scopes(client: TestClient) -> None:
 
 def test_unknown_key_rejected(client: TestClient) -> None:
     assert _chat(client, _bearer("sk-jarvis-bogus")).status_code == 401
+
+
+def test_per_key_rate_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "openai_key_rate_limit_per_min", 2)
+    key = client.post("/saas/api/keys", json={"scopes": ["chat"]}, headers=_root()).json()["key"]
+    assert _chat(client, _bearer(key)).status_code == 200
+    assert _chat(client, _bearer(key)).status_code == 200
+    r = _chat(client, _bearer(key))  # 3rd in the same minute → over limit
+    assert r.status_code == 429
+    assert r.json()["error"]["type"] == "rate_limit_error"
+    # root key is not rate-limited
+    assert _chat(client, _root()).status_code == 200
+
+
+def test_no_rate_limit_when_disabled(client: TestClient) -> None:
+    key = client.post("/saas/api/keys", json={"scopes": ["chat"]}, headers=_root()).json()["key"]
+    for _ in range(5):
+        assert _chat(client, _bearer(key)).status_code == 200

@@ -124,8 +124,27 @@ async def _authenticate(request: Request) -> dict[str, Any]:
     if ctx is None:
         raise HTTPException(status_code=401, detail="invalid api key")
     request.state.api_auth = ctx
+    if ctx.get("key_id"):  # rate-limit керовані ключі (root — без обмеження), AP-4
+        await _check_rate_limit(request, str(ctx["key_id"]))
     await _usage_store(request).record(str(ctx.get("key_id") or "root"), request.url.path)
     return ctx
+
+
+async def _check_rate_limit(request: Request, key_id: str) -> None:
+    """Per-key ліміт запитів/хв (AP-4). 0 = вимкнено. Best-effort: збій Redis → пропускаємо."""
+    limit = settings.openai_key_rate_limit_per_min
+    if limit <= 0:
+        return
+    window = int(time.time() // 60)
+    k = f"jarvis:ratelimit:{key_id}:{window}"
+    try:
+        n = int(await request.app.state.redis.incr(k))
+        if n == 1:
+            await request.app.state.redis.expire(k, 70)
+    except Exception:  # noqa: BLE001 — ліміт не має ламати запит при збої сховища
+        return
+    if n > limit:
+        raise HTTPException(status_code=429, detail="rate limit exceeded for this api key")
 
 
 def require_scope(scope: str) -> Callable[[Request], Coroutine[object, object, None]]:

@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.6 (2026-06-16)
+> **Версія:** 1.7 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -168,8 +168,8 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-4.1 | Org-scoped rate-limit ключі (SAAS §1.4) | `jarvis:{org}:rl:…` | [ ] |
-| AP-4.2 | `usage_events` запис на кожен виклик (turn/token/embed/job) | append-only + nightly rollup | [ ] |
+| AP-4.1 | Per-key rate-limit (org-scoped — поверх через tenant ctx) | `jarvis:ratelimit:{key}:{min}` | [x] `openai_key_rate_limit_per_min` (0=off); 429 `rate_limit_error`; root без ліміту; best-effort |
+| AP-4.2 | `usage_events` запис на кожен виклик (turn/token/embed/job) | append-only + nightly rollup | [~] per-key request-метрика є (AP-2.4 `UsageStore`); token/embed-розбивка + rollup — попереду |
 | AP-4.3 | `plan_limits.py` enforcement (free/pro/team/studio) | 402 при перевищенні | [ ] |
 | AP-4.4 | Per-org metrics (розщепити глобальні, SAAS §0.2) | `jarvis:{org}:metrics:*` | [ ] |
 | AP-4.5 | Soft/hard ліміти + grace (fail-open ops, fail-closed billing) | Config | [ ] |
@@ -259,6 +259,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.7 | AP-4.1 per-key rate-limit (429 `rate_limit_error`, opt-in) |
 | 2026-06-16 | 1.6 | AP-5.1/5.2 OpenAPI повна + `API_QUICKSTART.md` (OpenAI SDK drop-in) |
 | 2026-06-16 | 1.5 | AP-2.2 агентний `/v1/responses` (mode=agent, tool-use) |
 | 2026-06-16 | 1.4 | AP-2.4 per-key usage metering (`GET /v1/usage`) |
