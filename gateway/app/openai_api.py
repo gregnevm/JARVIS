@@ -7,13 +7,54 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
 from .config import settings
 
-router = APIRouter(prefix="/v1", tags=["openai"])
+# AP-2.6: статус → OpenAI error.type
+_ERR_TYPE = {
+    401: "authentication_error",
+    403: "authentication_error",
+    402: "insufficient_quota",
+    429: "rate_limit_error",
+}
+
+
+def _openai_error_body(status: int, detail: Any) -> dict[str, Any]:
+    if status >= 500:
+        etype = "api_error"
+    else:
+        etype = _ERR_TYPE.get(status, "invalid_request_error")
+    msg = detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False)
+    return {"error": {"message": msg, "type": etype, "code": status}}
+
+
+class _OpenAIErrorRoute(APIRoute):
+    """Перетворює HTTPException у тіло помилки формату OpenAI (AP-2.6).
+
+    Діє ЛИШЕ на `/v1` роутер — решта API лишає FastAPI `{"detail": ...}`."""
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        original = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            try:
+                return await original(request)
+            except HTTPException as exc:
+                return JSONResponse(
+                    status_code=exc.status_code,
+                    content=_openai_error_body(exc.status_code, exc.detail),
+                    headers=getattr(exc, "headers", None),
+                )
+
+        return handler
+
+
+router = APIRouter(prefix="/v1", tags=["openai"], route_class=_OpenAIErrorRoute)
 
 
 class ChatMessage(BaseModel):
@@ -25,6 +66,12 @@ class ChatCompletionRequest(BaseModel):
     model: str = "jarvis"
     messages: list[ChatMessage]
     stream: bool = False
+    user: str | None = None
+
+
+class EmbeddingsRequest(BaseModel):
+    model: str = "nomic-embed-text"
+    input: str | list[str]
     user: str | None = None
 
 
@@ -180,6 +227,46 @@ async def chat_completions(
     }
 
 
+async def _memory_embed(text: str) -> list[float]:
+    """Викликає memory `/embed` (nomic-embed-text); 502 на збій бекенду (AP-2.1)."""
+    url = settings.memory_url.rstrip("/") + "/embed"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as cli:
+            resp = await cli.post(url, json={"text": text})
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"embedding backend error: {exc}") from exc
+    vec = data.get("embedding")
+    if not isinstance(vec, list):
+        raise HTTPException(status_code=502, detail="embedding backend returned no vector")
+    return [float(x) for x in vec]
+
+
+@router.post("/embeddings")
+async def embeddings(
+    request: Request,
+    body: EmbeddingsRequest,
+    _: None = Depends(require_scope("embeddings")),
+) -> dict[str, Any]:
+    """OpenAI-сумісний `/v1/embeddings` → memory `nomic-embed-text` (AP-2.1)."""
+    items = [body.input] if isinstance(body.input, str) else list(body.input)
+    items = [s for s in items if isinstance(s, str) and s.strip()]
+    if not items:
+        raise HTTPException(status_code=400, detail="input required")
+    data: list[dict[str, Any]] = []
+    for i, text in enumerate(items):
+        vec = await _memory_embed(text)
+        data.append({"object": "embedding", "index": i, "embedding": vec})
+    total = sum(len(t.split()) for t in items)
+    return {
+        "object": "list",
+        "data": data,
+        "model": body.model or "nomic-embed-text",
+        "usage": {"prompt_tokens": total, "total_tokens": total},
+    }
+
+
 @router.get("/models")
 async def list_models(request: Request, _: None = Depends(_auth_bearer)) -> dict[str, Any]:
     return {
@@ -187,5 +274,6 @@ async def list_models(request: Request, _: None = Depends(_auth_bearer)) -> dict
         "data": [
             {"id": "jarvis", "object": "model", "owned_by": "jarvis"},
             {"id": "jarvis-agent", "object": "model", "owned_by": "jarvis"},
+            {"id": "nomic-embed-text", "object": "model", "owned_by": "jarvis"},
         ],
     }
