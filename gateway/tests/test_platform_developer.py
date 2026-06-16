@@ -67,6 +67,7 @@ def test_console_page_has_developer_tab(client: TestClient) -> None:
     assert 'data-tab="developer"' in html and 'id="panel-developer"' in html
     assert "/platform/api/developer/keys" in html  # render logic wired
     assert 'data-tab="playground"' in html and "/platform/api/developer/playground" in html
+    assert "Quickstart" in html and "OpenAI(base_url" in html  # AP-3.5 snippet panel
 
 
 def test_playground_runs(client: TestClient) -> None:

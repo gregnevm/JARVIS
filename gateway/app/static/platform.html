@@ -1499,6 +1499,25 @@ async function renderDeveloper() {
   }
   h += '<div class="section">Usage — root, 7d</div>';
   h += '<div class="grid">' + card(lbl("Запитів", "Requests"), String(u.total_requests || 0), "sm") + '</div>';
+
+  // AP-3.5: Quickstart panel (host підставлено; ключ — з вкладки вище)
+  const base = location.origin + "/v1";
+  const py = 'from openai import OpenAI\n' +
+    'client = OpenAI(base_url="' + base + '", api_key="sk-jarvis-…")\n' +
+    'print(client.chat.completions.create(\n' +
+    '    model="jarvis",\n' +
+    '    messages=[{"role":"user","content":"привіт"}],\n' +
+    ').choices[0].message.content)';
+  const curl = 'curl -s ' + base + '/chat/completions \\\n' +
+    '  -H "Authorization: Bearer sk-jarvis-…" -H "Content-Type: application/json" \\\n' +
+    '  -d \'{"model":"jarvis","messages":[{"role":"user","content":"hi"}]}\'';
+  h += '<div class="section">Quickstart</div>';
+  h += '<div class="card wide"><div class="sm muted">base_url</div>' +
+    '<div class="mono" style="word-break:break-all">' + esc(base) + '</div>' +
+    '<div class="sm muted" style="margin-top:8px">Python (OpenAI SDK)</div>' +
+    '<pre class="mono" style="white-space:pre-wrap">' + esc(py) + '</pre>' +
+    '<div class="sm muted">curl</div>' +
+    '<pre class="mono" style="white-space:pre-wrap">' + esc(curl) + '</pre></div>';
   el.innerHTML = h;
   devLastKey = null;  // show-once
   el.querySelector("#devCreate").addEventListener("click", devCreate);
