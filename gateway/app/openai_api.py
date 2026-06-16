@@ -87,10 +87,16 @@ def _key_store(request: Request) -> Any:
     return ApiKeyStore(request.app.state.redis)
 
 
+def _usage_store(request: Request) -> Any:
+    from .saas.usage import UsageStore
+
+    return UsageStore(request.app.state.redis)
+
+
 async def _authenticate(request: Request) -> dict[str, Any]:
     """Аутентифікація `/v1` (AP-1.4): root-ключ (`OPENAI_API_KEY`) АБО керований sk-jarvis-key.
 
-    Повертає {root, scopes, key_id}; scopes=None → усі скоупи (root)."""
+    Повертає {root, scopes, key_id}; scopes=None → усі скоупи (root). Веде usage (AP-2.4)."""
     import hmac
 
     if not settings.enable_openai_api:
@@ -100,12 +106,18 @@ async def _authenticate(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="missing bearer token")
     token = auth[7:].strip()
     root_key = (settings.openai_api_key or "").strip()
+    ctx: dict[str, Any] | None = None
     if root_key and hmac.compare_digest(token, root_key):
-        return {"root": True, "scopes": None, "key_id": None}
-    rec = await _key_store(request).verify(token)
-    if rec is not None:
-        return {"root": False, "scopes": set(rec.get("scopes") or []), "key_id": rec["id"]}
-    raise HTTPException(status_code=401, detail="invalid api key")
+        ctx = {"root": True, "scopes": None, "key_id": None}
+    else:
+        rec = await _key_store(request).verify(token)
+        if rec is not None:
+            ctx = {"root": False, "scopes": set(rec.get("scopes") or []), "key_id": rec["id"]}
+    if ctx is None:
+        raise HTTPException(status_code=401, detail="invalid api key")
+    request.state.api_auth = ctx
+    await _usage_store(request).record(str(ctx.get("key_id") or "root"), request.url.path)
+    return ctx
 
 
 def require_scope(scope: str) -> Callable[[Request], Coroutine[object, object, None]]:
@@ -335,6 +347,14 @@ async def get_job(
     if rec is None:
         raise HTTPException(status_code=404, detail="job not found")
     return _job_view(rec)
+
+
+@router.get("/usage")
+async def usage(request: Request, days: int = 7, _: None = Depends(_auth_bearer)) -> dict[str, Any]:
+    """Per-key usage за період (AP-2.4) — лічильники запитів для ключа-викликача."""
+    ctx = getattr(request.state, "api_auth", None) or {}
+    kid = str(ctx.get("key_id") or "root")
+    return await _usage_store(request).summary(kid, days=days)
 
 
 @router.get("/models")

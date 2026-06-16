@@ -10,12 +10,33 @@ from app.config import settings
 from app.main import app
 
 
+class FakeRedis:
+    def __init__(self) -> None:
+        self.h: dict[str, dict[str, int]] = {}
+
+    async def hincrby(self, key: str, field: str, amount: int) -> int:
+        bucket = self.h.setdefault(key, {})
+        bucket[field] = bucket.get(field, 0) + amount
+        return bucket[field]
+
+    async def hgetall(self, key: str) -> dict[str, str]:
+        return {k: str(v) for k, v in self.h.get(key, {}).items()}
+
+    # /v1 auth uses key store (verify) only for non-root tokens; root path skips it.
+    async def get(self, key: str) -> str | None:
+        return None
+
+    async def aclose(self) -> None:
+        return None
+
+
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(settings, "enable_openai_api", True)
     monkeypatch.setattr(settings, "openai_api_key", "sk-test")
     monkeypatch.setattr(settings, "openai_default_user_id", 42)
     with TestClient(app) as c:
+        c.app.state.redis = FakeRedis()
         yield c
 
 
@@ -99,3 +120,16 @@ def test_get_job_and_404(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["result"] == "ok"
     client.app.state.tools.get_bg_job = AsyncMock(return_value=None)
     assert client.get("/v1/jobs/ghost", headers=_auth()).status_code == 404
+
+
+def test_usage_records_and_reports(client: TestClient) -> None:
+    # кілька викликів /v1 → лічильники ростуть
+    client.get("/v1/models", headers=_auth())
+    client.get("/v1/models", headers=_auth())
+    r = client.get("/v1/usage", headers=_auth())
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["object"] == "usage" and body["key_id"] == "root"
+    # 2 models + цей usage-виклик = 3 запити; /v1/models у by_endpoint
+    assert body["total_requests"] >= 3
+    assert body["by_endpoint"].get("/v1/models") == 2

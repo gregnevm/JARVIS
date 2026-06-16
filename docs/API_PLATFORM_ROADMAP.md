@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.3 (2026-06-16)
+> **Версія:** 1.4 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -138,7 +138,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 | AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [x] memory `/embed`; str\|list[str]; 400 empty / 502 backend; `nomic-embed-text` у `/models` |
 | AP-2.2 | `POST /v1/responses` (агентний, tool-use) — мапа на `AgentRunner` | tools[] + tool_calls | [ ] |
 | AP-2.3 | `GET /v1/models` із реальним каталогом (CHAT/AGENT/VISION/EMBED/LoRA) | tags із Ollama | [ ] |
-| AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [ ] |
+| AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [x] `UsageStore` (Redis hash/день); best-effort запис у `_authenticate`; `GET /v1/usage?days=N` по ключу-викликачу |
 | AP-2.5 | `POST /v1/jobs` + `GET /v1/jobs/{id}` — async (research/team/coding) | Reuse bg_jobs | [x] `create_bg_job`/`get_bg_job`; 400 empty / 502 backend / 404 missing; `require_scope('jobs')` |
 | AP-2.6 | Error-codes per OpenAI (401/402/404/429) | Сумісні тіла помилок | [x] `_OpenAIErrorRoute` → `{error:{message,type,code}}` лише на `/v1` |
 
@@ -259,6 +259,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.4 | AP-2.4 per-key usage metering (`GET /v1/usage`) |
 | 2026-06-16 | 1.3 | AP-2.5 async `/v1/jobs` (POST+GET) на bg_jobs |
 | 2026-06-16 | 1.2 | AP-2.1 `/v1/embeddings` (nomic-embed-text) + AP-2.6 OpenAI error envelope на `/v1` |
 | 2026-06-16 | 1.1 | AP-1 керовані API-ключі (self-hosted): `ApiKeyStore` + `/saas/api/keys` CRUD + `/v1` scope-auth |
