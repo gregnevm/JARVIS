@@ -677,6 +677,54 @@ class AgentRunner:
         rec["marker"] = PLAN_MARKER.format(id=rec["id"])
         return rec
 
+    async def code_plan(self, user_id: int, text: str) -> dict[str, Any]:
+        """Code-specific план (CA-4.1): кроки з file-targets {file, action, rationale, risk}.
+
+        Один апрув на весь план (CA-4.2) — через звичайний approve-flow P3 (маркер).
+        """
+        from . import plans
+
+        prompt = (
+            "Склади план зміни коду під запит. Поверни ЛИШЕ JSON без пояснень:\n"
+            '{"summary":"короткий опис","steps":[{"file":"відносний/шлях.py",'
+            '"action":"що зробити у файлі","rationale":"чому","risk":"low|medium|high"}],'
+            '"risks":["загальні ризики"]}\n'
+            f"Максимум {_PLAN_MAX_STEPS} кроків, кожен прив'язаний до конкретного файлу. "
+            f"Запит: {text}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Ти планувальник змін коду JARVIS. Кожен крок прив'язаний до файлу. "
+                        "Відповідай лише валідним JSON."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = (msg.get("content") or "").strip()
+        parsed = extract_json_object(content)
+        if not parsed:
+            parsed = {
+                "summary": content[:500] or text[:200],
+                "steps": [{"file": "", "action": text[:200], "rationale": text, "risk": "medium"}],
+                "risks": [],
+            }
+        rec = await plans.create_plan(
+            user_id,
+            summary=str(parsed.get("summary") or text[:500]),
+            steps=parsed.get("steps") or [],
+            risks=parsed.get("risks") if isinstance(parsed.get("risks"), list) else [],
+            source_text=text,
+            status="pending",
+        )
+        rec["marker"] = PLAN_MARKER.format(id=rec["id"])
+        rec["kind"] = "code"
+        return rec
+
     async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:
         """Покрокове виконання схваленого плану (sync MVP, max 8 steps)."""
         from . import plans

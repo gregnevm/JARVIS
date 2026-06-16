@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.9 (2026-06-16)
+> **Версія:** 1.10 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -174,8 +174,8 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-4.1 | `POST /agent/code/plan` — кроки з `{file, action, rationale, risk}` | JSON schema (розширення P3) | [ ] |
-| CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [ ] |
+| CA-4.1 | `POST /agent/code/plan` — кроки з `{file, action, rationale, risk}` | JSON schema (розширення P3) | [x] `AgentRunner.code_plan` + route; `_normalize_steps` зберігає code-поля (file/action/rationale/risk) |
+| CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [~] один апрув на план через P3 approve-flow + маркер (Redis TTL); session-trust auto-approve — попереду |
 | CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [x] host-agent `/fs/edit_batch` (план-усіх→запис-усіх, відкат із пам'яті, дедуп, `edit_batch_max`) + tool `code_edit_batch` (T1, mutating→confirm, owner-gated) |
 | CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [x] `code_edit_batch(dry_run=true)` — усі diff-и без запису, read-only (без confirm) |
 | CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [ ] |
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.10 | CA-4.1 code-plan (`code_plan` + `POST /agent/code/plan`, file-targeted кроки) + CA-4.2 (один апрув на план через P3 flow) |
 | 2026-06-16 | 1.9 | CA-4.3/4.4 завершено: tool `code_edit_batch` (T1, confirm на запис, dry-run read-only) поверх `/fs/edit_batch` — повний контур транзакційної multi-file правки |
 | 2026-06-16 | 1.8 | CA-4.3/4.4 (host-side) транзакційний `/fs/edit_batch` (усе-або-нічого, dry-run, дедуп, `edit_batch_max`) + рефактор `_plan_edit`/`_write_planned` |
 | 2026-06-16 | 1.7 | CA-3.2 виділена fix-orchestration `AgentRunner.fix_tests` (петля тест→правка→тест, `coding_fix_max_rounds`, стоп green/max/no-progress) |
