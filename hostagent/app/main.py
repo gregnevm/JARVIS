@@ -463,7 +463,8 @@ def _backup_original(p: Path, original: str) -> str:
     backup_dir = p.parent / ".jarvis_backup"
     backup_dir.mkdir(parents=True, exist_ok=True)
     dest = backup_dir / f"{p.name}.{stamp}.bak"
-    dest.write_text(original, encoding="utf-8")
+    # newline="" → бекап байт-у-байт (зберігає сирі \r\n оригіналу).
+    dest.write_text(original, encoding="utf-8", newline="")
     return str(dest)
 
 
@@ -477,7 +478,10 @@ async def fs_edit(
     if not p.is_file():
         raise HTTPException(status_code=404, detail="not a file")
     try:
-        original = p.read_text(encoding="utf-8")
+        # newline="" вимикає universal-newlines: сирі \r\n зберігаються, тож
+        # детект стилю нижче коректний (read_text без цього перетворив би \r\n→\n).
+        with p.open("r", encoding="utf-8", newline="") as fh:
+            original = fh.read()
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -515,7 +519,9 @@ async def fs_edit(
     new_content = new_lf.replace("\n", "\r\n") if crlf else new_lf
     try:
         backup = _backup_original(p, original)
-        p.write_text(new_content, encoding="utf-8")
+        # newline="" → пишемо байти як є; інакше на Windows os.linesep подвоїв би
+        # наш явний \r\n у \r\r\n.
+        p.write_text(new_content, encoding="utf-8", newline="")
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {
