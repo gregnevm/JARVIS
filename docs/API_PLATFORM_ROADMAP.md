@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.1 (2026-06-16)
+> **Версія:** 1.2 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -140,7 +140,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 | AP-2.3 | `GET /v1/models` із реальним каталогом (CHAT/AGENT/VISION/EMBED/LoRA) | tags із Ollama | [ ] |
 | AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [ ] |
 | AP-2.5 | `POST /v1/jobs` + `GET /v1/jobs/{id}` — async (research/team/coding) | Reuse bg_jobs | [ ] |
-| AP-2.6 | Error-codes per OpenAI (401/402/404/429) | Сумісні тіла помилок | [ ] |
+| AP-2.6 | Error-codes per OpenAI (401/402/404/429) | Сумісні тіла помилок | [x] `_OpenAIErrorRoute` — `{"error":{message,type,code}}` на `/v1`; type-мапа (auth/rate_limit/insufficient_quota/api_error/invalid_request) |
 
 **Вихід AP-2:** `openai.OpenAI(base_url=…).chat/embeddings/models` працюють незмінно.
 
@@ -261,6 +261,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 |------|--------|-------|
 | 2026-06-15 | 1.0 | Початковий roadmap Стовпа A (AP-0…AP-6); продуктовий шар над SAAS_DEEP_DIVE |
 | 2026-06-16 | 1.1 | AP-2.1 `/v1/embeddings` (gateway → memory nomic-embed-text, OpenAI-формат) |
+| 2026-06-16 | 1.2 | AP-2.6 OpenAI-сумісні тіла помилок (`_OpenAIErrorRoute`, скоуп `/v1`) |
 
 ---
 

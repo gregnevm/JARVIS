@@ -123,3 +123,39 @@ def test_models_lists_embed_model(client):
     r = client.get("/v1/models", headers={"Authorization": "Bearer sk-test"})
     ids = [m["id"] for m in r.json()["data"]]
     assert "nomic-embed-text" in ids
+
+
+# --- OpenAI-compatible error envelope (AP-2.6) -------------------------------
+
+def test_error_envelope_on_bad_key(client):
+    r = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+        headers={"Authorization": "Bearer wrong"},
+    )
+    assert r.status_code == 401
+    body = r.json()
+    assert "error" in body and body["error"]["type"] == "authentication_error"
+    assert body["error"]["message"] and body["error"]["code"] is None
+
+
+def test_error_envelope_on_bad_request(client):
+    r = client.post(
+        "/v1/embeddings",
+        json={"input": "  "},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["type"] == "invalid_request_error"
+
+
+def test_error_envelope_on_disabled_404(monkeypatch):
+    monkeypatch.setattr(settings, "enable_openai_api", False)
+    with TestClient(app) as c:
+        r = c.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+            headers={"Authorization": "Bearer x"},
+        )
+    assert r.status_code == 404
+    assert r.json()["error"]["type"] == "invalid_request_error"

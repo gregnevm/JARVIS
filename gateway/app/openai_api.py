@@ -8,13 +8,55 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from collections.abc import Callable, Coroutine
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
 from .config import settings
 
-router = APIRouter(prefix="/v1", tags=["openai"])
+
+def _err_type(status: int) -> str:
+    """HTTP status → OpenAI error.type (AP-2.6)."""
+    if status in (401, 403):
+        return "authentication_error"
+    if status == 429:
+        return "rate_limit_error"
+    if status == 402:
+        return "insufficient_quota"
+    if status >= 500:
+        return "api_error"
+    return "invalid_request_error"
+
+
+class _OpenAIErrorRoute(APIRoute):
+    """Перетворює HTTPException у тіло у форматі OpenAI: {"error": {...}} (AP-2.6).
+
+    Скоупнуто лише на `/v1`-роутер — решта API лишається з FastAPI `{"detail": …}`."""
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[object, object, Response]]:
+        original = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            try:
+                return await original(request)
+            except HTTPException as exc:
+                return JSONResponse(
+                    status_code=exc.status_code,
+                    content={
+                        "error": {
+                            "message": exc.detail,
+                            "type": _err_type(exc.status_code),
+                            "code": None,
+                        }
+                    },
+                )
+
+        return handler
+
+
+router = APIRouter(prefix="/v1", tags=["openai"], route_class=_OpenAIErrorRoute)
 
 
 class ChatMessage(BaseModel):
