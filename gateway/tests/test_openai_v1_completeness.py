@@ -122,6 +122,34 @@ def test_get_job_and_404(client: TestClient) -> None:
     assert client.get("/v1/jobs/ghost", headers=_auth()).status_code == 404
 
 
+def test_responses_string_input(client: TestClient) -> None:
+    client.app.state.tools.process = AsyncMock(return_value="agent answer")
+    r = client.post("/v1/responses", json={"input": "do a thing"}, headers=_auth())
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["object"] == "response" and body["status"] == "completed"
+    assert body["output_text"] == "agent answer"
+    assert body["output"][0]["content"][0]["text"] == "agent answer"
+
+
+def test_responses_list_input(client: TestClient) -> None:
+    process = AsyncMock(return_value="ok")
+    client.app.state.tools.process = process
+    r = client.post(
+        "/v1/responses",
+        json={"input": [{"role": "user", "content": "hello agent"}]},
+        headers=_auth(),
+    )
+    assert r.status_code == 200
+    assert process.await_args.args[0]["text"] == "hello agent"
+    assert process.await_args.args[0]["mode"] == "agent"
+
+
+def test_responses_empty_400(client: TestClient) -> None:
+    r = client.post("/v1/responses", json={"input": "   "}, headers=_auth())
+    assert r.status_code == 400
+
+
 def test_usage_records_and_reports(client: TestClient) -> None:
     # кілька викликів /v1 → лічильники ростуть
     client.get("/v1/models", headers=_auth())

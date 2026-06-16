@@ -81,6 +81,14 @@ class JobRequest(BaseModel):
     user: str | None = None
 
 
+class ResponsesRequest(BaseModel):
+    """OpenAI Responses API (агентний): input як рядок або список item'ів."""
+
+    model: str = "jarvis-agent"
+    input: str | list[dict[str, Any]]
+    user: str | None = None
+
+
 def _key_store(request: Request) -> Any:
     from .saas.api_keys import ApiKeyStore
 
@@ -347,6 +355,66 @@ async def get_job(
     if rec is None:
         raise HTTPException(status_code=404, detail="job not found")
     return _job_view(rec)
+
+
+def _responses_input_text(value: str | list[dict[str, Any]]) -> str:
+    """Витягує текст із Responses `input` (рядок або список item'ів)."""
+    if isinstance(value, str):
+        return value.strip()
+    last = ""
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if isinstance(content, str) and content.strip():
+            text = content.strip()
+        elif isinstance(content, list):
+            parts = [
+                str(c.get("text", "")).strip()
+                for c in content
+                if isinstance(c, dict) and c.get("text")
+            ]
+            text = " ".join(p for p in parts if p)
+        else:
+            text = ""
+        if text:
+            if item.get("role") == "user":
+                last = text
+            elif not last:
+                last = text
+    return last
+
+
+@router.post("/responses")
+async def responses(
+    request: Request,
+    body: ResponsesRequest,
+    _: None = Depends(require_scope("chat")),
+) -> dict[str, Any]:
+    """Агентний `/v1/responses` (AP-2.2) — мапа на агент-луп (mode=agent, tool-use)."""
+    text = _responses_input_text(body.input)
+    if not text:
+        raise HTTPException(status_code=400, detail="input required")
+    uid = _resolve_uid(request, body.user)
+    result = await request.app.state.tools.process({"user_id": uid, "text": text, "mode": "agent"})
+    rid = f"resp_{uuid.uuid4().hex[:24]}"
+    return {
+        "id": rid,
+        "object": "response",
+        "created_at": int(time.time()),
+        "model": body.model or "jarvis-agent",
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "id": f"msg_{uuid.uuid4().hex[:24]}",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": result, "annotations": []}],
+            }
+        ],
+        "output_text": result,
+        "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+    }
 
 
 @router.get("/usage")
