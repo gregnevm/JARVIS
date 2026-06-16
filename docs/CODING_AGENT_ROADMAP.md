@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.10 (2026-06-16)
+> **Версія:** 1.11 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -76,7 +76,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Редагування файлів | **8/10** | `code_edit` diff/apply + git-safety `.jarvis_backup` + транзакційний multi-file `code_edit_batch` (усе-або-нічого, dry-run) (CA-4.3/4.4); лишається rename/move з оновленням імпортів (CA-4.5) |
 | Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
-| Self-review | **4/10** | P9 teams (Reviewer) є як bg job, не в coding-лупі |
+| Self-review | **5/10** | `code_review` self-pass (diff→findings+verdict, CA-5.1); P9 teams (Reviewer) як bg job; авто-fix-перед-звітом — попереду |
 | UX (coding-специфічний) | **3/10** | Workbench загальний; немає diff-viewer, repo-tree, test-panel |
 | CLI / IDE | **1/10** | немає `jarvis code`; Continue лише як міст |
 | Модель | **4/10** | qwen2.5:7b слабка для складного multi-file; потрібна 14b+/cloud opt-in |
@@ -190,7 +190,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [ ] |
+| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [~] `AgentRunner.code_review` (diff → структуровані findings + verdict) + `POST /agent/code/review`; авто-fix перед звітом і P9-wiring — попереду |
 | CA-5.2 | Coder→Reviewer→Tester team-pipeline для coding-задач | Reuse `teams.py` | [ ] |
 | CA-5.3 | bg job type `coding_task` — довгі задачі з progress/cancel | Reuse `bg_jobs.py` + AM-2.2 | [ ] |
 | CA-5.4 | Subagent на під-задачу (напр. окремий файл) з budget_iters | Reuse `subagents.py` | [ ] |
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.11 | CA-5.1 (часткою) self-review pass `AgentRunner.code_review` (diff→findings+verdict) + `POST /agent/code/review` |
 | 2026-06-16 | 1.10 | CA-4.1 code-plan (`code_plan` + `POST /agent/code/plan`, file-targeted кроки) + CA-4.2 (один апрув на план через P3 flow) |
 | 2026-06-16 | 1.9 | CA-4.3/4.4 завершено: tool `code_edit_batch` (T1, confirm на запис, dry-run read-only) поверх `/fs/edit_batch` — повний контур транзакційної multi-file правки |
 | 2026-06-16 | 1.8 | CA-4.3/4.4 (host-side) транзакційний `/fs/edit_batch` (усе-або-нічого, dry-run, дедуп, `edit_batch_max`) + рефактор `_plan_edit`/`_write_planned` |

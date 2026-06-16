@@ -725,6 +725,63 @@ class AgentRunner:
         rec["kind"] = "code"
         return rec
 
+    async def code_review(
+        self, user_id: int, *, diff: str = "", context: str = ""
+    ) -> dict[str, Any]:
+        """Self-review pass (CA-5.1): unified diff → структуровані зауваження.
+
+        Повертає {summary, verdict: approve|changes_requested, findings:[{severity,
+        file, line, comment}]}. Будівельний блок для «fix перед звітом» і P9 Reviewer.
+        """
+        if not (diff or "").strip():
+            return {"summary": "Порожній diff — нема що рев'ювити.", "verdict": "skip", "findings": []}
+        ctx = f"\nКонтекст: {context}" if context else ""
+        prompt = (
+            "Зроби код-рев'ю наведеного unified diff. Шукай: баги, регресії, edge-cases, "
+            "відсутні перевірки, безпеку, читабельність. Поверни ЛИШЕ JSON:\n"
+            '{"summary":"...","verdict":"approve|changes_requested",'
+            '"findings":[{"severity":"low|medium|high","file":"шлях","line":0,"comment":"..."}]}'
+            f"{ctx}\n\nDiff:\n{diff[:8000]}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": "Ти прискіпливий код-рев'юер JARVIS. Відповідай лише валідним JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = (msg.get("content") or "").strip()
+        parsed = extract_json_object(content) or {}
+        raw = parsed.get("findings")
+        findings: list[dict[str, Any]] = []
+        for f in (raw if isinstance(raw, list) else [])[:30]:
+            if not isinstance(f, dict):
+                continue
+            try:
+                line = int(f.get("line") or 0)
+            except (TypeError, ValueError):
+                line = 0
+            sev = str(f.get("severity") or "medium").lower()
+            findings.append(
+                {
+                    "severity": sev if sev in ("low", "medium", "high") else "medium",
+                    "file": str(f.get("file") or "")[:200],
+                    "line": line,
+                    "comment": str(f.get("comment") or "")[:500],
+                }
+            )
+        verdict = str(parsed.get("verdict") or "").lower()
+        if verdict not in ("approve", "changes_requested"):
+            verdict = "changes_requested" if findings else "approve"
+        return {
+            "summary": str(parsed.get("summary") or content[:300] or "—"),
+            "verdict": verdict,
+            "findings": findings,
+        }
+
     async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:
         """Покрокове виконання схваленого плану (sync MVP, max 8 steps)."""
         from . import plans

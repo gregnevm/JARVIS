@@ -62,6 +62,12 @@ class PlanUserRequest(BaseModel):
     user_id: int
 
 
+class CodeReviewRequest(BaseModel):
+    user_id: int
+    diff: str
+    context: str = ""
+
+
 class FilePathRequest(BaseModel):
     user_id: int
     path: str

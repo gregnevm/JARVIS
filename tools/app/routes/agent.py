@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from jarvis_core.pipeline.handlers import screen_text
 
-from ..schemas import AgentRequest, PlanCreateRequest, PlanUserRequest
+from ..schemas import AgentRequest, CodeReviewRequest, PlanCreateRequest, PlanUserRequest
 from ._helpers import ndjson, require_found, require_text
 
 logger = logging.getLogger("jarvis.tools.agent_routes")
@@ -72,6 +72,17 @@ def register(router: APIRouter) -> None:
             return await request.app.state.agent.code_plan(req.user_id, text)
         except Exception as exc:  # noqa: BLE001
             logger.exception("agent code plan failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @router.post("/agent/code/review")
+    async def agent_code_review_ep(req: CodeReviewRequest, request: Request) -> dict[str, Any]:
+        """Self-review pass (CA-5.1): unified diff → структуровані зауваження."""
+        try:
+            return await request.app.state.agent.code_review(
+                req.user_id, diff=req.diff, context=req.context
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent code review failed")
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @router.get("/agent/plan/{plan_id}")
