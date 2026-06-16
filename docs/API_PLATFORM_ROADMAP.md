@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.5 (2026-06-16)
+> **Версія:** 1.6 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -182,8 +182,8 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-5.1 | OpenAPI-спека для `/v1` + `/saas/api/*` | `/openapi.json` повна | [ ] |
-| AP-5.2 | Python SDK (thin, або «use openai with base_url») | README quickstart | [ ] |
+| AP-5.1 | OpenAPI-спека для `/v1` + `/saas/api/*` | `/openapi.json` повна | [x] FastAPI `/openapi.json` містить весь `/v1`+`/saas/api/*` (тест `test_openapi_schema`) |
+| AP-5.2 | Python SDK (thin, або «use openai with base_url») | README quickstart | [x] `docs/API_QUICKSTART.md` — OpenAI SDK drop-in (`base_url`+`api_key`) |
 | AP-5.3 | JS/TS SDK (або openai-node інструкція) | README quickstart | [ ] |
 | AP-5.4 | Docs-сайт / `docs/api/` — endpoints, auth, errors, rate-limits | Згенеровано з OpenAPI | [ ] |
 | AP-5.5 | Postman/insomnia колекція | Експорт | [ ] |
@@ -259,6 +259,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.6 | AP-5.1/5.2 OpenAPI повна + `API_QUICKSTART.md` (OpenAI SDK drop-in) |
 | 2026-06-16 | 1.5 | AP-2.2 агентний `/v1/responses` (mode=agent, tool-use) |
 | 2026-06-16 | 1.4 | AP-2.4 per-key usage metering (`GET /v1/usage`) |
 | 2026-06-16 | 1.3 | AP-2.5 async `/v1/jobs` (POST+GET) на bg_jobs |
