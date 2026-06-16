@@ -29,6 +29,7 @@
   "GET /teams",
   "GET /teams/{team_id}",
   "POST /agent",
+  "POST /agent/code/fix",
   "POST /agent/plan",
   "POST /agent/plan/{plan_id}/approve",
   "POST /agent/plan/{plan_id}/deny",

@@ -111,6 +111,11 @@ class BgJobCreate(BaseModel):
     mode: str = "auto"
     job_type: str = "agent_turn"
     max_hops: int = 3
+    # coding_task (CA-5.3): раннер + аргументи + cwd + стеля раундів fix-петлі.
+    exe: str = ""
+    args: list[str] | None = None
+    path: str = ""
+    max_rounds: int = 0
 
 
 class ResearchRunRequest(BaseModel):

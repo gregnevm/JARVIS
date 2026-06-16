@@ -144,6 +144,43 @@ async def _handle_cursor_task(
         await tools.finish_bg_job(job_id, error=str(exc)[:500], status="failed")
 
 
+async def _handle_coding_task(
+    tools: ToolsClient, tg: TelegramClient, job_id: str, uid: int, payload: dict[str, Any]
+) -> None:
+    """CA-5.3: довга coding-задача → `/agent/code/fix` (fix_tests) як headless-прогін."""
+    exe = str(payload.get("exe") or "").strip()
+    if not uid or not exe:
+        await tools.finish_bg_job(job_id, error="invalid coding payload", status="failed")
+        return
+    raw_args = payload.get("args")
+    args = [str(a) for a in raw_args] if isinstance(raw_args, list) else []
+    path = str(payload.get("path") or "")
+    task = str(payload.get("task") or "")
+    max_rounds = int(payload.get("max_rounds") or 0)
+    try:
+        result = await tools.run_coding_task(
+            job_id, uid, exe=exe, args=args, path=path, task=task, max_rounds=max_rounds
+        )
+        if result.get("error"):
+            await tools.finish_bg_job(job_id, error=str(result["error"])[:500], status="failed")
+            await tg.send_message(uid, f"❌ Coding {job_id}: {result['error']}")
+            return
+        status = str(result.get("status") or "?")
+        report = str(result.get("report") or "")[:3200]
+        summary = f"status={status} rounds={result.get('rounds', 0)}\n{report}"
+        # policy_denied/stuck/no_progress — не помилка інфраструктури, лишаємо job done зі звітом.
+        await tools.finish_bg_job(job_id, result=summary[:3500], status="done")
+        icon = "✅" if status in ("fixed", "already_green") else "⚠️"
+        await tg.send_message(
+            uid,
+            f"{icon} Coding <code>{job_id}</code>:\n{summary}",
+            parse_mode="HTML",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("bg coding job %s failed: %s", job_id, exc)
+        await tools.finish_bg_job(job_id, error=str(exc)[:500], status="failed")
+
+
 async def _handle_agent_turn(
     tools: ToolsClient, tg: TelegramClient, job_id: str, uid: int, payload: dict[str, Any]
 ) -> None:
@@ -172,6 +209,7 @@ _JOB_HANDLERS: dict[str, JobHandler] = {
     "agent_team": _handle_agent_team,
     "orchestrator": _handle_orchestrator,
     "cursor_task": _handle_cursor_task,
+    "coding_task": _handle_coding_task,
     "agent_turn": _handle_agent_turn,
 }
 
