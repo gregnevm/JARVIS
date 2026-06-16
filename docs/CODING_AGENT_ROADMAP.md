@@ -162,7 +162,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | CA-3.2 | Fix-loop у `AgentRunner`: fail → локалізація файлу → `code_edit` → re-run | Max N ітерацій (config) | [x] `AgentRunner.fix_tests` — виділена петля «тест→правка→тест», `coding_fix_max_rounds`, авторитетний re-run як гейт, стоп green/max/no-progress |
 | CA-3.3 | Build/lint tool (mypy/ruff/tsc) з тим самим патерном | Структурований вивід | [x] `check_tools.run_lint` (mypy/ruff/generic парсер) |
 | CA-3.4 | Stop-conditions: green / max-iters / no-progress (однаковий fail двічі) | Graceful звіт | [x] `fix_loop.note_test_result` — per-user fail-сигнатура (Redis, TTL); повтор → підказка «зміни підхід / зупинись»; max-iters в агент-лупі |
-| CA-3.5 | Golden trace: навмисно зламаний тест → агент полагодив до green | `tools/tests/golden/` | [~] детермінований golden парсингу (`check_output.json`); live-fix eval — попереду |
+| CA-3.5 | Golden trace: навмисно зламаний тест → агент полагодив до green | `tools/tests/golden/` | [x] `golden/fix_tests.json` + `test_fix_tests_golden.py` — live-fix через СПРАВЖНІЙ run_tests-парсер (зламано→правка→green / already_green / no_progress), host-agent `/cli` замокано |
 
 **Вихід CA-3:** «полагодь падіння в `tests/`» → агент ітерує до green або чесно звітує, що застряг.
 
