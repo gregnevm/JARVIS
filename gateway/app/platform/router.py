@@ -22,6 +22,7 @@ from . import hooks as platform_hooks
 from . import teams as platform_teams
 from . import orchestrator as platform_orchestrator
 from . import improve as platform_improve
+from . import developer as platform_developer
 from .auth import PlatformAuth, require_platform_auth, resolve_context
 
 router = APIRouter()
@@ -74,5 +75,6 @@ for _mod in (
     platform_teams,
     platform_orchestrator,
     platform_improve,
+    platform_developer,
 ):
     _mod.register(router)
