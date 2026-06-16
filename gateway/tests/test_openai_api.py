@@ -159,3 +159,47 @@ def test_error_envelope_on_disabled_404(monkeypatch):
         )
     assert r.status_code == 404
     assert r.json()["error"]["type"] == "invalid_request_error"
+
+
+# --- /v1/jobs async (AP-2.5) -------------------------------------------------
+
+def test_create_job(client):
+    client.app.state.tools.create_bg_job = AsyncMock(
+        return_value={"id": "job1", "status": "queued", "progress": 0, "created_at": 123}
+    )
+    r = client.post(
+        "/v1/jobs",
+        json={"input": "research X", "mode": "agent"},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == "job1" and body["object"] == "job" and body["status"] == "queued"
+    client.app.state.tools.create_bg_job.assert_awaited_once()
+
+
+def test_create_job_empty_input_400(client):
+    r = client.post("/v1/jobs", json={"input": " "}, headers={"Authorization": "Bearer sk-test"})
+    assert r.status_code == 400
+    assert r.json()["error"]["type"] == "invalid_request_error"
+
+
+def test_get_job(client):
+    client.app.state.tools.get_bg_job = AsyncMock(
+        return_value={"id": "job1", "status": "done", "progress": 100, "result": "ok", "created_at": 1}
+    )
+    r = client.get("/v1/jobs/job1", headers={"Authorization": "Bearer sk-test"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "done" and r.json()["result"] == "ok"
+
+
+def test_get_job_not_found_404(client):
+    client.app.state.tools.get_bg_job = AsyncMock(return_value=None)
+    r = client.get("/v1/jobs/missing", headers={"Authorization": "Bearer sk-test"})
+    assert r.status_code == 404
+    assert r.json()["error"]["type"] == "invalid_request_error"
+
+
+def test_jobs_require_auth(client):
+    r = client.post("/v1/jobs", json={"input": "x"}, headers={"Authorization": "Bearer wrong"})
+    assert r.status_code == 401

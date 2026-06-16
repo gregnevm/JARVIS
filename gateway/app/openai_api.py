@@ -78,6 +78,14 @@ class EmbeddingsRequest(BaseModel):
     encoding_format: str | None = None  # лише 'float' підтримується; поле ігнорується
 
 
+class JobRequest(BaseModel):
+    """Async-задача (AP-2.5) поверх bg_jobs. input — текст задачі; mode — auto|agent|…"""
+
+    input: str = ""
+    mode: str = "auto"
+    user: str | None = None
+
+
 def _auth_bearer(request: Request) -> None:
     if not settings.enable_openai_api:
         raise HTTPException(status_code=404, detail="OpenAI API disabled")
@@ -92,16 +100,17 @@ def _auth_bearer(request: Request) -> None:
         raise HTTPException(status_code=401, detail="invalid api key")
 
 
-def _resolve_user_id(request: Request, body: ChatCompletionRequest) -> int:
+def _resolve_uid(request: Request, user: str | None = None) -> int:
+    """user_id з заголовка X-JARVIS-User-Id → body.user → дефолт → перший allowed."""
     hdr = request.headers.get("x-jarvis-user-id") or request.headers.get("X-JARVIS-User-Id")
     if hdr:
         try:
             return int(hdr.strip())
         except ValueError:
             pass
-    if body.user:
+    if user:
         try:
-            return int(body.user)
+            return int(user)
         except ValueError:
             pass
     default = settings.openai_default_user_id
@@ -111,6 +120,10 @@ def _resolve_user_id(request: Request, body: ChatCompletionRequest) -> int:
     if ids:
         return next(iter(ids))
     raise HTTPException(status_code=400, detail="user_id required (X-JARVIS-User-Id header)")
+
+
+def _resolve_user_id(request: Request, body: ChatCompletionRequest) -> int:
+    return _resolve_uid(request, body.user)
 
 
 def _extract_text(messages: list[ChatMessage]) -> str:
@@ -234,6 +247,48 @@ async def embeddings(
         "model": body.model or "nomic-embed-text",
         "usage": {"prompt_tokens": 0, "total_tokens": 0},
     }
+
+
+def _job_view(rec: dict[str, Any]) -> dict[str, Any]:
+    """bg_job-запис → OpenAI-подібний job-обʼєкт."""
+    return {
+        "id": rec.get("id"),
+        "object": "job",
+        "status": rec.get("status"),
+        "progress": rec.get("progress", 0),
+        "result": rec.get("result", ""),
+        "error": rec.get("error", ""),
+        "created": rec.get("created_at"),
+    }
+
+
+@router.post("/jobs")
+async def create_job(
+    request: Request,
+    body: JobRequest,
+    _: None = Depends(_auth_bearer),
+) -> dict[str, Any]:
+    """Поставити async-задачу (AP-2.5) — повертає job id для опитування."""
+    text = (body.input or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="input required")
+    uid = _resolve_uid(request, body.user)
+    rec = await request.app.state.tools.create_bg_job(uid, text, (body.mode or "auto").strip())
+    return _job_view(rec)
+
+
+@router.get("/jobs/{job_id}")
+async def get_job(
+    request: Request,
+    job_id: str,
+    _: None = Depends(_auth_bearer),
+) -> dict[str, Any]:
+    """Статус/результат async-задачі (AP-2.5)."""
+    uid = _resolve_uid(request)
+    rec = await request.app.state.tools.get_bg_job(job_id, uid)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return _job_view(rec)
 
 
 @router.get("/models")
