@@ -32,7 +32,10 @@ _PLAN_MAX_STEPS = 8
 
 # CA-3.2 fix-orchestration: вузький набір coding-інструментів для петлі «тест→правка→тест».
 _FIX_TOOLS = frozenset(
-    {"code_read", "repo_grep", "repo_tree", "repo_symbols", "code_edit", "run_tests", "run_lint"}
+    {
+        "code_read", "repo_grep", "repo_tree", "repo_symbols", "repo_refs",
+        "code_edit", "run_tests", "run_lint",
+    }
 )
 _FIX_INNER_STEPS = 4  # модельних кроків (read/grep/edit) у межах одного раунду
 
