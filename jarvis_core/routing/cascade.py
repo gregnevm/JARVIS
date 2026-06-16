@@ -41,6 +41,17 @@ _BROWSER_RE = re.compile(
     r"(відкрий\s+https?://|browser_open|прочитай\s+сторінк|заголовок\s+сторінк)",
     re.IGNORECASE,
 )
+# Вузький патерн «зроби скріншот» — для прямого shortcut у gateway (capture_screenshot
+# без повного агент-лупу). Живе тут (routing = «мозок»), не в транспортному шарі (S3).
+_SCREENSHOT_RE = re.compile(
+    r"скріншот|screenshot|скрін\s*екран|зроби\s+скрін",
+    re.IGNORECASE,
+)
+
+
+def is_screenshot_request(text: str) -> bool:
+    """Чи це прямий запит «зроби скріншот» (gateway-shortcut на capture_screenshot)."""
+    return bool(_SCREENSHOT_RE.search(text or ""))
 
 
 @dataclass(frozen=True)

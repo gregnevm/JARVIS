@@ -163,6 +163,22 @@ def test_extract_message_variants():
     assert router._extract_message({}) is None
 
 
+# R5 — транспортна класифікація апдейту (без бізнес-логіки)
+def test_classify_update_types():
+    assert router.classify_update({"callback_query": {"id": "c"}}) == ("callback_query", {"id": "c"})
+    assert router.classify_update({"inline_query": {"id": "i"}}) == ("inline_query", {"id": "i"})
+    assert router.classify_update({"message_reaction": {"x": 1}}) == ("message_reaction", {"x": 1})
+    assert router.classify_update({"message": {"text": "hi"}}) == ("message", {"text": "hi"})
+    assert router.classify_update({"edited_message": {"text": "e"}}) == ("message", {"text": "e"})
+    assert router.classify_update({}) == ("unknown", None)
+
+
+def test_classify_update_precedence():
+    # callback_query має пріоритет над message у тому ж апдейті
+    kind, data = router.classify_update({"callback_query": {"id": "c"}, "message": {"text": "hi"}})
+    assert kind == "callback_query" and data == {"id": "c"}
+
+
 def test_extract_audio_via_media():
     from app.media import extract_audio_media
 
