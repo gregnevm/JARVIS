@@ -205,6 +205,10 @@
         <button type="button" class="navitem" data-tab="models" role="tab" aria-selected="false"><span class="ic">📦</span> Моделі / Models</button>
         <button type="button" class="navitem" data-tab="improve" role="tab" aria-selected="false"><span class="ic">✨</span> Покращення / Improve</button>
       </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Платформа API / Developer</div>
+        <button type="button" class="navitem" data-tab="developer" role="tab" aria-selected="false"><span class="ic">🔑</span> API ключі / API Keys</button>
+      </div>
     </nav>
     <div class="side-foot">
       Self-hosted · без зовнішніх API.<br />
@@ -240,6 +244,7 @@
     <section class="panel" id="panel-users" role="tabpanel"></section>
     <section class="panel" id="panel-models" role="tabpanel"></section>
     <section class="panel" id="panel-improve" role="tabpanel"></section>
+    <section class="panel" id="panel-developer" role="tabpanel"></section>
   </main>
 </div>
 <div class="drawer-backdrop" id="projDrawerBg"></div>
@@ -270,6 +275,7 @@ const TITLES = {
   subagents: "Subagents", teams: lbl("Команди", "Teams"), hooks: "Hooks",
   logs: lbl("Логи", "Logs"), settings: lbl("Налаштування", "Settings"), users: lbl("Доступ", "Access"),
   models: lbl("Моделі", "Models"), improve: lbl("Покращення", "Improve"),
+  developer: lbl("API ключі", "API Keys"),
 };
 
 let pendingAction = null;
@@ -1447,11 +1453,80 @@ async function improveReview(action) {
   } catch (e) { showErr(e.message); }
 }
 
+// ---------------- Developer / API Keys (AP-3) ----------------
+let devLastKey = null;
+async function renderDeveloper() {
+  const el = document.getElementById("panel-developer");
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  let d, u;
+  try { d = await api("/platform/api/developer/keys"); }
+  catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  try { u = await api("/platform/api/developer/usage?key_id=root&days=7"); }
+  catch (e) { u = { total_requests: 0, by_endpoint: {} }; }
+
+  const scopes = ["chat", "embeddings", "jobs", "models"];
+  let h = '<div class="section">' + lbl("Створити ключ", "Create key") + '</div>';
+  h += '<div class="card wide"><div class="toolbar">' +
+    '<input id="devName" placeholder="' + lbl("назва", "name") + '" />' +
+    scopes.map((s) => `<label class="sm"><input type="checkbox" class="devScope" value="${s}" checked> ${s}</label>`).join(" ") +
+    '<button type="button" id="devCreate">+ ' + lbl("створити", "create") + '</button></div>';
+  if (devLastKey) {
+    h += '<div class="card" style="margin-top:8px;border-color:var(--acc)"><b>' +
+      lbl("Скопіюй зараз — більше не покажемо:", "Copy now — shown only once:") +
+      '</b><div class="mono" style="word-break:break-all;margin-top:4px">' + esc(devLastKey) + '</div></div>';
+  }
+  h += '</div>';
+
+  const keys = d.data || [];
+  h += '<div class="section">' + lbl("Ключі", "Keys") + ' (' + keys.length + ')</div>';
+  if (!keys.length) h += '<div class="empty">' + lbl("Немає ключів", "No keys yet") + '</div>';
+  else {
+    let tbl = "<table><tr><th>" + lbl("Назва", "Name") + "</th><th>Prefix</th><th>Scopes</th><th>" +
+      lbl("Стан", "Status") + "</th><th></th></tr>";
+    for (const k of keys) {
+      const badge = k.revoked
+        ? '<span class="badge">' + lbl("відкликано", "revoked") + '</span>'
+        : '<span class="badge on">' + lbl("активний", "active") + '</span>';
+      const act = k.revoked ? "" :
+        `<button type="button" data-revoke="${esc(k.id)}">` + lbl("відкликати", "revoke") + `</button>`;
+      tbl += `<tr><td>${esc(k.name || "—")}</td><td class="mono">${esc(k.prefix)}…</td>` +
+        `<td class="sm">${esc((k.scopes || []).join(", "))}</td><td>${badge}</td>` +
+        `<td style="text-align:right">${act}</td></tr>`;
+    }
+    h += '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+  }
+  h += '<div class="section">Usage — root, 7d</div>';
+  h += '<div class="grid">' + card(lbl("Запитів", "Requests"), String(u.total_requests || 0), "sm") + '</div>';
+  el.innerHTML = h;
+  devLastKey = null;  // show-once
+  el.querySelector("#devCreate").addEventListener("click", devCreate);
+  el.querySelectorAll("[data-revoke]").forEach((b) =>
+    b.addEventListener("click", () => devRevoke(b.dataset.revoke)));
+}
+async function devCreate() {
+  const name = (document.getElementById("devName").value || "").trim();
+  const scopes = [...document.querySelectorAll(".devScope:checked")].map((c) => c.value);
+  try {
+    const r = await api("/platform/api/developer/keys", { method: "POST", body: { name, scopes } });
+    devLastKey = r.key;
+    toast(lbl("ключ створено", "key created"));
+    await renderDeveloper();
+  } catch (e) { showErr(e.message); }
+}
+function devRevoke(id) {
+  confirmModal(lbl("Відкликати ключ?", "Revoke key?"),
+    lbl("Ключ перестане працювати негайно.", "The key stops working immediately."),
+    async () => {
+      try { await api("/platform/api/developer/keys/" + encodeURIComponent(id), { method: "DELETE" }); toast(lbl("відкликано", "revoked")); await renderDeveloper(); }
+      catch (e) { showErr(e.message); }
+    });
+}
+
 const RENDER = { overview: renderOverview, workbench: renderWorkbench, memory: renderMemory,
   projects: renderProjects, jobs: renderJobs, planning: renderPlanning, research: renderResearch,
   mcp: renderMcp, connectors: renderConnectors, skills: renderSkills, subagents: renderSubagents,
   teams: renderTeams, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers,
-  models: renderModels, improve: renderImprove };
+  models: renderModels, improve: renderImprove, developer: renderDeveloper };
 
 const initTab = (location.hash || "#overview").slice(1);
 switchTab(TITLES[initTab] ? initTab : "overview", false);

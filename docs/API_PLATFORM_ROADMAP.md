@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.8 (2026-06-16)
+> **Версія:** 1.9 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -152,7 +152,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-3.1 | Tab **API Keys** — create/list/revoke, show-once | `platform.html` + `saas/api_keys` | [~] data-шар є: `/platform/api/developer/keys` (GET/POST/DELETE, panel-auth); HTML-tab — попереду |
+| AP-3.1 | Tab **API Keys** — create/list/revoke, show-once | `platform.html` + `saas/api_keys` | [x] nav-таб «API ключі» у `platform.html`: create (scopes) + show-once + list + revoke; data — `/platform/api/developer/keys` |
 | AP-3.2 | Tab **Usage** — графіки токенів/запитів, per-key breakdown | `/v1/usage` charts | [~] data-шар є: `/platform/api/developer/usage?key_id=&days=`; графіки — попереду |
 | AP-3.3 | Tab **Playground** — `/v1` запит із UI (model, messages, stream) | Reuse Workbench SSE | [ ] |
 | AP-3.4 | Tab **API Logs** — останні запити (status, latency, tokens) | request_id трейс | [ ] |
@@ -259,6 +259,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.9 | AP-3.1 console tab «API Keys» (create/list/revoke/show-once) у platform.html |
 | 2026-06-16 | 1.8 | AP-3.1/3.2 developer-console data-шар (`/platform/api/developer/*`) |
 | 2026-06-16 | 1.7 | AP-4.1 per-key rate-limit (429 `rate_limit_error`, opt-in) |
 | 2026-06-16 | 1.6 | AP-5.1/5.2 OpenAPI повна + `API_QUICKSTART.md` (OpenAI SDK drop-in) |

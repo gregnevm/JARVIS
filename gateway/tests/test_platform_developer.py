@@ -59,6 +59,12 @@ def test_requires_auth(client: TestClient) -> None:
     assert client.get("/platform/api/developer/keys").status_code == 401
 
 
+def test_console_page_has_developer_tab(client: TestClient) -> None:
+    html = client.get("/platform").text
+    assert 'data-tab="developer"' in html and 'id="panel-developer"' in html
+    assert "/platform/api/developer/keys" in html  # render logic wired
+
+
 def test_console_key_lifecycle(client: TestClient) -> None:
     # create
     r = client.post(
