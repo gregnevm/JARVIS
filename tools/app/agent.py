@@ -717,16 +717,22 @@ class AgentRunner:
                 "steps": [{"file": "", "action": text[:200], "rationale": text, "risk": "medium"}],
                 "risks": [],
             }
+        # CA-4.2: у вікні session-trust (як computer) план авто-апрувиться — без
+        # ручного ✅; поза вікном — звичайний pending + confirm-маркер.
+        from .computer_trust import trust_level
+
+        auto = (await trust_level(user_id)) is not None
         rec = await plans.create_plan(
             user_id,
             summary=str(parsed.get("summary") or text[:500]),
             steps=parsed.get("steps") or [],
             risks=parsed.get("risks") if isinstance(parsed.get("risks"), list) else [],
             source_text=text,
-            status="pending",
+            status="approved" if auto else "pending",
         )
-        rec["marker"] = PLAN_MARKER.format(id=rec["id"])
+        rec["marker"] = "" if auto else PLAN_MARKER.format(id=rec["id"])
         rec["kind"] = "code"
+        rec["auto_approved"] = auto
         return rec
 
     async def code_review(

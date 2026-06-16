@@ -175,7 +175,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
 | CA-4.1 | `POST /agent/code/plan` — кроки з `{file, action, rationale, risk}` | JSON schema (розширення P3) | [x] `AgentRunner.code_plan` + route; `_normalize_steps` зберігає code-поля (file/action/rationale/risk) |
-| CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [~] один апрув на план через P3 approve-flow + маркер (Redis TTL); session-trust auto-approve — попереду |
+| CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [x] один апрув на план (P3 approve-flow + маркер); у вікні session-trust (`computer_trust`) — авто-апрув без ✅ (`auto_approved`, маркер порожній) |
 | CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [x] host-agent `/fs/edit_batch` (план-усіх→запис-усіх, відкат із пам'яті, дедуп, `edit_batch_max`) + tool `code_edit_batch` (T1, mutating→confirm, owner-gated) |
 | CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [x] `code_edit_batch(dry_run=true)` — усі diff-и без запису, read-only (без confirm) |
 | CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [x] word-boundary `mode='rename_symbol'` (host-agent, безпечно — не чіпає довші імена) composable: `repo_refs` → `code_edit_batch(rename_symbol, dry_run)` → один апрув; golden у `hostagent/tests/test_fs_edit.py` |
