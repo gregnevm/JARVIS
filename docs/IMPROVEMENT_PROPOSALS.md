@@ -119,7 +119,7 @@ deletions), відкрито **PR #6** (https://github.com/gregnevm/JARVIS/pull/
 розпотрошення робочого коду — правильний хід був ескалювати рішення користувачу
 (`AskUserQuestion`), а не продовжувати відкладати чи форсувати власний план.
 
-### H. Архітектурний дрейф: `jarvis_core/` створено, але агент-луп його обходить · 🆕 відкрито (2026-06-16)
+### H. Архітектурний дрейф: `jarvis_core/` створено, але агент-луп його обходить · ✅ R1–R5 виконано (2026-06-16)
 **Чому пропозиція виникла:** запит "проаналізуй архітектуру та запропонуй рефактор".
 Повний обхід `tools/app/agent.py` (907 рядків), `gateway/app/tools_client.py` (873),
 `gateway/app/router.py` (608), `jarvis_core/*` та config/auth усіх 6 сервісів. Архітектура
@@ -171,13 +171,15 @@ teams/improve, ~20). Будь-яка нова фіча tools роздуває ц
 | R2 ✅ | Додати streaming через facade, щоб `run_stream` теж ішов через `JARVIS`, а не повз нього | **зроблено (2026-06-16):** `JARVIS.chat_stream()` — єдина точка входу для стріму, safety-скрин спільний із `SafetyHandler` (`screen_text`); `routes/agent.py:/agent/stream` тепер кличе facade, а не `agent.run_stream` напряму. Маршрутизація лишається в `run_stream` (поведінка незмінна). Повний CoR-стрім (Handler→async-gen) свідомо відкладено (YAGNI). 5 нових тестів facade |
 | R3 ✅ | Розбити `ToolsClient` на 4 доменні mixin-и (`Agent`/`Computer`/`Jobs`/`Orchestrator`) зі спільною базою; `ToolsClient` лишається тонким агрегатором | **зроблено (2026-06-16):** `tools_client.py` 873→~30 рядків (агрегатор); HTTP-плумбінг у `tools_client_base.ToolsClientBase`; методи у `tools_client_{agent,computer,jobs,orchestrator}.py`. Публічний API (усі методи + `extract_text`/`FALLBACK`) незмінний — call-sites не чіпались. Контракт-тест навчено читати всі split-файли; усі 268 gateway-тестів green |
 | R4 ✅ | Замінити ручний парсинг у `gateway/config.py` на `parse_comma_separated_ids`; винести `_SCREENSHOT_RE` з транспорту в `jarvis_core/routing` | **зроблено (2026-06-16):** 3 копії split-loop у `gateway/config.py` → `parse_comma_separated_ids`; `is_screenshot_request()` тепер у `jarvis_core/routing/cascade.py` (S3: intent-патерн поза транспортом), gateway імпортує. `tools/config` properties — пропущено (tools уже резолвить ID через helper, YAGNI). `BaseServiceSettings` — свідомо НЕ роблено: додало б pydantic у `jarvis_core` і зламало б «core dependency-light» заради 1-рядкового `SettingsConfigDict` (P6). 5 нових тестів; mypy strict |
-| R5 | `extract_telegram_update(raw) → (event_type, normalized)` + dispatch; `handle_update` стає ~30 рядків | розділення транспорт↔логіка, тестованість кожного handler-а окремо |
+| R5 ✅ | `classify_update(raw) → (kind, data)` + dispatch; `handle_update` стає тонким диспетчером, message-логіка — в `_handle_message` | **зроблено (2026-06-16):** транспортна класифікація відділена від обробки; `handle_update` 196→~20 рядків (диспетч), решта в `_handle_message`. Поведінка незмінна (всі 17 router-тестів green), `classify_update` чистий і покритий окремо (2 тести) |
 
 **Пріоритет:** R1 (найвищий ROI — три копії в критичному шляху) → R2 → R4 → R3 → R5.
 **DoD:** кожна фаза — окремий PR, рефактор без зміни поведінки, `mypy` strict + `pytest`
 по відповідних сервісах green, нові юніт-тести на витягнуту логіку (`ToolLoop`, parser).
-**Статус:** реалізація фазами. ✅ R1 (єдиний tool-loop) · ✅ R2 (стрім через facade) ·
-✅ R4 (config/intent у `jarvis_core`) · ✅ R3 (ToolsClient → доменні mixin-и). Лишилось: R5.
+**Статус:** ✅ **усі фази виконано (2026-06-16).** R1 (єдиний tool-loop) · R2 (стрім через
+facade) · R3 (ToolsClient → доменні mixin-и) · R4 (config/intent у `jarvis_core`) ·
+R5 (транспорт↔логіка в gateway-router). Усе без зміни поведінки, mypy strict + тести green
+посервісно. `BaseServiceSettings` свідомо НЕ робили (тримаємо `jarvis_core` dependency-light).
 
 ---
 
