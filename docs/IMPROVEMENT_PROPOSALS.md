@@ -169,7 +169,7 @@ teams/improve, ~20). Будь-яка нова фіча tools роздуває ц
 |---|-------|-------|
 | R1 ✅ | Витягти єдиний `ToolLoop` у `jarvis_core/`; три копії в `agent.py` стають варіантами (sync/stream/fix) над ним | **зроблено (2026-06-16):** `jarvis_core/agent/tool_loop.py` — одна петля; `_agent`/`_agent_events`/`_fix_round_edit` тепер тонкі споживачі `run_tool_loop`. Поведінка незмінна (всі agent-тести green), tool-loop single-sourced; 10 нових юніт-тестів engine на mocked-backend |
 | R2 ✅ | Додати streaming через facade, щоб `run_stream` теж ішов через `JARVIS`, а не повз нього | **зроблено (2026-06-16):** `JARVIS.chat_stream()` — єдина точка входу для стріму, safety-скрин спільний із `SafetyHandler` (`screen_text`); `routes/agent.py:/agent/stream` тепер кличе facade, а не `agent.run_stream` напряму. Маршрутизація лишається в `run_stream` (поведінка незмінна). Повний CoR-стрім (Handler→async-gen) свідомо відкладено (YAGNI). 5 нових тестів facade |
-| R3 | Розбити `ToolsClient` на 4 фасади (`Agent`/`Computer`/`Jobs`/`Orchestrator`) зі спільним `_request`; `ToolsClient` лишається тонким агрегатором | усуває god-object, зворотна сумісність збережена |
+| R3 ✅ | Розбити `ToolsClient` на 4 доменні mixin-и (`Agent`/`Computer`/`Jobs`/`Orchestrator`) зі спільною базою; `ToolsClient` лишається тонким агрегатором | **зроблено (2026-06-16):** `tools_client.py` 873→~30 рядків (агрегатор); HTTP-плумбінг у `tools_client_base.ToolsClientBase`; методи у `tools_client_{agent,computer,jobs,orchestrator}.py`. Публічний API (усі методи + `extract_text`/`FALLBACK`) незмінний — call-sites не чіпались. Контракт-тест навчено читати всі split-файли; усі 268 gateway-тестів green |
 | R4 ✅ | Замінити ручний парсинг у `gateway/config.py` на `parse_comma_separated_ids`; винести `_SCREENSHOT_RE` з транспорту в `jarvis_core/routing` | **зроблено (2026-06-16):** 3 копії split-loop у `gateway/config.py` → `parse_comma_separated_ids`; `is_screenshot_request()` тепер у `jarvis_core/routing/cascade.py` (S3: intent-патерн поза транспортом), gateway імпортує. `tools/config` properties — пропущено (tools уже резолвить ID через helper, YAGNI). `BaseServiceSettings` — свідомо НЕ роблено: додало б pydantic у `jarvis_core` і зламало б «core dependency-light» заради 1-рядкового `SettingsConfigDict` (P6). 5 нових тестів; mypy strict |
 | R5 | `extract_telegram_update(raw) → (event_type, normalized)` + dispatch; `handle_update` стає ~30 рядків | розділення транспорт↔логіка, тестованість кожного handler-а окремо |
 
@@ -177,7 +177,7 @@ teams/improve, ~20). Будь-яка нова фіча tools роздуває ц
 **DoD:** кожна фаза — окремий PR, рефактор без зміни поведінки, `mypy` strict + `pytest`
 по відповідних сервісах green, нові юніт-тести на витягнуту логіку (`ToolLoop`, parser).
 **Статус:** реалізація фазами. ✅ R1 (єдиний tool-loop) · ✅ R2 (стрім через facade) ·
-✅ R4 (config/intent у `jarvis_core`). Далі за пріоритетом: R3 → R5.
+✅ R4 (config/intent у `jarvis_core`) · ✅ R3 (ToolsClient → доменні mixin-и). Лишилось: R5.
 
 ---
 
