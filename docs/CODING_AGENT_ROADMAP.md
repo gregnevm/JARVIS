@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.15 (2026-06-16)
+> **Версія:** 1.16 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -76,7 +76,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Редагування файлів | **9/10** | `code_edit` diff/apply + git-safety + транзакційний multi-file `code_edit_batch` (dry-run) + word-boundary `rename_symbol` (CA-4.3/4.4/4.5); лишається інтеграція з повним symbol-графом |
 | Repo-контекст | **8/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), крос-файлові посилання (repo_refs), scoped-RAG + token-бюджет; повний symbol-граф із типами — попереду |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
-| Self-review | **5/10** | `code_review` self-pass (diff→findings+verdict, CA-5.1); P9 teams (Reviewer) як bg job; авто-fix-перед-звітом — попереду |
+| Self-review | **7/10** | `code_review` self-pass + інтеграція у `fix_tests` (review diff-ів правок після green, CA-5.1); Coder→Reviewer→Tester team (CA-5.2); глибша авто-fix-петля — опційно |
 | UX (coding-специфічний) | **3/10** | Workbench загальний; немає diff-viewer, repo-tree, test-panel |
 | CLI / IDE | **4/10** | `jarvis code` CLI (run/plan/review/fix, `app/cli.py`) + key/base auth (CA-6.1/6.2); IDE-міст і Platform tab — попереду |
 | Модель | **4/10** | qwen2.5:7b слабка для складного multi-file; потрібна 14b+/cloud opt-in |
@@ -190,7 +190,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [~] `AgentRunner.code_review` (diff → структуровані findings + verdict) + `POST /agent/code/review`; авто-fix перед звітом і P9-wiring — попереду |
+| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [x] `AgentRunner.code_review` + `POST /agent/code/review`; `fix_tests` після green збирає diff-и правок і робить self-review (`review` у звіті); глибша P9-інтеграція — опційно |
 | CA-5.2 | Coder→Reviewer→Tester team-pipeline для coding-задач | Reuse `teams.py` | [x] `teams.CODING_ROLES` + `tester` роль; `/teams/spawn {kind:"coding"}` → Coder→Reviewer→Tester |
 | CA-5.3 | bg job type `coding_task` — довгі задачі з progress/cancel | Reuse `bg_jobs.py` + AM-2.2 | [~] job type `coding_task` (jarvis_core) + `bg_jobs.create_coding_job` + виконавець `POST /agent/code/fix` (fix_tests); лишається dispatch у gateway-воркері |
 | CA-5.4 | Subagent на під-задачу (напр. окремий файл) з budget_iters | Reuse `subagents.py` | [x] `spawn_subagent` tool (P8): делегує під-задачу з `budget_iters` 1–8 → `create_subagent_job` |
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.16 | CA-5.1 завершено: `fix_tests` після green збирає diff-и правок і робить self-review (`review` у звіті) |
 | 2026-06-16 | 1.15 | CA-6.1/6.2 `jarvis code` CLI (`app/cli.py`: run/plan/review/fix + key/base auth); CA-5.3 (часткою) coding_task job type + `/agent/code/fix`; CA-5.4 ✅ (spawn_subagent) |
 | 2026-06-16 | 1.14 | CA-4.5 word-boundary `rename_symbol` mode (host-agent) — безпечний rename, composable repo_refs→code_edit_batch; **CA-4 повністю закрито** |
 | 2026-06-16 | 1.13 | `repo_refs` — крос-файловий reference finder (import/usage), закриває CB3 та закладає основу під CA-4.5 rename |

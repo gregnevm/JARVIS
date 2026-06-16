@@ -102,3 +102,35 @@ async def test_fix_round_dispatches_code_edit(monkeypatch: pytest.MonkeyPatch) -
     assert out["status"] == "fixed" and out["rounds"] == 1
     assert disp.await_count == 1
     assert disp.await_args.args[0] == "code_edit"
+
+
+async def test_fix_tests_self_review_after_green(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Правка → green → self-review pass (CA-5.1) у результаті.
+    import json
+
+    _patch_run_tests(monkeypatch, [_FAIL_A, _PASS])
+    monkeypatch.setattr("app.agent.dispatch", AsyncMock(return_value="```diff\n-a\n+b\n```"))
+    review_json = json.dumps(
+        {"summary": "ok", "verdict": "approve",
+         "findings": [{"severity": "low", "file": "x.py", "line": 1, "comment": "nit"}]}
+    )
+    llm = ScriptedLLM(
+        [
+            {"tool_calls": [{"function": {"name": "code_edit",
+                                          "arguments": {"path": "x.py", "old_string": "a",
+                                                        "new_string": "b"}}}]},
+            {"content": "done"},          # завершує раунд правок
+            {"content": review_json},      # відповідь code_review
+        ]
+    )
+    out = await _runner(llm).fix_tests(1, exe="pytest", max_rounds=2)
+    assert out["status"] == "fixed"
+    assert "review" in out and out["review"]["verdict"] == "approve"
+    assert out["review"]["findings"][0]["file"] == "x.py"
+
+
+async def test_fix_tests_no_review_when_no_edits(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Green без правок (already-fixed після раунду без code_edit) → без review-блоку.
+    _patch_run_tests(monkeypatch, [_FAIL_A, _PASS])
+    out = await _runner(ScriptedLLM()).fix_tests(1, exe="pytest", max_rounds=2)
+    assert out["status"] == "fixed" and "review" not in out

@@ -825,12 +825,17 @@ class AgentRunner:
         return {"plan": final, "result": result}
 
     async def _fix_round_edit(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], user_id: int
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        user_id: int,
+        edits_log: list[str] | None = None,
     ) -> None:
         """Один раунд «локалізуй+прав»: до _FIX_INNER_STEPS модельних кроків з тулами.
 
         Перезапуск тестів — НЕ тут (його робить fix_tests як авторитетний гейт);
-        тут модель читає код і вносить правку через code_edit.
+        тут модель читає код і вносить правку через code_edit. Результати правок
+        (code_edit/code_edit_batch) збираються в `edits_log` для self-review (CA-5.1).
         """
         for _ in range(_FIX_INNER_STEPS):
             msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
@@ -845,6 +850,8 @@ class AgentRunner:
                 args = coerce_args(fn.get("arguments"))
                 result = await dispatch(name, args, user_id, allow_computer=True)
                 logger.info("fix.tool[%s] -> %.80s", name, result.replace("\n", " "))
+                if edits_log is not None and name in ("code_edit", "code_edit_batch"):
+                    edits_log.append(result)
                 messages.append({"role": "tool", "content": f"[{name}] {result}"})
 
     async def fix_tests(
@@ -889,11 +896,16 @@ class AgentRunner:
 
         prev_sig = fix_loop.summary_signature(baseline)
         verdict = baseline
+        edits_log: list[str] = []
         for rnd in range(1, rounds + 1):
-            await self._fix_round_edit(messages, tools, user_id)
+            await self._fix_round_edit(messages, tools, user_id, edits_log)
             verdict = await _run()
             if "✅ PASS" in verdict:
-                return {"status": "fixed", "rounds": rnd, "report": verdict}
+                out: dict[str, Any] = {"status": "fixed", "rounds": rnd, "report": verdict}
+                review = await self._self_review_after_fix(user_id, edits_log, task)
+                if review is not None:
+                    out["review"] = review
+                return out
             sig = fix_loop.summary_signature(verdict)
             if sig == prev_sig:
                 return {"status": "no_progress", "rounds": rnd, "report": verdict}
@@ -905,3 +917,15 @@ class AgentRunner:
                 }
             )
         return {"status": "stuck", "rounds": rounds, "report": verdict}
+
+    async def _self_review_after_fix(
+        self, user_id: int, edits_log: list[str], task: str
+    ) -> dict[str, Any] | None:
+        """CA-5.1 «review перед звітом»: після green — self-review diff-ів правок.
+
+        Повертає {summary, verdict, findings} або None, якщо правок не було.
+        """
+        if not edits_log:
+            return None
+        diff = "\n\n".join(edits_log)[:8000]
+        return await self.code_review(user_id, diff=diff, context=task)
