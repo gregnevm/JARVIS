@@ -68,6 +68,12 @@ class CodeReviewRequest(BaseModel):
     context: str = ""
 
 
+class RepoTreeRequest(BaseModel):
+    user_id: int
+    path: str = ""
+    max_depth: int = 3
+
+
 class CodeFixRequest(BaseModel):
     user_id: int
     exe: str

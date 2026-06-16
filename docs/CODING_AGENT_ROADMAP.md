@@ -90,7 +90,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | ~~CB3~~ ✅ | дерево/grep/symbol-outline + scoped-RAG + **`repo_refs`** (крос-файлові import/usage-сайти) | Крос-файлові залежності тепер видимі (основа під CA-4.5 rename) |
 | CB4 | Тест-луп не первинна операція (через generic PS) | Немає структурованого fail→fix циклу |
 | CB5 | Planning не coding-специфічний (немає file-targets у кроках) | План не прив'язаний до файлів |
-| CB6 | Немає diff-viewer / repo-tree / test-panel у Platform | Огляд правок лише через текст |
+| ~~CB6~~ ✅ | ~~Немає diff-viewer / repo-tree / test-panel у Platform~~ → Platform **Coding tab** (план/review-diff/repo-tree/fix-job) | Закрито (CA-6.5) |
 | CB7↓ | `jarvis code` CLI є (run/plan/review/fix); лишається IDE-міст (CA-6.3) | Drop-in із терміналу частково закрито |
 | CB8 | Модель 7B слабка для multi-file | Потрібна 14b+/cloud planner opt-in (як AM-2.4) |
 
@@ -210,7 +210,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | CA-6.2 | CLI auth через `/v1` ключ (Стовп A) | `JARVIS_API_KEY` + `base_url` | [x] `JARVIS_API_KEY` (Bearer) + `JARVIS_TOOLS_URL` base + `JARVIS_USER_ID` у `cli.py` |
 | CA-6.3 | IDE-міст: LSP-обгортка або VS Code extension (поверх `/v1`) | Inline diff в IDE | [ ] |
 | CA-6.4 | Headless-режим (CI): `jarvis code --apply --no-confirm` за політикою | Policy gate (AM-4) | [x] `jarvis code fix --no-confirm/--apply` → policy gate `CODING_HEADLESS_APPLY` (`headless.authorize_headless_apply`): дозвіл → короткий session-trust (apply без ✅); інакше `policy_denied` |
-| CA-6.5 | Platform Coding tab: repo-tree, diff-viewer, test-panel (закриває CB6) | SSE як Workbench | [ ] |
+| CA-6.5 | Platform Coding tab: repo-tree, diff-viewer, test-panel (закриває CB6) | SSE як Workbench | [x] `platform/coding.py` + `Coding` tab у `platform.html`: file-targeted **план**, **self-review diff** (diff-viewer→findings), **repo-tree** (`/coding/repo_tree` route), **fix-петля** як coding_task bg job (test-panel; результат у Jobs). Мутації — лише через bg job (headless-гейт) |
 
 **Вихід CA-6:** `jarvis code "fix lint"` у терміналі = той самий агент, що з Telegram; видно diff в IDE/Platform.
 
