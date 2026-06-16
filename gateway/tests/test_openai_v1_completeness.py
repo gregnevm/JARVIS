@@ -68,3 +68,34 @@ def test_models_lists_embeddings(client: TestClient) -> None:
     r = client.get("/v1/models", headers=_auth())
     ids = {m["id"] for m in r.json()["data"]}
     assert "nomic-embed-text" in ids
+
+
+def test_create_job(client: TestClient) -> None:
+    client.app.state.tools.create_bg_job = AsyncMock(
+        return_value={"id": "job_1", "status": "queued", "created_at": 100, "kind": "research"}
+    )
+    r = client.post("/v1/jobs", json={"input": "research X", "mode": "research"}, headers=_auth())
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == "job_1" and body["object"] == "job" and body["status"] == "queued"
+
+
+def test_create_job_empty_400(client: TestClient) -> None:
+    r = client.post("/v1/jobs", json={"input": "  "}, headers=_auth())
+    assert r.status_code == 400
+
+
+def test_create_job_backend_error_502(client: TestClient) -> None:
+    client.app.state.tools.create_bg_job = AsyncMock(return_value={"error": "tools unavailable"})
+    r = client.post("/v1/jobs", json={"input": "x"}, headers=_auth())
+    assert r.status_code == 502
+
+
+def test_get_job_and_404(client: TestClient) -> None:
+    client.app.state.tools.get_bg_job = AsyncMock(
+        return_value={"id": "job_1", "status": "done", "result": "ok", "created_at": 1}
+    )
+    r = client.get("/v1/jobs/job_1", headers=_auth())
+    assert r.status_code == 200 and r.json()["result"] == "ok"
+    client.app.state.tools.get_bg_job = AsyncMock(return_value=None)
+    assert client.get("/v1/jobs/ghost", headers=_auth()).status_code == 404

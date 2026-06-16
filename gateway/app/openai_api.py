@@ -75,6 +75,12 @@ class EmbeddingsRequest(BaseModel):
     user: str | None = None
 
 
+class JobRequest(BaseModel):
+    input: str
+    mode: str = "auto"
+    user: str | None = None
+
+
 def _key_store(request: Request) -> Any:
     from .saas.api_keys import ApiKeyStore
 
@@ -265,6 +271,70 @@ async def embeddings(
         "model": body.model or "nomic-embed-text",
         "usage": {"prompt_tokens": total, "total_tokens": total},
     }
+
+
+def _resolve_uid(request: Request, user: str | None = None) -> int:
+    """Generic user-id resolver (header → body.user → default → перший allowed)."""
+    hdr = request.headers.get("x-jarvis-user-id") or request.headers.get("X-JARVIS-User-Id")
+    if hdr:
+        try:
+            return int(hdr.strip())
+        except ValueError:
+            pass
+    if user:
+        try:
+            return int(user)
+        except ValueError:
+            pass
+    default = settings.openai_default_user_id
+    if default:
+        return int(default)
+    ids = settings.allowed_ids
+    if ids:
+        return next(iter(ids))
+    raise HTTPException(status_code=400, detail="user_id required (X-JARVIS-User-Id header)")
+
+
+def _job_view(rec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": rec.get("id"),
+        "object": "job",
+        "status": rec.get("status", "unknown"),
+        "created_at": rec.get("created_at"),
+        "result": rec.get("result") or rec.get("output"),
+        "mode": rec.get("mode") or rec.get("kind"),
+    }
+
+
+@router.post("/jobs")
+async def create_job(
+    request: Request,
+    body: JobRequest,
+    _: None = Depends(require_scope("jobs")),
+) -> dict[str, Any]:
+    """Async-задача (AP-2.5): research/team/coding через bg_jobs — повертає job id."""
+    text = (body.input or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="input required")
+    uid = _resolve_uid(request, body.user)
+    rec = await request.app.state.tools.create_bg_job(uid, text, (body.mode or "auto").strip())
+    if rec.get("error"):
+        raise HTTPException(status_code=502, detail=str(rec["error"]))
+    return _job_view(rec)
+
+
+@router.get("/jobs/{job_id}")
+async def get_job(
+    request: Request,
+    job_id: str,
+    _: None = Depends(require_scope("jobs")),
+) -> dict[str, Any]:
+    """Статус async-задачі (AP-2.5)."""
+    uid = _resolve_uid(request)
+    rec = await request.app.state.tools.get_bg_job(job_id, uid)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return _job_view(rec)
 
 
 @router.get("/models")
