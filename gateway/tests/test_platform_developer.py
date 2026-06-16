@@ -49,9 +49,12 @@ class FakeRedis:
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    from unittest.mock import AsyncMock
+
     monkeypatch.setattr(settings, "platform_password", PW)
     with TestClient(app) as c:
         c.app.state.redis = FakeRedis()
+        c.app.state.tools.process = AsyncMock(return_value="playground answer")
         yield c
 
 
@@ -63,6 +66,19 @@ def test_console_page_has_developer_tab(client: TestClient) -> None:
     html = client.get("/platform").text
     assert 'data-tab="developer"' in html and 'id="panel-developer"' in html
     assert "/platform/api/developer/keys" in html  # render logic wired
+    assert 'data-tab="playground"' in html and "/platform/api/developer/playground" in html
+
+
+def test_playground_runs(client: TestClient) -> None:
+    r = client.post(
+        "/platform/api/developer/playground", json={"input": "hi", "mode": "agent"}, auth=AUTH
+    )
+    assert r.status_code == 200 and r.json()["output"] == "playground answer"
+
+
+def test_playground_empty_400_and_auth(client: TestClient) -> None:
+    assert client.post("/platform/api/developer/playground", json={"input": "  "}, auth=AUTH).status_code == 400
+    assert client.post("/platform/api/developer/playground", json={"input": "x"}).status_code == 401
 
 
 def test_console_key_lifecycle(client: TestClient) -> None:

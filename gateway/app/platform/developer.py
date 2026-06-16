@@ -21,6 +21,11 @@ class KeyCreateBody(BaseModel):
     scopes: list[str] | None = None
 
 
+class PlaygroundBody(BaseModel):
+    input: str
+    mode: str = "auto"
+
+
 def register(router: APIRouter) -> None:
     def _keys(request: Request) -> ApiKeyStore:
         return ApiKeyStore(request.app.state.redis)
@@ -59,3 +64,18 @@ def register(router: APIRouter) -> None:
         _: PlatformAuth = Depends(require_platform_auth),
     ) -> dict[str, Any]:
         return await _usage(request).summary(key_id or "root", days=days)
+
+    @router.post("/platform/api/developer/playground")
+    async def playground(
+        request: Request,
+        body: PlaygroundBody,
+        auth: PlatformAuth = Depends(require_platform_auth),
+    ) -> dict[str, Any]:
+        """AP-3.3: пробний `/v1`-виклик із консолі (admin-сесія, без вставляння ключа)."""
+        text = (body.input or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="input required")
+        result = await request.app.state.tools.process(
+            {"user_id": auth.user_id, "text": text, "mode": (body.mode or "auto").strip()}
+        )
+        return {"output": result}
