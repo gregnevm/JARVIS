@@ -330,13 +330,15 @@ _CODE_EDIT_SCHEMA = _schema(
     "code_edit",
     "Відредагувати файл коду диффом (БЕЗ повного перезапису). Показує diff і чекає "
     "підтвердження. mode='search_replace': old_string→new_string (old_string має бути "
-    "унікальним, інакше додай контекст або replace_all). mode='diff': unified diff.",
+    "унікальним, інакше додай контекст або replace_all). mode='diff': unified diff. "
+    "mode='rename_symbol': word-boundary перейменування ідентифікатора (old_string→"
+    "new_string, усі цілі-слова збіги; безпечно — не чіпає довші імена).",
     {
         "path": {**_STR, "description": "абсолютний шлях до файлу на хості"},
         "mode": {
             "type": "string",
-            "enum": ["search_replace", "diff"],
-            "description": "search_replace (default) | diff",
+            "enum": ["search_replace", "diff", "rename_symbol"],
+            "description": "search_replace (default) | diff | rename_symbol",
         },
         "old_string": {**_STR, "description": "точний фрагмент для заміни (search_replace)"},
         "new_string": {**_STR, "description": "новий фрагмент (search_replace)"},
@@ -351,7 +353,9 @@ _CODE_EDIT_BATCH_SCHEMA = _schema(
     "Транзакційно відредагувати КІЛЬКА файлів за один апрув (усе-або-нічого: при "
     "помилці всі вже застосовані правки відкочуються). dry_run=true → показати всі "
     "diff-и БЕЗ запису. Кожен елемент edits — як аргументи code_edit (path + "
-    "search_replace/diff). Шляхи мають бути різними.",
+    "search_replace/diff/rename_symbol). Для rename/move рефактора: знайди файли через "
+    "repo_refs, потім edits із mode='rename_symbol' (по файлу), спершу dry_run=true. "
+    "Шляхи мають бути різними.",
     {
         "edits": {
             "type": "array",
@@ -360,7 +364,7 @@ _CODE_EDIT_BATCH_SCHEMA = _schema(
                 "type": "object",
                 "properties": {
                     "path": {**_STR, "description": "абсолютний шлях до файлу"},
-                    "mode": {"type": "string", "enum": ["search_replace", "diff"]},
+                    "mode": {"type": "string", "enum": ["search_replace", "diff", "rename_symbol"]},
                     "old_string": {**_STR},
                     "new_string": {**_STR},
                     "diff": {**_STR},

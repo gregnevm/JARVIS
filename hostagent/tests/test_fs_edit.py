@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import (
+    _apply_rename_symbol,
     _apply_search_replace,
     _apply_unified_diff,
     _parse_hunks,
@@ -50,6 +51,28 @@ def test_search_replace_non_unique_blocks() -> None:
 def test_search_replace_all() -> None:
     out, n = _apply_search_replace("x x x", "x", "y", replace_all=True)
     assert out == "y y y" and n == 3
+
+
+# --- rename_symbol (CA-4.5): word-boundary -----------------------------------
+
+def test_rename_symbol_word_boundary_only() -> None:
+    src = "AgentRunner = 1\nx = Agent\nAgent.run()\nAgentX = 2\n"
+    out, n = _apply_rename_symbol(src, "Agent", "Bot")
+    # цілі слова Agent → Bot; AgentRunner/AgentX недоторкані
+    assert out == "AgentRunner = 1\nx = Bot\nBot.run()\nAgentX = 2\n"
+    assert n == 2
+
+
+def test_rename_symbol_not_found_raises() -> None:
+    with pytest.raises(HTTPException) as exc:
+        _apply_rename_symbol("a = 1\n", "Missing", "New")
+    assert exc.value.status_code == 422
+
+
+def test_rename_symbol_rejects_non_identifier() -> None:
+    with pytest.raises(HTTPException) as exc:
+        _apply_rename_symbol("a = 1\n", "a", "b c")
+    assert exc.value.status_code == 400
 
 
 def test_parse_and_apply_diff() -> None:
@@ -297,6 +320,38 @@ def test_fs_edit_batch_rejects_duplicate_path(client: TestClient, tmp_path: Path
     assert r.status_code == 422
     assert "duplicate" in r.json()["detail"]
     assert a.read_text(encoding="utf-8") == "x = 1\ny = 1\n"
+
+
+def test_fs_edit_batch_rename_symbol_mode(client: TestClient, tmp_path: Path) -> None:
+    a = tmp_path / "a.py"
+    b = tmp_path / "b.py"
+    a.write_text("Agent = 1\nAgentRunner = 2\n", encoding="utf-8")
+    b.write_text("from m import Agent\nx = Agent()\n", encoding="utf-8")
+    r = client.post(
+        "/fs/edit_batch",
+        headers=H,
+        json={
+            "edits": [
+                {"path": str(a), "mode": "rename_symbol", "old_string": "Agent", "new_string": "Bot"},
+                {"path": str(b), "mode": "rename_symbol", "old_string": "Agent", "new_string": "Bot"},
+            ]
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert a.read_text(encoding="utf-8") == "Bot = 1\nAgentRunner = 2\n"  # довше ім'я ціле
+    assert b.read_text(encoding="utf-8") == "from m import Bot\nx = Bot()\n"
+
+
+def test_fs_edit_single_rename_symbol_mode(client: TestClient, tmp_path: Path) -> None:
+    f = tmp_path / "f.py"
+    f.write_text("foo()\nfoobar()\n", encoding="utf-8")
+    r = client.post(
+        "/fs/edit",
+        headers=H,
+        json={"path": str(f), "mode": "rename_symbol", "old_string": "foo", "new_string": "baz"},
+    )
+    assert r.status_code == 200, r.text
+    assert f.read_text(encoding="utf-8") == "baz()\nfoobar()\n"
 
 
 def test_fs_edit_batch_empty_400(client: TestClient) -> None:

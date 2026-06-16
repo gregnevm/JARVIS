@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.13 (2026-06-16)
+> **Версія:** 1.14 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -73,7 +73,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
 | Виконання команд/тестів | **9/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); виділена fix-orchestration `fix_tests` (CA-3.2) + no-progress stop (CA-3.4); лишається live-fix eval (CA-3.5) |
-| Редагування файлів | **8/10** | `code_edit` diff/apply + git-safety `.jarvis_backup` + транзакційний multi-file `code_edit_batch` (усе-або-нічого, dry-run) (CA-4.3/4.4); лишається rename/move з оновленням імпортів (CA-4.5) |
+| Редагування файлів | **9/10** | `code_edit` diff/apply + git-safety + транзакційний multi-file `code_edit_batch` (dry-run) + word-boundary `rename_symbol` (CA-4.3/4.4/4.5); лишається інтеграція з повним symbol-графом |
 | Repo-контекст | **8/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), крос-файлові посилання (repo_refs), scoped-RAG + token-бюджет; повний symbol-граф із типами — попереду |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
 | Self-review | **5/10** | `code_review` self-pass (diff→findings+verdict, CA-5.1); P9 teams (Reviewer) як bg job; авто-fix-перед-звітом — попереду |
@@ -178,7 +178,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [~] один апрув на план через P3 approve-flow + маркер (Redis TTL); session-trust auto-approve — попереду |
 | CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [x] host-agent `/fs/edit_batch` (план-усіх→запис-усіх, відкат із пам'яті, дедуп, `edit_batch_max`) + tool `code_edit_batch` (T1, mutating→confirm, owner-gated) |
 | CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [x] `code_edit_batch(dry_run=true)` — усі diff-и без запису, read-only (без confirm) |
-| CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [ ] |
+| CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [x] word-boundary `mode='rename_symbol'` (host-agent, безпечно — не чіпає довші імена) composable: `repo_refs` → `code_edit_batch(rename_symbol, dry_run)` → один апрув; golden у `hostagent/tests/test_fs_edit.py` |
 
 **Вихід CA-4:** «винеси `_helpers` у `jarvis_core`» → план на 5 файлів → один апрув → консистентний apply.
 
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.14 | CA-4.5 word-boundary `rename_symbol` mode (host-agent) — безпечний rename, composable repo_refs→code_edit_batch; **CA-4 повністю закрито** |
 | 2026-06-16 | 1.13 | `repo_refs` — крос-файловий reference finder (import/usage), закриває CB3 та закладає основу під CA-4.5 rename |
 | 2026-06-16 | 1.12 | CA-5.2 coding team-pipeline (`CODING_ROLES` coder→reviewer→tester + `tester` роль + `/teams/spawn {kind:"coding"}`) |
 | 2026-06-16 | 1.11 | CA-5.1 (часткою) self-review pass `AgentRunner.code_review` (diff→findings+verdict) + `POST /agent/code/review` |

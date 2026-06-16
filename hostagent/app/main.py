@@ -386,6 +386,26 @@ def _apply_search_replace(
     return content.replace(old, new, 1), 1
 
 
+# Ідентифікатор — без regex-метасимволів (rename word-boundary безпечний).
+_RENAME_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _apply_rename_symbol(content: str, old: str, new: str) -> tuple[str, int]:
+    """Word-boundary заміна ідентифікатора (CA-4.5): `\\bOLD\\b`→NEW, усі збіги.
+
+    Безпечніше за search_replace для перейменувань: не псує довші ідентифікатори
+    (``Agent`` не зачепить ``AgentRunner``). Вимагає валідних ідентифікаторів."""
+    o, n = old.strip(), new.strip()
+    if not _RENAME_IDENT_RE.match(o) or not _RENAME_IDENT_RE.match(n):
+        raise HTTPException(
+            status_code=400, detail="rename_symbol requires identifier old/new strings"
+        )
+    new_content, count = re.subn(rf"\b{re.escape(o)}\b", n, content)
+    if count == 0:
+        raise HTTPException(status_code=422, detail=f"symbol {o!r} not found")
+    return new_content, count
+
+
 _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 
 
@@ -505,6 +525,8 @@ def _plan_edit(req: FsEditRequest) -> dict[str, Any]:
         old = req.old_string.replace("\r\n", "\n")
         new = req.new_string.replace("\r\n", "\n")
         new_lf, occurrences = _apply_search_replace(base, old, new, replace_all=req.replace_all)
+    elif mode == "rename_symbol":
+        new_lf, occurrences = _apply_rename_symbol(base, req.old_string, req.new_string)
     else:
         raise HTTPException(status_code=400, detail=f"unknown mode {mode!r}")
 
