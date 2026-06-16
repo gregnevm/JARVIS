@@ -94,6 +94,57 @@ def test_format_fix() -> None:
     assert "fixed" in out and "rounds=2" in out and "PASS" in out
 
 
+def test_format_fix_with_review() -> None:
+    out = cli.format_result(
+        "fix",
+        {"status": "fixed", "rounds": 1, "report": "✅ PASS",
+         "review": {"verdict": "changes_requested", "summary": "magic", "fix_attempted": True, "tests_after_fix": "pass"}},
+    )
+    assert "review: changes_requested" in out and "tests pass" in out
+
+
+def test_fix_review_flag() -> None:
+    _cmd, payload, _post = _run_dispatch(["fix", "--exe", "pytest", "--review"])
+    assert payload["review"] is True
+
+
+def test_edit_reads_file_and_posts(tmp_path: Path) -> None:
+    f = tmp_path / "m.py"
+    f.write_text("x = 1\n", encoding="utf-8")
+    ns = cli.build_parser().parse_args(
+        ["edit", "--file", str(f), "--instruction", "rename x to y"]
+    )
+    with patch(
+        "app.cli._post",
+        new_callable=AsyncMock,
+        return_value={"path": str(f), "diff": "d", "proposed": "y = 1\n", "changed": True},
+    ) as post:
+        import asyncio
+
+        asyncio.run(cli.dispatch(ns))
+    assert post.await_args.args[0] == "/agent/code/edit"
+    assert post.await_args.args[1]["content"] == "x = 1\n"
+    # без --apply файл не чіпаємо
+    assert f.read_text(encoding="utf-8") == "x = 1\n"
+
+
+def test_edit_apply_writes_file(tmp_path: Path) -> None:
+    f = tmp_path / "m.py"
+    f.write_text("x = 1\n", encoding="utf-8")
+    ns = cli.build_parser().parse_args(
+        ["edit", "--file", str(f), "--instruction", "rename", "--apply"]
+    )
+    with patch(
+        "app.cli._post",
+        new_callable=AsyncMock,
+        return_value={"path": str(f), "diff": "d", "proposed": "y = 1\n", "changed": True},
+    ):
+        import asyncio
+
+        asyncio.run(cli.dispatch(ns))
+    assert f.read_text(encoding="utf-8") == "y = 1\n"
+
+
 def test_main_handles_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     import httpx
 

@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import re
@@ -38,6 +39,18 @@ _FIX_TOOLS = frozenset(
     }
 )
 _FIX_INNER_STEPS = 4  # модельних кроків (read/grep/edit) у межах одного раунду
+
+
+def _strip_code_fences(text: str) -> str:
+    """Прибирає обгортку ```lang ... ``` навколо повернутого моделлю вмісту файлу (CA-6.3)."""
+    s = text.strip()
+    if not s.startswith("```"):
+        return text
+    lines = s.split("\n")
+    lines = lines[1:]  # перший рядок: ``` або ```python
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines)
 
 
 def _fix_system() -> str:
@@ -790,6 +803,51 @@ class AgentRunner:
             "summary": str(parsed.get("summary") or content[:300] or "—"),
             "verdict": verdict,
             "findings": findings,
+        }
+
+    async def code_edit_propose(
+        self, user_id: int, *, path: str, instruction: str, content: str = ""
+    ) -> dict[str, Any]:
+        """IDE-міст (CA-6.3): запропонувати правку файлу як unified diff, БЕЗ apply.
+
+        Редактор надсилає поточний вміст + інструкцію; модель повертає оновлений вміст,
+        ми рахуємо diff локально (difflib) і віддаємо `{path, diff, proposed, changed}`.
+        Inline-diff показує/застосовує сам IDE — нічого не пишемо на диск (S4, dry-run).
+        """
+        if not (instruction or "").strip():
+            return {"path": path, "diff": "", "proposed": content, "changed": False,
+                    "error": "instruction required"}
+        prompt = (
+            "Онови вміст файлу згідно з інструкцією. Поверни ЛИШЕ повний новий вміст файлу — "
+            "без пояснень, без markdown-огорожі (```), без коментарів поза кодом.\n"
+            f"Файл: {path}\nІнструкція: {instruction}\n\n--- ПОТОЧНИЙ ВМІСТ ---\n{content}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Ти редагуєш файли коду JARVIS точковими правками. Зберігай стиль і "
+                        "відступи. Виводь лише повний оновлений вміст файлу."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        proposed = _strip_code_fences((msg.get("content") or ""))
+        old_lines = content.splitlines(keepends=True)
+        new_lines = proposed.splitlines(keepends=True)
+        diff = "".join(
+            difflib.unified_diff(
+                old_lines, new_lines, fromfile=f"a/{path}", tofile=f"b/{path}"
+            )
+        )
+        return {
+            "path": path,
+            "diff": diff,
+            "proposed": proposed,
+            "changed": proposed != content,
         }
 
     async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:

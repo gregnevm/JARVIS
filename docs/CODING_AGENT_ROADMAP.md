@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.15 (2026-06-16)
+> **Версія:** 1.17 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -76,9 +76,9 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Редагування файлів | **9/10** | `code_edit` diff/apply + git-safety + транзакційний multi-file `code_edit_batch` (dry-run) + word-boundary `rename_symbol` (CA-4.3/4.4/4.5); лишається інтеграція з повним symbol-графом |
 | Repo-контекст | **8/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), крос-файлові посилання (repo_refs), scoped-RAG + token-бюджет; повний symbol-граф із типами — попереду |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
-| Self-review | **5/10** | `code_review` self-pass (diff→findings+verdict, CA-5.1); P9 teams (Reviewer) як bg job; авто-fix-перед-звітом — попереду |
-| UX (coding-специфічний) | **3/10** | Workbench загальний; немає diff-viewer, repo-tree, test-panel |
-| CLI / IDE | **5/10** | `jarvis code` CLI (run/plan/review/fix) + key/base auth + headless `--no-confirm` за policy-gate (CA-6.1/6.2/6.4); IDE-міст і Platform tab — попереду |
+| Self-review | **7/10** | `code_review` self-pass (CA-5.1) + **review-after-fix gate** (`fix_tests(review=True)`: рев'ю diff → авто-fix зауважень перед звітом); P9 teams (Reviewer) як bg job; повна P9-інтеграція (Reviewer викликає structured review) — попереду |
+| UX (coding-специфічний) | **6/10** | Platform **Coding tab** (CA-6.5): file-targeted план, diff-viewer (review→findings), repo-tree, fix-job test-panel; SSE-стрім fix-логу — попереду |
+| CLI / IDE | **8/10** | `jarvis code` CLI (run/plan/review/fix/**edit**) + key/base auth + headless `--no-confirm` (CA-6.1/6.2/6.4) + **VS Code extension** (inline diff, CA-6.3); багатший LSP-режим — опційно попереду |
 | Модель | **4/10** | qwen2.5:7b слабка для складного multi-file; потрібна 14b+/cloud opt-in |
 
 ### 2.3 Розриви (gap list)
@@ -91,7 +91,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | CB4 | Тест-луп не первинна операція (через generic PS) | Немає структурованого fail→fix циклу |
 | CB5 | Planning не coding-специфічний (немає file-targets у кроках) | План не прив'язаний до файлів |
 | ~~CB6~~ ✅ | ~~Немає diff-viewer / repo-tree / test-panel у Platform~~ → Platform **Coding tab** (план/review-diff/repo-tree/fix-job) | Закрито (CA-6.5) |
-| CB7↓ | `jarvis code` CLI є (run/plan/review/fix); лишається IDE-міст (CA-6.3) | Drop-in із терміналу частково закрито |
+| ~~CB7~~ ✅ | ~~Drop-in із терміналу/IDE~~ → `jarvis code` CLI (run/plan/review/fix/edit) + VS Code extension (inline diff) | Закрито (CA-6.1/6.2/6.3) |
 | CB8 | Модель 7B слабка для multi-file | Потрібна 14b+/cloud planner opt-in (як AM-2.4) |
 
 ---
@@ -208,7 +208,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 |---|--------|-----|--------|
 | CA-6.1 | `jarvis code "<task>"` CLI — локальний агент проти cwd-репо | Streaming у термінал | [x] `tools/app/cli.py` (`python -m app.cli`): run/plan/review/fix підкоманди → agent REST; стрім-у-термінал (зараз фінальна відповідь) — рефайн попереду |
 | CA-6.2 | CLI auth через `/v1` ключ (Стовп A) | `JARVIS_API_KEY` + `base_url` | [x] `JARVIS_API_KEY` (Bearer) + `JARVIS_TOOLS_URL` base + `JARVIS_USER_ID` у `cli.py` |
-| CA-6.3 | IDE-міст: LSP-обгортка або VS Code extension (поверх `/v1`) | Inline diff в IDE | [ ] |
+| CA-6.3 | IDE-міст: LSP-обгортка або VS Code extension (поверх `/v1`) | Inline diff в IDE | [x] VS Code extension `clients/vscode-jarvis/` (zero-build JS) + бекенд `POST /agent/code/edit` (`code_edit_propose`: вміст+інструкція → unified diff через difflib, **dry-run**, без apply) + `jarvis code edit --file --instruction [--apply]`. Inline diff у нативному diff-view, apply лише за згодою; git-safety/policy — на бекенді |
 | CA-6.4 | Headless-режим (CI): `jarvis code --apply --no-confirm` за політикою | Policy gate (AM-4) | [x] `jarvis code fix --no-confirm/--apply` → policy gate `CODING_HEADLESS_APPLY` (`headless.authorize_headless_apply`): дозвіл → короткий session-trust (apply без ✅); інакше `policy_denied` |
 | CA-6.5 | Platform Coding tab: repo-tree, diff-viewer, test-panel (закриває CB6) | SSE як Workbench | [x] `platform/coding.py` + `Coding` tab у `platform.html`: file-targeted **план**, **self-review diff** (diff-viewer→findings), **repo-tree** (`/coding/repo_tree` route), **fix-петля** як coding_task bg job (test-panel; результат у Jobs). Мутації — лише через bg job (headless-гейт) |
 
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.17 | **CA-5/6 фінал**: CA-5.1 review-after-fix gate (`fix_tests(review=True)`), CA-5.3 gateway-воркер dispatch для `coding_task`, CA-6.5 Platform Coding tab (закриває CB6), CA-6.3 VS Code extension + `POST /agent/code/edit` + `jarvis code edit` (закриває CB7). **Фази CA-5/CA-6 повністю закрито** |
 | 2026-06-16 | 1.16 | follow-ups: CA-3.5 live-fix golden, CA-5.5 turnkey pre-commit lint gate, CA-4.2 session-trust auto-approve планів, CA-6.4 headless `--no-confirm` за policy-gate |
 | 2026-06-16 | 1.15 | CA-6.1/6.2 `jarvis code` CLI (`app/cli.py`: run/plan/review/fix + key/base auth); CA-5.3 (часткою) coding_task job type + `/agent/code/fix`; CA-5.4 ✅ (spawn_subagent) |
 | 2026-06-16 | 1.14 | CA-4.5 word-boundary `rename_symbol` mode (host-agent) — безпечний rename, composable repo_refs→code_edit_batch; **CA-4 повністю закрито** |

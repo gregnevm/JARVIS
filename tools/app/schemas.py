@@ -74,6 +74,13 @@ class RepoTreeRequest(BaseModel):
     max_depth: int = 3
 
 
+class CodeEditRequest(BaseModel):
+    user_id: int
+    path: str
+    instruction: str
+    content: str = ""
+
+
 class CodeFixRequest(BaseModel):
     user_id: int
     exe: str
