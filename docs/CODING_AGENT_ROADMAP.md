@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.12 (2026-06-16)
+> **Версія:** 1.13 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -74,7 +74,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 |----------|--------|----------|
 | Виконання команд/тестів | **9/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); виділена fix-orchestration `fix_tests` (CA-3.2) + no-progress stop (CA-3.4); лишається live-fix eval (CA-3.5) |
 | Редагування файлів | **8/10** | `code_edit` diff/apply + git-safety `.jarvis_backup` + транзакційний multi-file `code_edit_batch` (усе-або-нічого, dry-run) (CA-4.3/4.4); лишається rename/move з оновленням імпортів (CA-4.5) |
-| Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
+| Repo-контекст | **8/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), крос-файлові посилання (repo_refs), scoped-RAG + token-бюджет; повний symbol-граф із типами — попереду |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
 | Self-review | **5/10** | `code_review` self-pass (diff→findings+verdict, CA-5.1); P9 teams (Reviewer) як bg job; авто-fix-перед-звітом — попереду |
 | UX (coding-специфічний) | **3/10** | Workbench загальний; немає diff-viewer, repo-tree, test-panel |
@@ -87,7 +87,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 |---|-----|-------|
 | ~~CB1~~ ✅ | ~~Немає `code_edit` (diff/apply)~~ → `code_edit` (search_replace+diff, confirm, diff-preview) | Закрито (CA-1.1/1.2) |
 | ~~CB2~~ ✅ | ~~Немає git-safety~~ → `.jarvis_backup/<name>.<ts>.bak` перед кожним записом | Закрито (CA-1.3) |
-| CB3↓ | Repo-контекст: дерево/grep/symbol-outline + scoped-RAG індекс project-файлів є; лишається крос-файловий symbol-граф (CA-4.5) | Структура файлу видима; крос-файлові залежності — ще ні |
+| ~~CB3~~ ✅ | дерево/grep/symbol-outline + scoped-RAG + **`repo_refs`** (крос-файлові import/usage-сайти) | Крос-файлові залежності тепер видимі (основа під CA-4.5 rename) |
 | CB4 | Тест-луп не первинна операція (через generic PS) | Немає структурованого fail→fix циклу |
 | CB5 | Planning не coding-специфічний (немає file-targets у кроках) | План не прив'язаний до файлів |
 | CB6 | Немає diff-viewer / repo-tree / test-panel у Platform | Огляд правок лише через текст |
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.13 | `repo_refs` — крос-файловий reference finder (import/usage), закриває CB3 та закладає основу під CA-4.5 rename |
 | 2026-06-16 | 1.12 | CA-5.2 coding team-pipeline (`CODING_ROLES` coder→reviewer→tester + `tester` роль + `/teams/spawn {kind:"coding"}`) |
 | 2026-06-16 | 1.11 | CA-5.1 (часткою) self-review pass `AgentRunner.code_review` (diff→findings+verdict) + `POST /agent/code/review` |
 | 2026-06-16 | 1.10 | CA-4.1 code-plan (`code_plan` + `POST /agent/code/plan`, file-targeted кроки) + CA-4.2 (один апрув на план через P3 flow) |

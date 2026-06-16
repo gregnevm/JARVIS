@@ -415,11 +415,26 @@ _RUN_LINT_SCHEMA = _schema(
     ["exe"],
 )
 
+_REPO_REFS_SCHEMA = _schema(
+    "repo_refs",
+    "Крос-файлові посилання на символ/модуль (read-only): розділяє import-сайти й "
+    "usage-сайти по репо. Основа для rename/move рефактора й огляду залежностей. "
+    "name — ідентифікатор (AgentRunner) або dotted-модуль (tools.app.agent).",
+    {
+        "name": {**_STR, "description": "символ або dotted-модуль для пошуку посилань"},
+        "path": {**_STR, "description": "корінь пошуку (repo root); default cwd"},
+        "glob": {**_STR, "description": "glob-фільтр (default '*.py')"},
+        "max_results": {"type": "integer", "description": "ліміт рядків (default з конфігу)"},
+    },
+    ["name"],
+)
+
 _CODING_SCHEMAS = [
     _REPO_TREE_SCHEMA,
     _REPO_GREP_SCHEMA,
     _CODE_READ_SCHEMA,
     _REPO_SYMBOLS_SCHEMA,
+    _REPO_REFS_SCHEMA,
     _RUN_TESTS_SCHEMA,
     _RUN_LINT_SCHEMA,
 ]

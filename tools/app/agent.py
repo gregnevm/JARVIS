@@ -206,6 +206,7 @@ _TOOL_STATUS = {
     "repo_grep": "🔎 шукаю в коді…",
     "code_read": "📄 читаю рядки…",
     "repo_symbols": "🧭 символи файлу…",
+    "repo_refs": "🔗 шукаю посилання…",
     "run_tests": "🧪 ганяю тести…",
     "run_lint": "🔬 лінт/типи…",
     "capture_screenshot": "📸 знімаю екран…",

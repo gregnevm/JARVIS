@@ -243,3 +243,52 @@ async def test_repo_symbols_requires_path(coding_enabled: None) -> None:
 async def test_repo_symbols_in_schema(coding_enabled: None) -> None:
     names = [s["function"]["name"] for s in toolkit.agent_tool_schemas(computer=True)]
     assert "repo_symbols" in names
+
+
+# --- repo_refs (CA-4.5 foundation / CB3) -------------------------------------
+
+_RG_REFS = (
+    "tools/app/x.py:3:from tools.app.agent import AgentRunner\n"
+    "tools/app/x.py:5:import tools.app.agent\n"
+    "tools/app/y.py:10:    r = AgentRunner(llm, mem)\n"
+    "tools/app/z.py:42:        self.runner = AgentRunner(a, b)\n"
+)
+
+
+async def test_repo_refs_classifies_imports_and_usages(coding_enabled: None) -> None:
+    with _patch_request({"stdout": _RG_REFS, "stderr": "", "code": 0}) as req:
+        out = await coding_tools.repo_refs("AgentRunner", path="O:/repo", user_id=1)
+    # rg отримав -w і останній сегмент імені
+    sent = req.await_args.kwargs["json"]
+    assert sent["exe"] == "rg" and "-w" in sent["args"] and sent["args"][-1] == "AgentRunner"
+    assert "import=2" in out and "usage=2" in out
+    assert "import-сайти" in out and "usage-сайти" in out
+    assert "from tools.app.agent import AgentRunner" in out
+    assert "r = AgentRunner(llm, mem)" in out
+
+
+async def test_repo_refs_dotted_module_uses_last_segment(coding_enabled: None) -> None:
+    with _patch_request({"stdout": _RG_REFS, "stderr": "", "code": 0}) as req:
+        await coding_tools.repo_refs("tools.app.agent", user_id=1)
+    assert req.await_args.kwargs["json"]["args"][-1] == "agent"
+
+
+async def test_repo_refs_rejects_bad_name(coding_enabled: None) -> None:
+    out = await coding_tools.repo_refs("foo bar; rm -rf", user_id=1)
+    assert "ідентифікатор" in out
+
+
+async def test_repo_refs_no_matches(coding_enabled: None) -> None:
+    with _patch_request({"stdout": "", "stderr": "", "code": 1}):
+        out = await coding_tools.repo_refs("Nonexistent", user_id=1)
+    assert "не знайдено" in out
+
+
+async def test_repo_refs_in_schema(coding_enabled: None) -> None:
+    names = [s["function"]["name"] for s in toolkit.agent_tool_schemas(computer=True)]
+    assert "repo_refs" in names
+
+
+async def test_repo_refs_denied_for_non_owner(coding_enabled: None) -> None:
+    out = await toolkit.dispatch("repo_refs", {"name": "AgentRunner"}, user_id=99)
+    assert "власник" in out.lower()

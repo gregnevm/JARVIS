@@ -433,6 +433,18 @@ async def _h_repo_symbols(args: dict[str, Any], uid: int) -> str:
     )
 
 
+async def _h_repo_refs(args: dict[str, Any], uid: int) -> str:
+    from ..tools.coding_tools import repo_refs
+
+    return await repo_refs(
+        str(args.get("name") or ""),
+        path=str(args.get("path") or ""),
+        glob=str(args.get("glob") or ""),
+        max_results=int(args.get("max_results") or 0),
+        user_id=uid,
+    )
+
+
 async def _h_run_tests(args: dict[str, Any], uid: int) -> str:
     from ..tools.check_tools import run_tests
 
@@ -509,6 +521,7 @@ _HANDLERS: dict[str, Handler] = {
     "repo_grep": _h_repo_grep,
     "code_read": _h_code_read,
     "repo_symbols": _h_repo_symbols,
+    "repo_refs": _h_repo_refs,
     "run_tests": _h_run_tests,
     "run_lint": _h_run_lint,
 }
@@ -516,7 +529,7 @@ _HANDLERS: dict[str, Handler] = {
 _CONTINUE_DEV_TOOLS = frozenset({"continue_dev"})
 # Owner-gated як continue_dev: ходять через host-agent FS/CLI (той самий computer-кордон).
 _CODING_TOOLS = frozenset(
-    {"repo_tree", "repo_grep", "code_read", "repo_symbols", "run_tests", "run_lint"}
+    {"repo_tree", "repo_grep", "code_read", "repo_symbols", "repo_refs", "run_tests", "run_lint"}
 )
 
 
