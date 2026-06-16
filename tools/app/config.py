@@ -170,6 +170,10 @@ class Settings(BaseSettings):
     # — fix-петля застосовує правки БЕЗ інтерактивного confirm. Лише для CI за політикою. Дефолт false.
     coding_headless_apply: bool = False
     coding_headless_trust_ttl: int = 600          # TTL session-trust (сек) на headless-прогін
+    # CA-5.1 review-after-fix: коли fix-петля доводить тести до green, прогнати self-review
+    # на робочому git-diff і, якщо є changes_requested + high/medium зауваження, зробити один
+    # додатковий раунд правок «під зауваження» ПЕРЕД фінальним звітом. Дефолт false.
+    coding_review_after_fix: bool = False
 
 
 settings = Settings()

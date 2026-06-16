@@ -11,7 +11,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
 from typing import Any
 
@@ -853,6 +853,62 @@ class AgentRunner:
                 logger.info("fix.tool[%s] -> %.80s", name, result.replace("\n", " "))
                 messages.append({"role": "tool", "content": f"[{name}] {result}"})
 
+    async def _session_diff(self, path: str) -> str:
+        """Робочий git-diff робочого дерева (для post-fix self-review).
+
+        Порожньо, якщо git/host-agent недоступні — self-review тоді тихо пропускається.
+        """
+        from .tools import coding_tools
+
+        try:
+            res = await coding_tools._cli("git", ["diff", "--no-color"], path or None)
+        except Exception:  # noqa: BLE001
+            return ""
+        if not isinstance(res, dict) or res.get("error"):
+            return ""
+        return str(res.get("stdout") or "")[:8000]
+
+    async def _self_review_gate(
+        self,
+        user_id: int,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        path: str,
+        run_fn: Callable[[], Awaitable[str]],
+    ) -> dict[str, Any]:
+        """CA-5.1 review-перед-звітом: рев'ю робочого diff; за changes_requested із
+        high/medium зауваженнями — один раунд правок «під зауваження» + re-test.
+
+        Повертає review-дікт (+ fix_attempted/tests_after_fix), або skip, якщо diff порожній.
+        """
+        diff = await self._session_diff(path)
+        if not diff.strip():
+            return {"verdict": "skip", "summary": "Немає робочого diff для self-review.", "findings": []}
+        review = await self.code_review(user_id, diff=diff, context="post-fix self-review")
+        actionable = [
+            f for f in review.get("findings", []) if f.get("severity") in ("high", "medium")
+        ]
+        if review.get("verdict") != "changes_requested" or not actionable:
+            return review
+        notes = "\n".join(
+            f"- [{f['severity']}] {f.get('file') or '?'}:{f.get('line') or 0} {f['comment']}"
+            for f in actionable
+        )
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Код-рев'ю знайшло проблеми у твоїх правках — виправ їх перед звітом, "
+                    f"не ламаючи тести:\n{notes}"
+                ),
+            }
+        )
+        await self._fix_round_edit(messages, tools, user_id)
+        after = await run_fn()
+        review["fix_attempted"] = True
+        review["tests_after_fix"] = "pass" if "✅ PASS" in after else "fail"
+        return review
+
     async def fix_tests(
         self,
         user_id: int,
@@ -862,6 +918,7 @@ class AgentRunner:
         path: str = "",
         task: str = "",
         max_rounds: int | None = None,
+        review: bool = False,
     ) -> dict[str, Any]:
         """Виділена fix-orchestration (CA-3.2): тест → локалізація → code_edit → re-test.
 
@@ -869,12 +926,16 @@ class AgentRunner:
         (той самий набір впалих тестів двічі поспіль). code_edit лишається за confirm/
         session-trust — петля нічого не обходить (S4).
 
+        `review=True` (+ `CODING_REVIEW_AFTER_FIX`) → після green прогнати self-review на
+        робочому diff і авто-fix зауважень перед звітом (CA-5.1). Результат у `report["review"]`.
+
         Повертає {status, rounds, report}: status ∈ already_green|fixed|no_progress|stuck.
         """
         from .tools import check_tools, fix_loop
 
         arglist = list(args or [])
         rounds = max(1, max_rounds if max_rounds is not None else settings.coding_fix_max_rounds)
+        do_review = bool(review and settings.coding_review_after_fix)
 
         async def _run() -> str:
             return await check_tools.run_tests(exe, args=arglist, path=path, user_id=user_id)
@@ -899,7 +960,12 @@ class AgentRunner:
             await self._fix_round_edit(messages, tools, user_id)
             verdict = await _run()
             if "✅ PASS" in verdict:
-                return {"status": "fixed", "rounds": rnd, "report": verdict}
+                out: dict[str, Any] = {"status": "fixed", "rounds": rnd, "report": verdict}
+                if do_review:
+                    out["review"] = await self._self_review_gate(
+                        user_id, messages, tools, path, _run
+                    )
+                return out
             sig = fix_loop.summary_signature(verdict)
             if sig == prev_sig:
                 return {"status": "no_progress", "rounds": rnd, "report": verdict}

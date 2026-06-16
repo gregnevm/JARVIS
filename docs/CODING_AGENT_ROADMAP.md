@@ -190,7 +190,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [~] `AgentRunner.code_review` (diff → структуровані findings + verdict) + `POST /agent/code/review`; авто-fix перед звітом і P9-wiring — попереду |
+| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [x] `AgentRunner.code_review` (diff→findings+verdict) + `POST /agent/code/review`; **review-after-fix gate**: `fix_tests(review=True)` за `CODING_REVIEW_AFTER_FIX` після green рев'ює робочий git-diff і за changes_requested+high/medium робить один раунд правок «під зауваження» + re-test ПЕРЕД звітом (`report["review"]`); `jarvis code fix --review` |
 | CA-5.2 | Coder→Reviewer→Tester team-pipeline для coding-задач | Reuse `teams.py` | [x] `teams.CODING_ROLES` + `tester` роль; `/teams/spawn {kind:"coding"}` → Coder→Reviewer→Tester |
 | CA-5.3 | bg job type `coding_task` — довгі задачі з progress/cancel | Reuse `bg_jobs.py` + AM-2.2 | [~] job type `coding_task` (jarvis_core) + `bg_jobs.create_coding_job` + виконавець `POST /agent/code/fix` (fix_tests); лишається dispatch у gateway-воркері |
 | CA-5.4 | Subagent на під-задачу (напр. окремий файл) з budget_iters | Reuse `subagents.py` | [x] `spawn_subagent` tool (P8): делегує під-задачу з `budget_iters` 1–8 → `create_subagent_job` |

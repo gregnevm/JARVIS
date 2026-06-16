@@ -72,6 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="headless: застосовувати правки без інтерактивного confirm (за CODING_HEADLESS_APPLY)",
     )
+    p_fix.add_argument(
+        "--review",
+        dest="review",
+        action="store_true",
+        help="self-review + авто-fix зауважень перед звітом (за CODING_REVIEW_AFTER_FIX)",
+    )
     p_fix.add_argument("rest", nargs="*", help="аргументи раннера (після --)")
     return parser
 
@@ -96,6 +102,7 @@ async def dispatch(ns: argparse.Namespace) -> dict[str, Any]:
                 "task": ns.task,
                 "max_rounds": ns.max_rounds,
                 "no_confirm": bool(getattr(ns, "no_confirm", False)),
+                "review": bool(getattr(ns, "review", False)),
             },
         )
     raise SystemExit(2)
@@ -119,7 +126,14 @@ def format_result(cmd: str, data: dict[str, Any]) -> str:
                 out.append(f"  [{f.get('severity')}] {f.get('file')}:{f.get('line')} {f.get('comment')}")
         return "\n".join(out)
     if cmd == "fix":
-        return f"status: {data.get('status', '?')} (rounds={data.get('rounds', 0)})\n{data.get('report', '')}"
+        head = f"status: {data.get('status', '?')} (rounds={data.get('rounds', 0)})\n{data.get('report', '')}"
+        rv = data.get("review")
+        if isinstance(rv, dict) and rv.get("verdict") not in (None, "skip"):
+            extra = f"\n— review: {rv.get('verdict')} — {rv.get('summary', '')}"
+            if rv.get("fix_attempted"):
+                extra += f" (авто-fix → tests {rv.get('tests_after_fix', '?')})"
+            head += extra
+        return head
     return json.dumps(data, ensure_ascii=False)
 
 

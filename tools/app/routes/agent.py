@@ -109,6 +109,7 @@ def register(router: APIRouter) -> None:
                 path=req.path,
                 task=req.task,
                 max_rounds=req.max_rounds,
+                review=req.review,
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception("agent code fix failed")

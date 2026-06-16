@@ -76,6 +76,7 @@ class CodeFixRequest(BaseModel):
     task: str = ""
     max_rounds: int | None = None
     no_confirm: bool = False  # CA-6.4: headless auto-apply (за policy gate)
+    review: bool = False  # CA-5.1: self-review + авто-fix зауважень перед звітом
 
 
 class FilePathRequest(BaseModel):
