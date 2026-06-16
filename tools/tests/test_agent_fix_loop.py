@@ -102,3 +102,10 @@ async def test_fix_round_dispatches_code_edit(monkeypatch: pytest.MonkeyPatch) -
     assert out["status"] == "fixed" and out["rounds"] == 1
     assert disp.await_count == 1
     assert disp.await_args.args[0] == "code_edit"
+
+
+async def test_fix_tests_no_review_when_no_edits(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Green без правок (already-fixed після раунду без code_edit) → без review-блоку.
+    _patch_run_tests(monkeypatch, [_FAIL_A, _PASS])
+    out = await _runner(ScriptedLLM()).fix_tests(1, exe="pytest", max_rounds=2)
+    assert out["status"] == "fixed" and "review" not in out

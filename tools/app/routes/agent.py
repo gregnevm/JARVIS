@@ -7,7 +7,6 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from jarvis_core.pipeline.handlers import screen_text
 
 from ..schemas import (
     AgentRequest,
@@ -37,16 +36,12 @@ def register(router: APIRouter) -> None:
 
     @router.post("/agent/stream")
     async def agent_stream_ep(req: AgentRequest, request: Request) -> StreamingResponse:
-        safe, block = screen_text(req.text)
-
         async def gen() -> AsyncIterator[bytes]:
-            if block is not None:
-                yield ndjson({"done": True, "mode": block.mode, "iters": 0, "text": block.text})
-                return
             try:
-                hint = req.mode if req.mode and req.mode != "auto" else None
-                async for ev in request.app.state.agent.run_stream(
-                    req.user_id, safe or req.text, mode=hint, mode_hint=hint
+                # R2: стрім теж через facade (safety-скрин усередині chat_stream),
+                # а не повз нього напряму в runner.
+                async for ev in request.app.state.jarvis.chat_stream(
+                    req.user_id, req.text, mode=req.mode
                 ):
                     yield ndjson(ev)
             except Exception:  # noqa: BLE001

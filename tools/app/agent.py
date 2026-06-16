@@ -20,6 +20,7 @@ from .config import settings
 from .memory_client import MemoryClient
 from .thread_context import build_thread_context
 from .user_profile import profile_prompt_block
+from jarvis_core.agent.tool_loop import ToolStepResult, run_tool_loop
 from jarvis_core.llm.chat import ChatBackend
 from jarvis_core.llm.parsers import extract_json_object
 from .toolkit import agent_tool_schemas, coerce_args, dispatch, image_gen_enabled
@@ -306,11 +307,8 @@ def _max_iters(*, computer: bool = False, override: int | None = None) -> int:
     return settings.max_agent_iters
 
 
-def _assistant_msg(msg: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {"role": "assistant", "content": msg.get("content") or ""}
-    if msg.get("tool_calls"):
-        out["tool_calls"] = msg["tool_calls"]
-    return out
+def _tool_message(name: str, result: str) -> dict[str, Any]:
+    return {"role": "tool", "content": f"[{name}] {result}"}
 
 
 def _sys_with_ctx(base: str, ctx: str) -> str:
@@ -515,6 +513,54 @@ class AgentRunner:
         ):
             yield delta
 
+    def _agent_chat(
+        self, tools: list[dict[str, Any]]
+    ) -> "Callable[[list[dict[str, Any]]], Awaitable[dict[str, Any]]]":
+        """Один крок AGENT-моделі з тулами — інжектується у run_tool_loop."""
+
+        async def chat(messages: list[dict[str, Any]]) -> dict[str, Any]:
+            return await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
+
+        return chat
+
+    def _make_executor(
+        self, user_id: int, origin_text: str, *, allow_computer: bool, streaming: bool
+    ) -> "Callable[[str, Any], Awaitable[ToolStepResult]]":
+        """Сервіс-специфічне виконання інструмента (dispatch + post_tool hook +
+        confirm-рендеринг + лог) — інжектується у run_tool_loop. Confirm рендериться
+        по-різному для sync (inline-маркер) і stream (окрема подія + людський текст)."""
+
+        async def execute(name: str, args: Any) -> ToolStepResult:
+            result = await dispatch(name, args, user_id, allow_computer=allow_computer)
+            from . import hooks as agent_hooks
+
+            hook_out = await agent_hooks.run_post_tool(
+                {"user_id": user_id, "tool": name, "args": args, "result": result}
+            )
+            result = str(hook_out.get("result") or result)
+            done_text = result
+            event: dict[str, Any] | None = None
+            confirm = _parse_confirm(result)
+            if confirm:
+                from .computer_confirm import save_origin
+
+                await save_origin(user_id, origin_text)
+                if streaming:
+                    event = {"confirm": confirm}
+                    result = (
+                        f"Очікую підтвердження в Telegram (код {confirm['code']}): "
+                        f"{confirm['desc']}"
+                    )
+                else:
+                    result = (
+                        f"[[COMPUTER_CONFIRM:{confirm['code']}]] "
+                        f"Очікую підтвердження: {confirm['desc']}"
+                    )
+            logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
+            return ToolStepResult(text=result, done_text=done_text, event=event)
+
+        return execute
+
     async def _agent_events(
         self,
         text: str,
@@ -528,10 +574,10 @@ class AgentRunner:
     ) -> AsyncIterator[dict[str, Any]]:
         """Тул-луп зі стрімом: статус на кожен виклик інструмента + фінальний текст.
 
-        Паралельний до _agent() (не змінюємо синхронний шлях). Фінальну відповідь
-        у звичайному завершенні модель уже згенерувала разом із рішенням «тулів
-        більше нема» — віддаємо її одним delta; лише при вичерпанні ітерацій
-        примусова відповідь без тулів стрімиться токенами.
+        Тонкий споживач спільного run_tool_loop (R1). Фінальну відповідь у звичайному
+        завершенні модель уже згенерувала разом із рішенням «тулів більше нема» —
+        віддаємо її одним delta; лише при вичерпанні ітерацій примусова відповідь без
+        тулів стрімиться токенами.
         """
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": _agent_system(ctx, computer=computer, profile=profile)},
@@ -539,56 +585,31 @@ class AgentRunner:
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
         limit = _max_iters(computer=computer, override=max_iters_override)
-        for i in range(1, limit + 1):
-            msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
-            messages.append(_assistant_msg(msg))
-            calls = msg.get("tool_calls") or []
-            content = msg.get("content") or ""
-            if not calls:
-                calls = _parse_inline_tool_calls(content)
-            if not calls:
-                if content.strip():
-                    yield {"delta": _ensure_tool_media(content.strip(), messages)}
-                yield {"iters": i}
+        async for ev in run_tool_loop(
+            messages=messages,
+            limit=limit,
+            chat=self._agent_chat(tools),
+            coerce=coerce_args,
+            execute=self._make_executor(user_id, text, allow_computer=allow_computer, streaming=True),
+            inline_parser=_parse_inline_tool_calls,
+            tool_message=_tool_message,
+            emit_status=lambda name: {"status": _tool_status(name)},
+        ):
+            if "final" in ev:
+                content = str(ev["final"])
+                if content:
+                    yield {"delta": _ensure_tool_media(content, messages)}
+                yield {"iters": int(ev["iters"])}
                 return
-            for call in calls:
-                fn = call.get("function") or {}
-                name = str(fn.get("name", ""))
-                args = coerce_args(fn.get("arguments"))
-                yield {"status": _tool_status(name)}
-                yield {"tool_start": {"name": name, "args": args}}
-                result = await dispatch(name, args, user_id, allow_computer=allow_computer)
-                from . import hooks as agent_hooks
-
-                hook_out = await agent_hooks.run_post_tool(
-                    {
-                        "user_id": user_id,
-                        "tool": name,
-                        "args": args,
-                        "result": result,
-                    }
+            if "need_final" in ev:
+                messages.append(
+                    {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
                 )
-                result = str(hook_out.get("result") or result)
-                yield {"tool_done": {"name": name, "result": result}}
-                confirm = _parse_confirm(result)
-                if confirm:
-                    from .computer_confirm import save_origin
-
-                    await save_origin(user_id, text)
-                    yield {"confirm": confirm}
-                    result = (
-                        f"Очікую підтвердження в Telegram (код {confirm['code']}): "
-                        f"{confirm['desc']}"
-                    )
-                logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
-                messages.append({"role": "tool", "content": f"[{name}] {result}"})
-
-        messages.append(
-            {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
-        )
-        async for delta in self._llm.chat_stream(settings.ollama_model_agent, messages):
-            yield {"delta": delta}
-        yield {"iters": limit}
+                async for delta in self._llm.chat_stream(settings.ollama_model_agent, messages):
+                    yield {"delta": delta}
+                yield {"iters": int(ev["iters"])}
+                return
+            yield ev
 
     async def _chat(self, text: str, ctx: str, profile: str = "") -> str:
         msg = await self._llm.chat(
@@ -617,50 +638,25 @@ class AgentRunner:
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
         limit = _max_iters(computer=computer, override=max_iters_override)
-        for i in range(1, limit + 1):
-            msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
-            messages.append(_assistant_msg(msg))
-            calls = msg.get("tool_calls") or []
-            content = msg.get("content") or ""
-            if not calls:
-                # Фолбек: модель могла віддати tool call текстом (inline XML/JSON).
-                calls = _parse_inline_tool_calls(content)
-            if not calls:
-                return _ensure_tool_media(content.strip(), messages), i
-            for call in calls:
-                fn = call.get("function") or {}
-                name = str(fn.get("name", ""))
-                args = coerce_args(fn.get("arguments"))
-                result = await dispatch(name, args, user_id, allow_computer=allow_computer)
-                from . import hooks as agent_hooks
-
-                hook_out = await agent_hooks.run_post_tool(
-                    {
-                        "user_id": user_id,
-                        "tool": name,
-                        "args": args,
-                        "result": result,
-                    }
+        async for ev in run_tool_loop(
+            messages=messages,
+            limit=limit,
+            chat=self._agent_chat(tools),
+            coerce=coerce_args,
+            execute=self._make_executor(user_id, text, allow_computer=allow_computer, streaming=False),
+            inline_parser=_parse_inline_tool_calls,
+            tool_message=_tool_message,
+        ):
+            if "final" in ev:
+                return _ensure_tool_media(str(ev["final"]), messages), int(ev["iters"])
+            if "need_final" in ev:
+                # Ітерації вичерпано — змусимо модель дати текстову відповідь без тулів.
+                messages.append(
+                    {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
                 )
-                result = str(hook_out.get("result") or result)
-                confirm = _parse_confirm(result)
-                if confirm:
-                    from .computer_confirm import save_origin
-
-                    await save_origin(user_id, text)
-                    result = (
-                        f"[[COMPUTER_CONFIRM:{confirm['code']}]] "
-                        f"Очікую підтвердження: {confirm['desc']}"
-                    )
-                logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
-                messages.append({"role": "tool", "content": f"[{name}] {result}"})
-
-        # Ітерації вичерпано — змусимо модель дати текстову відповідь без тулів.
-        messages.append(
-            {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
-        )
-        final = await self._llm.chat(settings.ollama_model_agent, messages)
-        return _ensure_tool_media((final.get("content") or "").strip(), messages), limit
+                final = await self._llm.chat(settings.ollama_model_agent, messages)
+                return _ensure_tool_media((final.get("content") or "").strip(), messages), int(ev["iters"])
+        return _ensure_tool_media("", messages), limit  # недосяжно: луп завжди ʼїлдить final|need_final
 
     async def plan(self, user_id: int, text: str) -> dict[str, Any]:
         """Structured plan JSON → Redis (status pending) + marker для Telegram."""
@@ -889,27 +885,34 @@ class AgentRunner:
         return {"plan": final, "result": result}
 
     async def _fix_round_edit(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], user_id: int
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        user_id: int,
     ) -> None:
         """Один раунд «локалізуй+прав»: до _FIX_INNER_STEPS модельних кроків з тулами.
 
         Перезапуск тестів — НЕ тут (його робить fix_tests як авторитетний гейт);
         тут модель читає код і вносить правку через code_edit.
         """
-        for _ in range(_FIX_INNER_STEPS):
-            msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
-            messages.append(_assistant_msg(msg))
-            content = msg.get("content") or ""
-            calls = msg.get("tool_calls") or _parse_inline_tool_calls(content)
-            if not calls:
+        async def execute(name: str, args: Any) -> ToolStepResult:
+            result = await dispatch(name, args, user_id, allow_computer=True)
+            logger.info("fix.tool[%s] -> %.80s", name, result.replace("\n", " "))
+            return ToolStepResult(text=result)
+
+        async for ev in run_tool_loop(
+            messages=messages,
+            limit=_FIX_INNER_STEPS,
+            chat=self._agent_chat(tools),
+            coerce=coerce_args,
+            execute=execute,
+            inline_parser=_parse_inline_tool_calls,
+            tool_message=_tool_message,
+        ):
+            # fix-раунд лише читає/править; на завершенні (final|need_final) — стоп,
+            # перезапуск тестів робить fix_tests як авторитетний гейт. Tool-події ігноруємо.
+            if "final" in ev or "need_final" in ev:
                 return
-            for call in calls:
-                fn = call.get("function") or {}
-                name = str(fn.get("name", ""))
-                args = coerce_args(fn.get("arguments"))
-                result = await dispatch(name, args, user_id, allow_computer=True)
-                logger.info("fix.tool[%s] -> %.80s", name, result.replace("\n", " "))
-                messages.append({"role": "tool", "content": f"[{name}] {result}"})
 
     async def _session_diff(self, path: str) -> str:
         """Робочий git-diff робочого дерева (для post-fix self-review).
