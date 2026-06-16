@@ -69,4 +69,10 @@ curl -s https://YOUR_HOST/v1/chat/completions \
   -d '{"model":"jarvis","messages":[{"role":"user","content":"hi"}]}'
 ```
 
+## 5. Postman / Insomnia
+
+Готова колекція: [`sdk/jarvis-api.postman_collection.json`](../sdk/jarvis-api.postman_collection.json).
+Імпортуй, постав змінні `base_url`, `api_key` (`sk-jarvis-…`) і `root_key` — усі `/v1`
+ендпоінти + керування ключами вже налаштовані.
+
 Деталі фаз і статус — [`API_PLATFORM_ROADMAP.md`](API_PLATFORM_ROADMAP.md).

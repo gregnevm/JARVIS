@@ -1,0 +1,85 @@
+{
+  "info": {
+    "name": "JARVIS API (/v1)",
+    "description": "OpenAI-compatible /v1 surface + key management. Set {{base_url}} (e.g. https://your-host) and {{api_key}} (sk-jarvis-… or root key). See docs/API_QUICKSTART.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "api_key", "value": "sk-jarvis-..." },
+    { "key": "root_key", "value": "OPENAI_API_KEY value" },
+    { "key": "job_id", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{api_key}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Chat Completions",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/v1/chat/completions",
+        "body": { "mode": "raw", "raw": "{\n  \"model\": \"jarvis\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}]\n}" }
+      }
+    },
+    {
+      "name": "Responses (agentic)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/v1/responses",
+        "body": { "mode": "raw", "raw": "{\n  \"model\": \"jarvis-agent\",\n  \"input\": \"research the topic and summarize\"\n}" }
+      }
+    },
+    {
+      "name": "Embeddings",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/v1/embeddings",
+        "body": { "mode": "raw", "raw": "{\n  \"model\": \"nomic-embed-text\",\n  \"input\": \"hello world\"\n}" }
+      }
+    },
+    {
+      "name": "Create Job (async)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/v1/jobs",
+        "body": { "mode": "raw", "raw": "{\n  \"input\": \"deep research task\",\n  \"mode\": \"research\"\n}" }
+      }
+    },
+    {
+      "name": "Get Job",
+      "request": { "method": "GET", "url": "{{base_url}}/v1/jobs/{{job_id}}" }
+    },
+    {
+      "name": "Usage",
+      "request": { "method": "GET", "url": "{{base_url}}/v1/usage?days=7" }
+    },
+    {
+      "name": "Models",
+      "request": { "method": "GET", "url": "{{base_url}}/v1/models" }
+    },
+    {
+      "name": "Create API Key (root)",
+      "request": {
+        "method": "POST",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{root_key}}", "type": "string" }] },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base_url}}/saas/api/keys",
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"my-app\",\n  \"scopes\": [\"chat\", \"embeddings\", \"jobs\"]\n}" }
+      }
+    },
+    {
+      "name": "List API Keys (root)",
+      "request": {
+        "method": "GET",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{root_key}}", "type": "string" }] },
+        "url": "{{base_url}}/saas/api/keys"
+      }
+    }
+  ]
+}
