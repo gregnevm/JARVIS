@@ -166,6 +166,10 @@ class Settings(BaseSettings):
     coding_precommit_lint_exe: str = "ruff"       # раннер лінтера для гейта
     coding_precommit_lint_args: str = "check"     # аргументи (через пробіл)
     coding_precommit_path: str = ""               # cwd лінтера (repo root); порожньо = дефолт
+    # CA-6.4 policy gate (AM-4): дозволити headless auto-apply (`jarvis code fix --no-confirm`)
+    # — fix-петля застосовує правки БЕЗ інтерактивного confirm. Лише для CI за політикою. Дефолт false.
+    coding_headless_apply: bool = False
+    coding_headless_trust_ttl: int = 600          # TTL session-trust (сек) на headless-прогін
 
 
 settings = Settings()

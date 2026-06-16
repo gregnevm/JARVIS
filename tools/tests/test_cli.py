@@ -77,6 +77,18 @@ def test_format_review() -> None:
     assert "changes_requested" in out and "a.py:3" in out and "bug" in out
 
 
+def test_fix_default_no_confirm_false() -> None:
+    _cmd, payload, _post = _run_dispatch(["fix", "--exe", "pytest"])
+    assert payload["no_confirm"] is False
+
+
+def test_fix_apply_flag_sets_no_confirm() -> None:
+    # --apply і --no-confirm — синоніми headless-режиму (CA-6.4)
+    for flag in ("--no-confirm", "--apply"):
+        _cmd, payload, _post = _run_dispatch(["fix", "--exe", "pytest", flag])
+        assert payload["no_confirm"] is True
+
+
 def test_format_fix() -> None:
     out = cli.format_result("fix", {"status": "fixed", "rounds": 2, "report": "✅ PASS"})
     assert "fixed" in out and "rounds=2" in out and "PASS" in out

@@ -65,6 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_fix.add_argument("--path", default="")
     p_fix.add_argument("--task", default="")
     p_fix.add_argument("--max-rounds", type=int, default=None)
+    p_fix.add_argument(
+        "--no-confirm",
+        "--apply",
+        dest="no_confirm",
+        action="store_true",
+        help="headless: застосовувати правки без інтерактивного confirm (за CODING_HEADLESS_APPLY)",
+    )
     p_fix.add_argument("rest", nargs="*", help="аргументи раннера (після --)")
     return parser
 
@@ -88,6 +95,7 @@ async def dispatch(ns: argparse.Namespace) -> dict[str, Any]:
                 "path": ns.path,
                 "task": ns.task,
                 "max_rounds": ns.max_rounds,
+                "no_confirm": bool(getattr(ns, "no_confirm", False)),
             },
         )
     raise SystemExit(2)

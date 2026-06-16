@@ -96,6 +96,11 @@ def register(router: APIRouter) -> None:
         """Виділена fix-orchestration (CA-3.2): тест→правка→тест до green/max/no-progress."""
         if not (req.exe or "").strip():
             raise HTTPException(status_code=400, detail="exe required")
+        from ..headless import authorize_headless_apply
+
+        denial = await authorize_headless_apply(req.user_id, req.no_confirm)
+        if denial:
+            return {"status": "policy_denied", "rounds": 0, "report": denial}
         try:
             return await request.app.state.agent.fix_tests(
                 req.user_id,

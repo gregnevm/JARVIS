@@ -78,7 +78,7 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
 | Self-review | **5/10** | `code_review` self-pass (diff→findings+verdict, CA-5.1); P9 teams (Reviewer) як bg job; авто-fix-перед-звітом — попереду |
 | UX (coding-специфічний) | **3/10** | Workbench загальний; немає diff-viewer, repo-tree, test-panel |
-| CLI / IDE | **4/10** | `jarvis code` CLI (run/plan/review/fix, `app/cli.py`) + key/base auth (CA-6.1/6.2); IDE-міст і Platform tab — попереду |
+| CLI / IDE | **5/10** | `jarvis code` CLI (run/plan/review/fix) + key/base auth + headless `--no-confirm` за policy-gate (CA-6.1/6.2/6.4); IDE-міст і Platform tab — попереду |
 | Модель | **4/10** | qwen2.5:7b слабка для складного multi-file; потрібна 14b+/cloud opt-in |
 
 ### 2.3 Розриви (gap list)
@@ -209,7 +209,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | CA-6.1 | `jarvis code "<task>"` CLI — локальний агент проти cwd-репо | Streaming у термінал | [x] `tools/app/cli.py` (`python -m app.cli`): run/plan/review/fix підкоманди → agent REST; стрім-у-термінал (зараз фінальна відповідь) — рефайн попереду |
 | CA-6.2 | CLI auth через `/v1` ключ (Стовп A) | `JARVIS_API_KEY` + `base_url` | [x] `JARVIS_API_KEY` (Bearer) + `JARVIS_TOOLS_URL` base + `JARVIS_USER_ID` у `cli.py` |
 | CA-6.3 | IDE-міст: LSP-обгортка або VS Code extension (поверх `/v1`) | Inline diff в IDE | [ ] |
-| CA-6.4 | Headless-режим (CI): `jarvis code --apply --no-confirm` за політикою | Policy gate (AM-4) | [ ] |
+| CA-6.4 | Headless-режим (CI): `jarvis code --apply --no-confirm` за політикою | Policy gate (AM-4) | [x] `jarvis code fix --no-confirm/--apply` → policy gate `CODING_HEADLESS_APPLY` (`headless.authorize_headless_apply`): дозвіл → короткий session-trust (apply без ✅); інакше `policy_denied` |
 | CA-6.5 | Platform Coding tab: repo-tree, diff-viewer, test-panel (закриває CB6) | SSE як Workbench | [ ] |
 
 **Вихід CA-6:** `jarvis code "fix lint"` у терміналі = той самий агент, що з Telegram; видно diff в IDE/Platform.
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.16 | follow-ups: CA-3.5 live-fix golden, CA-5.5 turnkey pre-commit lint gate, CA-4.2 session-trust auto-approve планів, CA-6.4 headless `--no-confirm` за policy-gate |
 | 2026-06-16 | 1.15 | CA-6.1/6.2 `jarvis code` CLI (`app/cli.py`: run/plan/review/fix + key/base auth); CA-5.3 (часткою) coding_task job type + `/agent/code/fix`; CA-5.4 ✅ (spawn_subagent) |
 | 2026-06-16 | 1.14 | CA-4.5 word-boundary `rename_symbol` mode (host-agent) — безпечний rename, composable repo_refs→code_edit_batch; **CA-4 повністю закрито** |
 | 2026-06-16 | 1.13 | `repo_refs` — крос-файловий reference finder (import/usage), закриває CB3 та закладає основу під CA-4.5 rename |

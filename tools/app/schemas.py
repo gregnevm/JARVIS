@@ -75,6 +75,7 @@ class CodeFixRequest(BaseModel):
     path: str = ""
     task: str = ""
     max_rounds: int | None = None
+    no_confirm: bool = False  # CA-6.4: headless auto-apply (за policy gate)
 
 
 class FilePathRequest(BaseModel):
