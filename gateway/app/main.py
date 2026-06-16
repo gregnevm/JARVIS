@@ -179,6 +179,10 @@ app.include_router(admin_panel_router)
 app.include_router(platform_router)
 app.include_router(openai_router)
 
+from .saas import routes as saas_routes  # noqa: E402
+
+saas_routes.register(app)
+
 
 @app.middleware("http")
 async def _request_id_middleware(

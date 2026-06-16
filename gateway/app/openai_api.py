@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -28,18 +28,49 @@ class ChatCompletionRequest(BaseModel):
     user: str | None = None
 
 
-def _auth_bearer(request: Request) -> None:
+def _key_store(request: Request) -> Any:
+    from .saas.api_keys import ApiKeyStore
+
+    return ApiKeyStore(request.app.state.redis)
+
+
+async def _authenticate(request: Request) -> dict[str, Any]:
+    """Аутентифікація `/v1` (AP-1.4): root-ключ (`OPENAI_API_KEY`) АБО керований sk-jarvis-key.
+
+    Повертає {root, scopes, key_id}; scopes=None → усі скоупи (root)."""
+    import hmac
+
     if not settings.enable_openai_api:
         raise HTTPException(status_code=404, detail="OpenAI API disabled")
-    key = (settings.openai_api_key or "").strip()
-    if not key:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY not configured")
     auth = request.headers.get("authorization") or ""
     if not auth.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
     token = auth[7:].strip()
-    if token != key:
-        raise HTTPException(status_code=401, detail="invalid api key")
+    root_key = (settings.openai_api_key or "").strip()
+    if root_key and hmac.compare_digest(token, root_key):
+        return {"root": True, "scopes": None, "key_id": None}
+    rec = await _key_store(request).verify(token)
+    if rec is not None:
+        return {"root": False, "scopes": set(rec.get("scopes") or []), "key_id": rec["id"]}
+    raise HTTPException(status_code=401, detail="invalid api key")
+
+
+def require_scope(scope: str) -> Callable[[Request], Coroutine[object, object, None]]:
+    """Залежність: аутентифікує і вимагає `scope` (root має всі) — AP-1.5."""
+
+    async def dep(request: Request) -> None:
+        ctx = await _authenticate(request)
+        request.state.api_auth = ctx
+        scopes = ctx.get("scopes")
+        if scopes is not None and scope not in scopes:
+            raise HTTPException(status_code=403, detail=f"api key missing scope: {scope}")
+
+    return dep
+
+
+async def _auth_bearer(request: Request) -> None:
+    """Бекворд-сумісно: будь-який валідний ключ (root або керований), без scope-обмежень."""
+    await _authenticate(request)
 
 
 def _resolve_user_id(request: Request, body: ChatCompletionRequest) -> int:
@@ -101,7 +132,7 @@ def _chunk(id_: str, model: str, delta: str, finish: bool = False) -> str:
 async def chat_completions(
     request: Request,
     body: ChatCompletionRequest,
-    _: None = Depends(_auth_bearer),
+    _: None = Depends(require_scope("chat")),
 ) -> Any:
     text = _extract_text(body.messages)
     if not text:

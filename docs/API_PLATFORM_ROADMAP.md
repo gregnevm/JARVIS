@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.0 (2026-06-15)
+> **Версія:** 1.1 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -112,20 +112,20 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 ---
 
-## AP-1 — API-ключі (per-org) · **блокується SAAS PR#0/#1**
+## AP-1 — API-ключі · **керовані ключі ✅ (self-hosted); per-org tenant — попереду**
 
-**Мета:** замість одного `.env`-ключа — керовані per-org ключі.
+**Мета:** замість одного `.env`-ключа — керовані ключі з create/list/revoke + scopes.
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-1.0 | **SAAS PR#0** — IDOR fix (`get_by_id` ownership) | Cross-tenant get → 404 | [ ] |
-| AP-1.1 | **SAAS PR#1** — `jarvis_core/context.py` RequestContext + tenant headers | `X-JARVIS-Org-Id/User-Id` | [ ] |
-| AP-1.2 | `api_keys` таблиця (prefix, hash, scopes, revoked_at) | Міграція `003_saas_tenant` | [ ] |
-| AP-1.3 | `gateway/app/saas/api_keys.py` — CRUD + lookup by prefix | bcrypt hash, show-once | [ ] |
-| AP-1.4 | `/v1` auth → per-org key замість глобального; fallback на global для self-hosted | Backward compat | [ ] |
-| AP-1.5 | Scopes enforcement (`chat`, `embeddings`, `jobs`) | 403 поза scope | [ ] |
+| AP-1.0 | **SAAS PR#0** — IDOR fix (`get_by_id` ownership) | Cross-tenant get → 404 | [ ] (per-org tenant) |
+| AP-1.1 | **SAAS PR#1** — `jarvis_core/context.py` RequestContext + tenant headers | `X-JARVIS-Org-Id/User-Id` | [ ] (per-org tenant) |
+| AP-1.2 | Сховище ключів (prefix, hash, scopes, revoked) | show-once | [x] `gateway/app/saas/api_keys.py` `ApiKeyStore` (Redis; sha256+prefix; constant-time verify; per-org — поверх через tenant ctx) |
+| AP-1.3 | Management endpoints — create / list / revoke | root-gated | [x] `POST/GET/DELETE /saas/api/keys` (`saas/routes.py`, лише root-ключ) |
+| AP-1.4 | `/v1` auth → керований ключ АБО глобальний (self-hosted fallback) | Backward compat | [x] `_authenticate` приймає root АБО `sk-jarvis-…`; revoke → 401 |
+| AP-1.5 | Scopes enforcement (`chat`, `models`, `embeddings`, `jobs`) | 403 поза scope | [x] `require_scope(...)`; root має всі скоупи |
 
-**Вихід AP-1:** `POST /saas/api/keys` створює `sk-jarvis-live-…`; `/v1` приймає його; revoke працює.
+**Вихід AP-1:** `POST /saas/api/keys` створює `sk-jarvis-…` (показ один раз); `/v1` приймає його зі scope-перевіркою; revoke миттєво відхиляє. Зберігається лише `sha256(key)` + prefix — сирий ключ ніколи. Per-org розшарування (multi-tenant) додасться зверху через SAAS tenant-context, не змінюючи API.
 
 ---
 
@@ -259,6 +259,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.1 | AP-1 керовані API-ключі (self-hosted): `ApiKeyStore` + `/saas/api/keys` CRUD + `/v1` scope-auth |
 | 2026-06-15 | 1.0 | Початковий roadmap Стовпа A (AP-0…AP-6); продуктовий шар над SAAS_DEEP_DIVE |
 
 ---
