@@ -45,6 +45,25 @@ vec = client.embeddings.create(model="nomic-embed-text", input="hello").data[0].
 print([m.id for m in client.models.list().data])
 ```
 
+## 2b. Node / TypeScript (openai-node)
+
+Той самий drop-in — лише `baseURL` + `apiKey`:
+
+```js
+import OpenAI from "openai";
+
+const client = new OpenAI({ baseURL: "https://YOUR_HOST/v1", apiKey: "sk-jarvis-…" });
+
+const r = await client.chat.completions.create({
+  model: "jarvis",
+  messages: [{ role: "user", content: "привіт" }],
+});
+console.log(r.choices[0].message.content);
+
+// embeddings
+const e = await client.embeddings.create({ model: "nomic-embed-text", input: "hello" });
+```
+
 ## 3. Endpoints (`/v1`)
 
 | Метод | Шлях | Scope | Опис |
