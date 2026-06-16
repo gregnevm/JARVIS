@@ -15,6 +15,8 @@ _STORE = RedisIndexedStore(
 )
 
 DEFAULT_ROLES = ("researcher", "coder", "reviewer")
+# Coding-специфічний pipeline (CA-5.2): без research-фази, з окремим Tester.
+CODING_ROLES = ("coder", "reviewer", "tester")
 
 ROLE_PROMPTS: dict[str, str] = {
     "researcher": (
@@ -28,6 +30,11 @@ ROLE_PROMPTS: dict[str, str] = {
     "reviewer": (
         "Ти Reviewer у команді JARVIS. Перевір research і coder output: помилки, прогалини, "
         "безпека. Дай фінальну рекомендацію українською."
+    ),
+    "tester": (
+        "Ти Tester у команді JARVIS. На основі coder/reviewer-виходу склади план перевірки: "
+        "які тести запустити (run_tests), які краєві випадки покрити, що вважати green. "
+        "Якщо бачиш конкретні команди — наведи їх. Стисло, actionable."
     ),
 }
 

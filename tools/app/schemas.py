@@ -155,6 +155,7 @@ class TeamSpawnBody(BaseModel):
     task: str
     budget_per_role: int = 3
     roles: list[str] | None = None
+    kind: str = ""  # "coding" → пресет Coder→Reviewer→Tester (CA-5.2)
     async_mode: bool = True
 
 
