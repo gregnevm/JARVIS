@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.12 (2026-06-16)
+> **Версія:** 1.13 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -155,7 +155,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 | AP-3.1 | Tab **API Keys** — create/list/revoke, show-once | `platform.html` + `saas/api_keys` | [x] nav-таб «API ключі» у `platform.html`: create (scopes) + show-once + list + revoke; data — `/platform/api/developer/keys` |
 | AP-3.2 | Tab **Usage** — графіки токенів/запитів, per-key breakdown | `/v1/usage` charts | [~] data-шар є: `/platform/api/developer/usage?key_id=&days=`; графіки — попереду |
 | AP-3.3 | Tab **Playground** — `/v1` запит із UI (model, messages, stream) | Reuse Workbench SSE | [x] console Playground tab + `/platform/api/developer/playground` (mode auto/agent/chat, admin-сесія) |
-| AP-3.4 | Tab **API Logs** — останні запити (status, latency, tokens) | request_id трейс | [ ] |
+| AP-3.4 | Tab **API Logs** — останні запити (status, latency, tokens) | request_id трейс | [x] `RequestLogStore` (capped Redis list, лог у `_OpenAIErrorRoute`: status+ms) + `/platform/api/developer/logs` + console tab |
 | AP-3.5 | **Quickstart** панель — curl/python/node snippet із підставленим ключем | Copy-paste готовий | [x] панель у Developer-табі: base_url (live host) + Python(OpenAI SDK) + curl snippets |
 
 **Вихід AP-3:** розробник не торкається `.env` — усе через консоль.
@@ -259,6 +259,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.13 | AP-3.4 API-Logs (request log + console tab) — AP-3 console повний |
 | 2026-06-16 | 1.12 | AP-3.5 Quickstart-панель у Developer-табі (base_url+Python+curl) |
 | 2026-06-16 | 1.11 | AP-3.3 console Playground tab + `/platform/api/developer/playground` |
 | 2026-06-16 | 1.10 | AP-2.3 `/v1/models` реальний каталог (Ollama merge) — AP-2 повний 6/6 |

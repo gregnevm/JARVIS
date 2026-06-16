@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from ..saas.api_keys import ApiKeyStore
+from ..saas.request_log import RequestLogStore
 from ..saas.usage import UsageStore
 from .auth import PlatformAuth, require_platform_auth
 
@@ -64,6 +65,13 @@ def register(router: APIRouter) -> None:
         _: PlatformAuth = Depends(require_platform_auth),
     ) -> dict[str, Any]:
         return await _usage(request).summary(key_id or "root", days=days)
+
+    @router.get("/platform/api/developer/logs")
+    async def logs(
+        request: Request, limit: int = 50, _: PlatformAuth = Depends(require_platform_auth)
+    ) -> dict[str, Any]:
+        """AP-3.4: останні `/v1`-запити (status/latency/endpoint/key)."""
+        return {"data": await RequestLogStore(request.app.state.redis).recent(limit=limit)}
 
     @router.post("/platform/api/developer/playground")
     async def playground(

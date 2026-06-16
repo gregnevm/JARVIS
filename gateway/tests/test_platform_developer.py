@@ -16,6 +16,7 @@ class FakeRedis:
         self.kv: dict[str, str] = {}
         self.sets: dict[str, set[str]] = {}
         self.h: dict[str, dict[str, int]] = {}
+        self.lists: dict[str, list[str]] = {}
 
     async def set(self, key: str, value: str) -> None:
         self.kv[key] = value
@@ -43,6 +44,18 @@ class FakeRedis:
     async def hgetall(self, key: str) -> dict[str, str]:
         return {k: str(v) for k, v in self.h.get(key, {}).items()}
 
+    async def lpush(self, key: str, *values: str) -> int:
+        lst = self.lists.setdefault(key, [])
+        for v in values:
+            lst.insert(0, v)
+        return len(lst)
+
+    async def ltrim(self, key: str, start: int, end: int) -> None:
+        self.lists[key] = self.lists.get(key, [])[start : end + 1]
+
+    async def lrange(self, key: str, start: int, end: int) -> list[str]:
+        return self.lists.get(key, [])[start : end + 1]
+
     async def aclose(self) -> None:
         return None
 
@@ -68,6 +81,13 @@ def test_console_page_has_developer_tab(client: TestClient) -> None:
     assert "/platform/api/developer/keys" in html  # render logic wired
     assert 'data-tab="playground"' in html and "/platform/api/developer/playground" in html
     assert "Quickstart" in html and "OpenAI(base_url" in html  # AP-3.5 snippet panel
+    assert 'data-tab="apilogs"' in html and "/platform/api/developer/logs" in html  # AP-3.4
+
+
+def test_logs_endpoint(client: TestClient) -> None:
+    assert client.get("/platform/api/developer/logs").status_code == 401
+    r = client.get("/platform/api/developer/logs", auth=AUTH)
+    assert r.status_code == 200 and isinstance(r.json()["data"], list)
 
 
 def test_playground_runs(client: TestClient) -> None:

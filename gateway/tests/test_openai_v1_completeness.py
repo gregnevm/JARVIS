@@ -13,6 +13,7 @@ from app.main import app
 class FakeRedis:
     def __init__(self) -> None:
         self.h: dict[str, dict[str, int]] = {}
+        self.lists: dict[str, list[str]] = {}
 
     async def hincrby(self, key: str, field: str, amount: int) -> int:
         bucket = self.h.setdefault(key, {})
@@ -21,6 +22,18 @@ class FakeRedis:
 
     async def hgetall(self, key: str) -> dict[str, str]:
         return {k: str(v) for k, v in self.h.get(key, {}).items()}
+
+    async def lpush(self, key: str, *values: str) -> int:
+        lst = self.lists.setdefault(key, [])
+        for v in values:
+            lst.insert(0, v)
+        return len(lst)
+
+    async def ltrim(self, key: str, start: int, end: int) -> None:
+        self.lists[key] = self.lists.get(key, [])[start : end + 1]
+
+    async def lrange(self, key: str, start: int, end: int) -> list[str]:
+        return self.lists.get(key, [])[start : end + 1]
 
     # /v1 auth uses key store (verify) only for non-root tokens; root path skips it.
     async def get(self, key: str) -> str | None:
@@ -101,6 +114,18 @@ def test_models_merges_ollama_catalog(client: TestClient, monkeypatch: pytest.Mo
     assert "qwen2.5:7b" in ids  # real catalog merged
     assert sum(1 for m in client.get("/v1/models", headers=_auth()).json()["data"]
                if m["id"] == "jarvis") == 1  # deduped
+
+
+def test_v1_request_is_logged(client: TestClient) -> None:
+    client.get("/v1/models", headers=_auth())
+    client.get("/v1/models", headers={"Authorization": "Bearer nope"})  # 401 also logged
+    from app.saas.request_log import RequestLogStore
+    import asyncio
+
+    rows = asyncio.run(RequestLogStore(client.app.state.redis).recent(limit=10))
+    assert any(r["path"] == "/v1/models" and r["status"] == 200 for r in rows)
+    assert any(r["status"] == 401 for r in rows)
+    assert all("ms" in r and "ts" in r for r in rows)
 
 
 def test_models_ollama_down_falls_back(client: TestClient) -> None:

@@ -42,14 +42,33 @@ class _OpenAIErrorRoute(APIRoute):
         original = super().get_route_handler()
 
         async def handler(request: Request) -> Response:
+            start = time.monotonic()
+            status = 500
             try:
-                return await original(request)
+                resp = await original(request)
+                status = resp.status_code
+                return resp
             except HTTPException as exc:
+                status = exc.status_code
                 return JSONResponse(
                     status_code=exc.status_code,
                     content=_openai_error_body(exc.status_code, exc.detail),
                     headers=getattr(exc, "headers", None),
                 )
+            finally:
+                try:
+                    from .saas.request_log import RequestLogStore
+
+                    ctx = getattr(request.state, "api_auth", None) or {}
+                    await RequestLogStore(request.app.state.redis).record(
+                        method=request.method,
+                        path=request.url.path,
+                        status=status,
+                        ms=int((time.monotonic() - start) * 1000),
+                        key_id=str(ctx.get("key_id") or "root"),
+                    )
+                except Exception:  # noqa: BLE001 — лог best-effort
+                    pass
 
         return handler
 
