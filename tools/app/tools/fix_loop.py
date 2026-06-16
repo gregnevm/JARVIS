@@ -12,6 +12,7 @@ Stop-condition «однаковий fail двічі». Коли `run_tests` по
 from __future__ import annotations
 
 import hashlib
+import re
 
 from ..redis_util import get_redis
 
@@ -28,6 +29,19 @@ def fail_signature(parts: list[str]) -> str:
     """Стабільна коротка сигнатура fail-стану (sha1-hex, без ':')."""
     raw = "|".join(p for p in parts if p)
     return hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def summary_signature(summary: str) -> str:
+    """Сигнатура з рендереного підсумку run_tests (для fix-orchestration CA-3.2).
+
+    Орієнтир — список впалих тестів (рядки з відступом до роздільника '---').
+    Якщо імен нема (generic-раннер) — хеш голови підсумку. Стабільне до timing/
+    no-progress-підказки, бо дивиться лише на набір впалих тестів.
+    """
+    head = summary.split("\n---", 1)[0]
+    names = re.findall(r"^\s{2}(\S+)$", head, re.MULTILINE)
+    basis = sorted(set(names)) if names else [head.strip()[:200]]
+    return fail_signature(basis)
 
 
 def _parse(raw: bytes | str | None) -> tuple[str, int]:

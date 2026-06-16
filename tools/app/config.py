@@ -157,6 +157,8 @@ class Settings(BaseSettings):
     # Стелі для repo-інструментів (захист контексту/хоста).
     coding_tree_max_entries: int = 300
     coding_grep_max_results: int = 60
+    # CA-3.2 fix-orchestration: стеля раундів виділеної петлі «тест→правка→тест».
+    coding_fix_max_rounds: int = 4
 
 
 settings = Settings()

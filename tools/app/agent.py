@@ -29,6 +29,33 @@ FALLBACK = "Не зміг сформувати відповідь. Спробу�
 
 PLAN_MARKER = "[[PLAN_CONFIRM:{id}]]"
 _PLAN_MAX_STEPS = 8
+
+# CA-3.2 fix-orchestration: вузький набір coding-інструментів для петлі «тест→правка→тест».
+_FIX_TOOLS = frozenset(
+    {"code_read", "repo_grep", "repo_tree", "repo_symbols", "code_edit", "run_tests", "run_lint"}
+)
+_FIX_INNER_STEPS = 4  # модельних кроків (read/grep/edit) у межах одного раунду
+
+
+def _fix_system() -> str:
+    return (
+        "Ти JARVIS — інженер, що лагодить падіння тестів. Працюй вузько: 1) прочитай "
+        "вивід тестів і локалізуй причину (code_read/repo_grep/repo_symbols); 2) внеси "
+        "мінімальну правку через code_edit (diff), не переписуй файл цілком; 3) НЕ вгадуй — "
+        "спирайся на текст помилки. Після твоєї правки систему тестів буде перезапущено "
+        "автоматично. Якщо причина неясна — спершу читай код, не редагуй наосліп. "
+        "Відповідай українською, стисло."
+    )
+
+
+def _fix_user_prompt(task: str, exe: str, args: list[str], path: str, verdict: str) -> str:
+    cmd = (exe + " " + " ".join(args)).strip()
+    where = f" у {path}" if path else ""
+    extra = f"\nКонтекст задачі: {task}" if task else ""
+    return (
+        f"Падають тести (команда: `{cmd}`{where}). Локалізуй і виправ диффом, "
+        f"мінімально.{extra}\n\nПоточний вивід:\n{verdict}"
+    )
 _TOOL_MEDIA_RE = re.compile(
     r"\[\[\s*(?:photo|image|document|file)\s*:\s*[^\]]+\]\]",
     re.IGNORECASE,
@@ -686,3 +713,85 @@ class AgentRunner:
         await plans.finish_plan(plan_id, result=result, status="done")
         final = await plans.get_plan(plan_id)
         return {"plan": final, "result": result}
+
+    async def _fix_round_edit(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], user_id: int
+    ) -> None:
+        """Один раунд «локалізуй+прав»: до _FIX_INNER_STEPS модельних кроків з тулами.
+
+        Перезапуск тестів — НЕ тут (його робить fix_tests як авторитетний гейт);
+        тут модель читає код і вносить правку через code_edit.
+        """
+        for _ in range(_FIX_INNER_STEPS):
+            msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
+            messages.append(_assistant_msg(msg))
+            content = msg.get("content") or ""
+            calls = msg.get("tool_calls") or _parse_inline_tool_calls(content)
+            if not calls:
+                return
+            for call in calls:
+                fn = call.get("function") or {}
+                name = str(fn.get("name", ""))
+                args = coerce_args(fn.get("arguments"))
+                result = await dispatch(name, args, user_id, allow_computer=True)
+                logger.info("fix.tool[%s] -> %.80s", name, result.replace("\n", " "))
+                messages.append({"role": "tool", "content": f"[{name}] {result}"})
+
+    async def fix_tests(
+        self,
+        user_id: int,
+        *,
+        exe: str,
+        args: list[str] | None = None,
+        path: str = "",
+        task: str = "",
+        max_rounds: int | None = None,
+    ) -> dict[str, Any]:
+        """Виділена fix-orchestration (CA-3.2): тест → локалізація → code_edit → re-test.
+
+        Стоп-умови: green / max-rounds (config `coding_fix_max_rounds`) / no-progress
+        (той самий набір впалих тестів двічі поспіль). code_edit лишається за confirm/
+        session-trust — петля нічого не обходить (S4).
+
+        Повертає {status, rounds, report}: status ∈ already_green|fixed|no_progress|stuck.
+        """
+        from .tools import check_tools, fix_loop
+
+        arglist = list(args or [])
+        rounds = max(1, max_rounds if max_rounds is not None else settings.coding_fix_max_rounds)
+
+        async def _run() -> str:
+            return await check_tools.run_tests(exe, args=arglist, path=path, user_id=user_id)
+
+        baseline = await _run()
+        if "✅ PASS" in baseline:
+            return {"status": "already_green", "rounds": 0, "report": baseline}
+
+        tools = [
+            s
+            for s in agent_tool_schemas(computer=True, allow_computer=True)
+            if s.get("function", {}).get("name") in _FIX_TOOLS
+        ]
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": _fix_system()},
+            {"role": "user", "content": _fix_user_prompt(task, exe, arglist, path, baseline)},
+        ]
+
+        prev_sig = fix_loop.summary_signature(baseline)
+        verdict = baseline
+        for rnd in range(1, rounds + 1):
+            await self._fix_round_edit(messages, tools, user_id)
+            verdict = await _run()
+            if "✅ PASS" in verdict:
+                return {"status": "fixed", "rounds": rnd, "report": verdict}
+            sig = fix_loop.summary_signature(verdict)
+            if sig == prev_sig:
+                return {"status": "no_progress", "rounds": rnd, "report": verdict}
+            prev_sig = sig
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Тести все ще падають — спробуй інший підхід:\n{verdict}",
+                }
+            )
+        return {"status": "stuck", "rounds": rounds, "report": verdict}
