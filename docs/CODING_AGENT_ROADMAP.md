@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.7 (2026-06-16)
+> **Версія:** 1.8 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -176,8 +176,8 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 |---|--------|-----|--------|
 | CA-4.1 | `POST /agent/code/plan` — кроки з `{file, action, rationale, risk}` | JSON schema (розширення P3) | [ ] |
 | CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [ ] |
-| CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [ ] |
-| CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [ ] |
+| CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [~] host-agent `/fs/edit_batch` — план-усіх→запис-усіх, відкат із пам'яті на помилці, дедуп шляхів, `edit_batch_max`; лишається toolkit-обгортка + confirm-tier |
+| CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [~] `/fs/edit_batch {dry_run:true}` повертає всі diff-и без запису; лишається toolkit-обгортка |
 | CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [ ] |
 
 **Вихід CA-4:** «винеси `_helpers` у `jarvis_core`» → план на 5 файлів → один апрув → консистентний apply.
@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.8 | CA-4.3/4.4 (host-side) транзакційний `/fs/edit_batch` (усе-або-нічого, dry-run, дедуп, `edit_batch_max`) + рефактор `_plan_edit`/`_write_planned` |
 | 2026-06-16 | 1.7 | CA-3.2 виділена fix-orchestration `AgentRunner.fix_tests` (петля тест→правка→тест, `coding_fix_max_rounds`, стоп green/max/no-progress) |
 | 2026-06-16 | 1.6 | CA-3.4 no-progress детектор (`fix_loop.py` — per-user fail-сигнатура в Redis, повтор → підказка стоп/зміна підходу) + крос-платформний `_basename` (PureWindowsPath) |
 | 2026-06-15 | 1.5 | CA-3.1 `run_tests` + CA-3.3 `run_lint` (структуровані раннери, `check_tools.py`) + golden парсингу |

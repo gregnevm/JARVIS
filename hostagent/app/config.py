@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # Окремий, більший ліміт для code_edit (CA-1.x): 6 KB замало навіть для одного
     # модуля. Читання/запис правки використовують цей ліміт, не max_bytes.
     edit_max_bytes: int = 2 * 1024 * 1024
+    # Стеля файлів у транзакційному батчі (CA-4.3) — захист від «правка всього репо».
+    edit_batch_max: int = 20
     max_download_bytes: int = 48 * 1024 * 1024
     # Comma-separated absolute paths; FS API only allows paths under these roots.
     fs_roots: str = ""

@@ -215,3 +215,109 @@ def test_fs_edit_missing_file_404(client: TestClient, tmp_path: Path) -> None:
         json={"path": str(tmp_path / "nope.py"), "old_string": "a", "new_string": "b"},
     )
     assert r.status_code == 404
+
+
+# --- /fs/edit_batch — транзакційна multi-file правка + dry-run (CA-4.3/4.4) ----
+
+def test_fs_edit_batch_applies_all(client: TestClient, tmp_path: Path) -> None:
+    a = tmp_path / "a.py"
+    b = tmp_path / "b.py"
+    a.write_text("x = 1\n", encoding="utf-8")
+    b.write_text("y = 2\n", encoding="utf-8")
+    r = client.post(
+        "/fs/edit_batch",
+        headers=H,
+        json={
+            "edits": [
+                {"path": str(a), "old_string": "x = 1", "new_string": "x = 10"},
+                {"path": str(b), "old_string": "y = 2", "new_string": "y = 20"},
+            ]
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "ok" and body["count"] == 2
+    assert a.read_text(encoding="utf-8") == "x = 10\n"
+    assert b.read_text(encoding="utf-8") == "y = 20\n"
+
+
+def test_fs_edit_batch_dry_run_writes_nothing(client: TestClient, tmp_path: Path) -> None:
+    a = tmp_path / "a.py"
+    a.write_text("x = 1\n", encoding="utf-8")
+    r = client.post(
+        "/fs/edit_batch",
+        headers=H,
+        json={
+            "dry_run": True,
+            "edits": [{"path": str(a), "old_string": "x = 1", "new_string": "x = 99"}],
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "dry_run" and body["count"] == 1
+    assert "x = 99" in body["edits"][0]["diff"]
+    assert a.read_text(encoding="utf-8") == "x = 1\n"  # без запису
+
+
+def test_fs_edit_batch_rolls_back_on_invalid_edit(client: TestClient, tmp_path: Path) -> None:
+    # Перша правка валідна, друга — old_string не знайдено → весь батч відхилено,
+    # перший файл НЕ змінено (валідація всіх до першого запису).
+    a = tmp_path / "a.py"
+    b = tmp_path / "b.py"
+    a.write_text("x = 1\n", encoding="utf-8")
+    b.write_text("y = 2\n", encoding="utf-8")
+    r = client.post(
+        "/fs/edit_batch",
+        headers=H,
+        json={
+            "edits": [
+                {"path": str(a), "old_string": "x = 1", "new_string": "x = 10"},
+                {"path": str(b), "old_string": "NOPE", "new_string": "z"},
+            ]
+        },
+    )
+    assert r.status_code == 422
+    assert a.read_text(encoding="utf-8") == "x = 1\n"  # перший файл недоторканий
+    assert b.read_text(encoding="utf-8") == "y = 2\n"
+
+
+def test_fs_edit_batch_rejects_duplicate_path(client: TestClient, tmp_path: Path) -> None:
+    a = tmp_path / "a.py"
+    a.write_text("x = 1\ny = 1\n", encoding="utf-8")
+    r = client.post(
+        "/fs/edit_batch",
+        headers=H,
+        json={
+            "edits": [
+                {"path": str(a), "old_string": "x = 1", "new_string": "x = 2"},
+                {"path": str(a), "old_string": "y = 1", "new_string": "y = 2"},
+            ]
+        },
+    )
+    assert r.status_code == 422
+    assert "duplicate" in r.json()["detail"]
+    assert a.read_text(encoding="utf-8") == "x = 1\ny = 1\n"
+
+
+def test_fs_edit_batch_empty_400(client: TestClient) -> None:
+    r = client.post("/fs/edit_batch", headers=H, json={"edits": []})
+    assert r.status_code == 400
+
+
+def test_fs_edit_batch_too_many_400(client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "edit_batch_max", 1)
+    a = tmp_path / "a.py"
+    b = tmp_path / "b.py"
+    a.write_text("x = 1\n", encoding="utf-8")
+    b.write_text("y = 2\n", encoding="utf-8")
+    r = client.post(
+        "/fs/edit_batch",
+        headers=H,
+        json={
+            "edits": [
+                {"path": str(a), "old_string": "x", "new_string": "X"},
+                {"path": str(b), "old_string": "y", "new_string": "Y"},
+            ]
+        },
+    )
+    assert r.status_code == 400 and "too many" in r.json()["detail"]
