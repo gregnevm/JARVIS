@@ -9,7 +9,13 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from jarvis_core.pipeline.handlers import screen_text
 
-from ..schemas import AgentRequest, CodeReviewRequest, PlanCreateRequest, PlanUserRequest
+from ..schemas import (
+    AgentRequest,
+    CodeFixRequest,
+    CodeReviewRequest,
+    PlanCreateRequest,
+    PlanUserRequest,
+)
 from ._helpers import ndjson, require_found, require_text
 
 logger = logging.getLogger("jarvis.tools.agent_routes")
@@ -83,6 +89,24 @@ def register(router: APIRouter) -> None:
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception("agent code review failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @router.post("/agent/code/fix")
+    async def agent_code_fix_ep(req: CodeFixRequest, request: Request) -> dict[str, Any]:
+        """Виділена fix-orchestration (CA-3.2): тест→правка→тест до green/max/no-progress."""
+        if not (req.exe or "").strip():
+            raise HTTPException(status_code=400, detail="exe required")
+        try:
+            return await request.app.state.agent.fix_tests(
+                req.user_id,
+                exe=req.exe,
+                args=req.args,
+                path=req.path,
+                task=req.task,
+                max_rounds=req.max_rounds,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent code fix failed")
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @router.get("/agent/plan/{plan_id}")

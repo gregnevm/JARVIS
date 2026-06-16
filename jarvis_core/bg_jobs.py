@@ -11,6 +11,7 @@ JOB_TYPES: frozenset[str] = frozenset(
         "agent_team",
         "orchestrator",
         "cursor_task",
+        "coding_task",
     }
 )
 
@@ -79,6 +80,18 @@ def normalize_payload(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
             "run_id": str(payload.get("run_id") or ""),
             "worker_budget": int(payload.get("worker_budget") or 5),
             "max_revisions": int(payload.get("max_revisions") or 1),
+        }
+
+    if jt == "coding_task":
+        exe = str(payload.get("exe") or "").strip()
+        if not exe:
+            raise ValueError("exe required")
+        return {
+            "exe": exe,
+            "args": [str(a) for a in (payload.get("args") or [])],
+            "path": str(payload.get("path") or ""),
+            "task": str(payload.get("task") or ""),
+            "max_rounds": int(payload.get("max_rounds") or 0),
         }
 
     # cursor_task

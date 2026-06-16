@@ -68,6 +68,15 @@ class CodeReviewRequest(BaseModel):
     context: str = ""
 
 
+class CodeFixRequest(BaseModel):
+    user_id: int
+    exe: str
+    args: list[str] | None = None
+    path: str = ""
+    task: str = ""
+    max_rounds: int | None = None
+
+
 class FilePathRequest(BaseModel):
     user_id: int
     path: str
