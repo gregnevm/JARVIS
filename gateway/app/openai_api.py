@@ -444,13 +444,35 @@ async def usage(request: Request, days: int = 7, _: None = Depends(_auth_bearer)
     return await _usage_store(request).summary(kid, days=days)
 
 
+async def _ollama_catalog(request: Request) -> list[dict[str, Any]]:
+    """Реальний каталог моделей із Ollama (AP-2.3), best-effort — порожньо при збої."""
+    try:
+        core = await request.app.state.svc.dashboard()
+        host = str(core.get("ollama_host") or "")
+        if not host:
+            return []
+        from .platform.models import _ollama_tags
+
+        out: list[dict[str, Any]] = []
+        for m in await _ollama_tags(host):
+            name = m.get("name")
+            if name:
+                out.append({"id": str(name), "object": "model", "owned_by": "ollama"})
+        return out
+    except Exception:  # noqa: BLE001 — каталог не має ламати ендпоінт
+        return []
+
+
 @router.get("/models")
 async def list_models(request: Request, _: None = Depends(_auth_bearer)) -> dict[str, Any]:
-    return {
-        "object": "list",
-        "data": [
-            {"id": "jarvis", "object": "model", "owned_by": "jarvis"},
-            {"id": "jarvis-agent", "object": "model", "owned_by": "jarvis"},
-            {"id": "nomic-embed-text", "object": "model", "owned_by": "jarvis"},
-        ],
-    }
+    data: list[dict[str, Any]] = [
+        {"id": "jarvis", "object": "model", "owned_by": "jarvis"},
+        {"id": "jarvis-agent", "object": "model", "owned_by": "jarvis"},
+        {"id": "nomic-embed-text", "object": "model", "owned_by": "jarvis"},
+    ]
+    seen = {m["id"] for m in data}
+    for m in await _ollama_catalog(request):  # AP-2.3: реальний каталог
+        if m["id"] not in seen:
+            data.append(m)
+            seen.add(m["id"])
+    return {"object": "list", "data": data}

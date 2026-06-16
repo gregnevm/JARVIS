@@ -91,6 +91,24 @@ def test_models_lists_embeddings(client: TestClient) -> None:
     assert "nomic-embed-text" in ids
 
 
+def test_models_merges_ollama_catalog(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    client.app.state.svc.dashboard = AsyncMock(return_value={"ollama_host": "http://ollama"})
+    monkeypatch.setattr(
+        "app.platform.models._ollama_tags",
+        AsyncMock(return_value=[{"name": "qwen2.5:7b"}, {"name": "jarvis"}]),
+    )
+    ids = {m["id"] for m in client.get("/v1/models", headers=_auth()).json()["data"]}
+    assert "qwen2.5:7b" in ids  # real catalog merged
+    assert sum(1 for m in client.get("/v1/models", headers=_auth()).json()["data"]
+               if m["id"] == "jarvis") == 1  # deduped
+
+
+def test_models_ollama_down_falls_back(client: TestClient) -> None:
+    client.app.state.svc.dashboard = AsyncMock(side_effect=RuntimeError("ollama down"))
+    ids = {m["id"] for m in client.get("/v1/models", headers=_auth()).json()["data"]}
+    assert "jarvis" in ids and "nomic-embed-text" in ids  # static list still served
+
+
 def test_create_job(client: TestClient) -> None:
     client.app.state.tools.create_bg_job = AsyncMock(
         return_value={"id": "job_1", "status": "queued", "created_at": 100, "kind": "research"}
