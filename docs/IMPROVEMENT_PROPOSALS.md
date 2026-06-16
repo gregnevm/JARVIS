@@ -167,7 +167,7 @@ teams/improve, ~20). Будь-яка нова фіча tools роздуває ц
 
 | # | Зміна | Ефект |
 |---|-------|-------|
-| R1 | Витягти єдиний `ToolLoop` у `jarvis_core/`; три копії в `agent.py` стають варіантами (sync/stream/fix) над ним | −~150 дубльованих рядків, прибирає клас багів розсинхрону; покрити юніт-тестами на mocked-backend |
+| R1 ✅ | Витягти єдиний `ToolLoop` у `jarvis_core/`; три копії в `agent.py` стають варіантами (sync/stream/fix) над ним | **зроблено (2026-06-16):** `jarvis_core/agent/tool_loop.py` — одна петля; `_agent`/`_agent_events`/`_fix_round_edit` тепер тонкі споживачі `run_tool_loop`. Поведінка незмінна (всі agent-тести green), tool-loop single-sourced; 10 нових юніт-тестів engine на mocked-backend |
 | R2 | Додати streaming-handler у `jarvis_core/pipeline`, щоб `run_stream` теж ішов через `JARVIS.chat` | facade/pipeline перестають бути мертвими; один шлях входу в `routes/agent.py` |
 | R3 | Розбити `ToolsClient` на 4 фасади (`Agent`/`Computer`/`Jobs`/`Orchestrator`) зі спільним `_request`; `ToolsClient` лишається тонким агрегатором | усуває god-object, зворотна сумісність збережена |
 | R4 | `BaseServiceSettings` у `jarvis_core/`; замінити ручний парсинг у `gateway/config.py` на `parse_comma_separated_ids`; додати properties у `tools/config.py`; `_SCREENSHOT_RE` → `cascade.py` | single source of truth для config/auth/intent |
@@ -176,7 +176,8 @@ teams/improve, ~20). Будь-яка нова фіча tools роздуває ц
 **Пріоритет:** R1 (найвищий ROI — три копії в критичному шляху) → R2 → R4 → R3 → R5.
 **DoD:** кожна фаза — окремий PR, рефактор без зміни поведінки, `mypy` strict + `pytest`
 по відповідних сервісах green, нові юніт-тести на витягнуту логіку (`ToolLoop`, parser).
-**Статус:** аналіз готовий, чекає рішення про старт реалізації (фазами).
+**Статус:** реалізація стартувала фазами. ✅ R1 (єдиний tool-loop у `jarvis_core/agent/`).
+Далі за пріоритетом: R2 (streaming через pipeline) → R4 → R3 → R5.
 
 ---
 
