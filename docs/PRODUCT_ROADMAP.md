@@ -1,6 +1,6 @@
 # JARVIS — Product Roadmap (повноцінна платформа)
 
-> **Версія:** 2.0 (2026-06-15) — *перевизначено зі «self-hosted personal AGI» на повноцінний продукт.*
+> **Версія:** 2.1 (2026-06-16) — *перевизначено зі «self-hosted personal AGI» на повноцінний продукт.*
 > **Статус:** Living document — парасолька над усіма трек-roadmap-ами.
 > **Скоуп:** суверенна AI-платформа = **API-платформа розробника** + **агент кодування рівня Claude Code** + **мультиплатформа** (web · Telegram · mobile).
 
@@ -119,12 +119,12 @@ multi-user/whitelist (зародок auth), bg jobs / subagents / teams (пар�
 | Фаза | Зміст | Старт-умова | Статус |
 |------|-------|-------------|--------|
 | CA-0 | Bridges baseline: `cursor_task`, `continue_dev`, computer PS/CLI | — | ✅ done |
-| CA-1 | Рідний file-edit: read/diff/apply, workspace-скоуп, git-aware | Computer Use FS | ⏳ |
-| CA-2 | Repo-context: дерево файлів, symbol-граф, scoped RAG по проєкту | P1 Projects | ⏳ |
-| CA-3 | Test/build loop: запусти→прочитай fail→виправ→повтори | CA-1 | ⏳ |
-| CA-4 | Plan→approve→execute для коду; multi-file рефактор | P3 Planning + CA-2 | ⏳ |
-| CA-5 | Self-review + субагенти (Coder/Reviewer/Tester pipeline) | P8/P9 Teams | ⏳ |
-| CA-6 | CLI (`jarvis code …`) + IDE-режим (LSP/extension) | CA-3 | ⏳ |
+| CA-1 | Рідний file-edit: read/diff/apply, workspace-скоуп, git-aware | Computer Use FS | ✅ done |
+| CA-2 | Repo-context: дерево файлів, symbol-граф, scoped RAG по проєкту | P1 Projects | ✅ done (+ `repo_refs` крос-файл) |
+| CA-3 | Test/build loop: запусти→прочитай fail→виправ→повтори | CA-1 | ✅ майже (3.5 live-eval — попереду) |
+| CA-4 | Plan→approve→execute для коду; multi-file рефактор | P3 Planning + CA-2 | ✅ done (батч + rename_symbol) |
+| CA-5 | Self-review + субагенти (Coder/Reviewer/Tester pipeline) | P8/P9 Teams | 🔄 5.2/5.4 ✅; 5.1/5.3 частково |
+| CA-6 | CLI (`jarvis code …`) + IDE-режим (LSP/extension) | CA-3 | 🔄 CLI ✅ (6.1/6.2); IDE/Platform tab — попереду |
 
 **Вихід треку B:** «полагодь тести в репо» з Telegram/CLI → агент сам редагує файли диффами,
 ганяє pytest у лупі, рев'ювить, звітує. Tier-ladder і audit — як у Computer Use.
@@ -212,6 +212,7 @@ Edition gating технічно лягає на plan limits (SAAS §7) + feature
 |------|--------|-------|
 | 2026-06-04 | 1.0 | Початкова версія: self-hosted personal AGI, фази 0–7 |
 | 2026-06-15 | 2.0 | Перевизначення на повноцінний продукт: 3 стовпи (API/Coding/Clients) над фундаментом; синхронізація з [`AGENTS.md`](../AGENTS.md) і трек-roadmap-ами |
+| 2026-06-16 | 2.1 | Стовп B (Coding Agent) рвонув: CA-1…CA-4 ✅, CA-5/6 частково (fix-loop, transactional multi-file + rename_symbol, code-plan/review, coding teams, `jarvis code` CLI). Деталі — [`CODING_AGENT_ROADMAP.md`](CODING_AGENT_ROADMAP.md) v1.15 |
 
 ---
 
