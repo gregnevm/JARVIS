@@ -44,35 +44,26 @@ JAVA_MAJOR="$("$JAVA_HOME/bin/java" -version 2>&1 | sed -n 's/.*version "\([0-9]
 # ---- 2. Android SDK ---------------------------------------------------------
 step "Android SDK ($PLATFORM + build-tools $BUILD_TOOLS_VER)"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$SDK_DEFAULT}}"
-sdkmanager_bin() {
-  # 1) явний cmdline-tools/latest
-  if [ -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-    echo "$SDK/cmdline-tools/latest/bin/sdkmanager"; return 0
-  fi
-  # 2) будь-яка версія cmdline-tools (CI-образ кладе у versioned dir, напр. 16.0/) —
-  #    беремо найновішу. НЕ legacy `tools/bin/sdkmanager` (розуміє лише SDK XML v3).
-  local m
-  m="$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1 || true)"
-  if [ -n "$m" ] && [ -x "$m" ]; then echo "$m"; return 0; fi
-  # 3) PATH, але свідомо пропускаємо застарілий tools/bin
-  local p; p="$(command -v sdkmanager 2>/dev/null || true)"
-  case "$p" in */tools/bin/sdkmanager) p="" ;; esac
-  if [ -n "$p" ]; then echo "$p"; return 0; fi
-  return 1
-}
-if ! SDKMGR="$(sdkmanager_bin)"; then
-  echo "    bootstrap cmdline-tools → $SDK"
+# Свідомо НЕ беремо випадковий sdkmanager з PATH: CI-образ має ще й застарілий
+# `$SDK/tools/bin/sdkmanager` (розуміє лише SDK XML v3 → падає на v4-репозиторії).
+# Гарантуємо свіжий modern cmdline-tools/latest — бутстрапимо, якщо його немає
+# (GitHub-раннери мають відкритий інтернет, тож завантаження з Google працює).
+CLT="$SDK/cmdline-tools/latest"
+SDKMGR="$CLT/bin/sdkmanager"
+if [ ! -x "$SDKMGR" ]; then
+  echo "    bootstrap cmdline-tools → $CLT"
   zip="$DL/cmdline-tools.zip"
   [ -f "$zip" ] || curl -fSL "$CLT_URL" -o "$zip" || die "download cmdline-tools failed"
   tmp="$TC/_clt_tmp"; rm -rf "$tmp"; mkdir -p "$tmp"
   unzip -q "$zip" -d "$tmp"
   mkdir -p "$SDK/cmdline-tools"
-  rm -rf "$SDK/cmdline-tools/latest"
-  mv "$tmp/cmdline-tools" "$SDK/cmdline-tools/latest"
+  rm -rf "$CLT"
+  mv "$tmp/cmdline-tools" "$CLT"
   rm -rf "$tmp"
-  SDKMGR="$SDK/cmdline-tools/latest/bin/sdkmanager"
 fi
 export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+echo "    sdkmanager: $SDKMGR"
+"$SDKMGR" --version 2>&1 | sed 's/^/    sdkmanager v/' | head -1 || true
 
 # Прийняти ліцензії детерміновано (hash-файли) — як у PS1, без інтерактиву.
 echo "    accepting licenses (hash files)…"
@@ -84,8 +75,11 @@ printf '%s\n' \
 printf '%s\n' 84831b9409646a918e30573bab4c9c91346d8abd > "$SDK/licenses/android-sdk-preview-license"
 echo "    installing packages…"
 yes 2>/dev/null | "$SDKMGR" --sdk_root="$SDK" \
-  "platform-tools" "platforms;$PLATFORM" "build-tools;$BUILD_TOOLS_VER" >/dev/null \
-  || die "sdkmanager install failed"
+  "platform-tools" "platforms;$PLATFORM" "build-tools;$BUILD_TOOLS_VER" 2>&1 \
+  | grep -vE '^\[=*>* *\] *[0-9]+% ' | sed 's/^/    /' \
+  || true
+[ -d "$SDK/platforms/$PLATFORM" ] && [ -d "$SDK/build-tools/$BUILD_TOOLS_VER" ] \
+  || die "sdkmanager install failed (platform/build-tools відсутні)"
 
 # ---- 3. local.properties ----------------------------------------------------
 printf 'sdk.dir=%s\n' "$SDK" > "$MOBILE/local.properties"
