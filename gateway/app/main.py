@@ -120,6 +120,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         ctx_sched_task = asyncio.create_task(context_scheduler_loop(app.state.redis))
 
+    # Auto-code coroutine (OKR-керований автономний цикл). Default off (ADR-008).
+    autopilot_task: asyncio.Task[None] | None = None
+    if settings.auto_coroutine_enabled and settings.auto_coroutine_uid:
+        from .auto_coroutine import auto_coroutine_loop, make_tools_dispatch
+
+        autopilot_task = asyncio.create_task(
+            auto_coroutine_loop(
+                data_dir=settings.data_dir,
+                user_id=settings.auto_coroutine_uid,
+                repo_path=settings.auto_coroutine_repo_path or ".",
+                dispatch=make_tools_dispatch(app.state.tools),
+                interval=settings.auto_coroutine_interval,
+            )
+        )
+
     # BotFather UI: команди, опис, Mini App menu button.
     await register_bot_ui(app.state.tg)
 
@@ -136,7 +151,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
 
-    for task in (poll_task, reminder_task, health_task, job_task, bg_job_task, ctx_sched_task):
+    for task in (
+        poll_task, reminder_task, health_task, job_task, bg_job_task,
+        ctx_sched_task, autopilot_task,
+    ):
         if task is not None:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

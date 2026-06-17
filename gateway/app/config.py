@@ -151,6 +151,24 @@ class Settings(BaseSettings):
     context_daily_hour: int = 6
     context_scheduler_interval: float = 1800.0  # сек між тіками (summarize + перевірка daily)
 
+    # Auto-code coroutine (OKR-керований автономний цикл розробки). Дефолт OFF
+    # (ADR-008): мутує код БЕЗ підтвердження, тож вмикати лише свідомо й під
+    # наглядом. Застосування правок додатково гейтиться tools `CODING_HEADLESS_APPLY`.
+    auto_coroutine_enabled: bool = False
+    # Від чийого імені крутиться (Telegram id). Порожньо → перший із ADMIN_USER_IDS.
+    auto_coroutine_user_id: int = 0
+    # Корінь репо для test/fix фаз (на хост-агенті). Порожньо → CWD виконавця.
+    auto_coroutine_repo_path: str = ""
+    auto_coroutine_interval: float = 3600.0  # сек між циклами
+
+    @property
+    def auto_coroutine_uid(self) -> int:
+        """AUTO_COROUTINE_USER_ID або перший адмін (self-hosted власник)."""
+        if self.auto_coroutine_user_id:
+            return self.auto_coroutine_user_id
+        ids = sorted(self.admin_ids)
+        return ids[0] if ids else 0
+
     @property
     def allowed_ids(self) -> set[int]:
         """ALLOWED_USER_IDS ('1,2,3') → set[int]. Порожньо = нікого не пускаємо."""
