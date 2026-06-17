@@ -135,32 +135,72 @@ class CommandRegistry:
         ]
 
 
-# Callback-маршрутизація за префіксом (`callback_data` будуються в keyboards.py).
-CallbackHandler = Callable[..., Awaitable[bool]]
+# Callback-маршрутизація за префіксом `callback_data` (будуються в keyboards.py).
+@dataclass
+class CbCtx:
+    """Контекст callback_query. Транспорт (chat/message/user) уже розібрано роутером."""
+
+    data: str
+    chat_id: int
+    user_id: int | None
+    message_id: int | None
+    cq_id: str | None
+    tg: TelegramClient
+    svc: ServicesClient
+    redis: aioredis.Redis | None = None
+    tools: ToolsClient | None = None
+
+    async def ack(self, text: str | None = None) -> None:
+        """answer_callback_query (прибирає «годинник» на кнопці). No-op без cq_id."""
+        if self.cq_id:
+            await self.tg.answer_callback_query(str(self.cq_id), text=text)
+
+
+# Хендлер повертає True, якщо callback спожито (інакше — фінальний ack у диспетчері).
+CallbackHandler = Callable[[CbCtx], Awaitable[bool]]
 
 
 @dataclass(frozen=True)
 class CallbackSpec:
     prefix: str
     handler: CallbackHandler
-    needs_tools: bool = False
-    needs_redis: bool = False
-    ack: str | None = None      # текст для answer_callback_query ПЕРЕД обробкою (toast)
+    needs_tools: bool = False    # пропустити (→ фінальний ack), якщо tools відсутній
+    needs_redis: bool = False    # пропустити (→ фінальний ack), якщо redis відсутній
 
 
 class CallbackRegistry:
-    """Реєстр callback-хендлерів за префіксом `data` (першим виграє довший префікс)."""
+    """Реєстр callback-хендлерів за префіксом `data` (довший префікс виграє першим)."""
 
     def __init__(self) -> None:
         self._specs: list[CallbackSpec] = []
 
     def add(self, spec: CallbackSpec) -> None:
         self._specs.append(spec)
-        # довші префікси — раніше, щоб "cmpA:" не перехоплювався "cmp:"
+        # довші префікси — раніше, щоб напр. "cmpA:" не перехоплювався "cmp:"
         self._specs.sort(key=lambda s: len(s.prefix), reverse=True)
+
+    def callback(
+        self, prefix: str, *, needs_tools: bool = False, needs_redis: bool = False
+    ) -> Callable[[CallbackHandler], CallbackHandler]:
+        def deco(fn: CallbackHandler) -> CallbackHandler:
+            self.add(CallbackSpec(prefix, fn, needs_tools, needs_redis))
+            return fn
+
+        return deco
 
     def match(self, data: str) -> CallbackSpec | None:
         for spec in self._specs:
             if data.startswith(spec.prefix):
                 return spec
         return None
+
+    async def dispatch(self, cb: CbCtx) -> bool:
+        """Знаходить хендлер за префіксом, перевіряє guard-и, викликає. True — спожито."""
+        spec = self.match(cb.data)
+        if spec is None:
+            return False
+        if spec.needs_tools and cb.tools is None:
+            return False
+        if spec.needs_redis and cb.redis is None:
+            return False
+        return await spec.handler(cb)

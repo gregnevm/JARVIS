@@ -17,7 +17,7 @@ from ..services import ServicesClient
 from ..telegram import TelegramClient
 from ..tools_client import ToolsClient
 from .dashboard import esc, format_dashboard, format_help
-from .dispatch import Ctx, CommandRegistry
+from .dispatch import CbCtx, Ctx, CallbackRegistry, CommandRegistry
 from ._helpers import send_denial
 from .access import handle_access_command, is_access_command
 from .admin import handle_admin_command, is_admin_command
@@ -37,6 +37,8 @@ logger = logging.getLogger("jarvis.gateway.bot")
 # декоратором `@registry.command(...)`; `is_command`, BotFather-меню
 # (`bot/setup.py`) і `/help` походять із цього ж реєстру — без дублювання списків.
 registry = CommandRegistry()
+# Реєстр callback-кнопок (inline_keyboard) — маршрутизація за префіксом `callback_data`.
+callbacks = CallbackRegistry()
 
 
 def is_command(text: str) -> bool:
@@ -621,6 +623,185 @@ async def handle_command(
     return await spec.handler(ctx)
 
 
+# --------------------------------------------------------------------------- #
+# Callback-хендлери (inline-кнопки). Кожен бере `CbCtx`, повертає True (спожито).
+# Делеговані (conn/acc/adm/pln/cmp/agt) — тонкі адаптери до підмодулів; решта
+# (mode/dash) — локальна dashboard-навігація. Раніше — ладдер `if data.startswith`.
+# --------------------------------------------------------------------------- #
+
+
+@callbacks.callback("conn:")
+async def _cb_conn(cb: CbCtx) -> bool:
+    if cb.user_id is None:
+        return False
+    from .auth_link import handle_connect_callback
+
+    await cb.ack("Готую посилання…")
+    return await handle_connect_callback(
+        cb.data, cb.chat_id, int(cb.user_id), cb.tg, cb.redis
+    )
+
+
+@callbacks.callback("acc:")
+async def _cb_acc(cb: CbCtx) -> bool:
+    if cb.user_id is None:
+        return False
+    store = get_access_store()
+    if store is None:
+        return False
+    from .access import handle_access_callback
+
+    await cb.ack()
+    return await handle_access_callback(cb.data, cb.chat_id, int(cb.user_id), cb.tg, store)
+
+
+@callbacks.callback("adm:", needs_redis=True)
+async def _cb_adm(cb: CbCtx) -> bool:
+    if cb.user_id is None:
+        return False
+    assert cb.redis is not None  # гарантовано needs_redis
+    from .admin import handle_admin_callback
+
+    await cb.ack()
+    return await handle_admin_callback(
+        cb.data, cb.chat_id, int(cb.user_id), cb.tg, cb.svc, cb.redis
+    )
+
+
+@callbacks.callback("pln:", needs_tools=True)
+async def _cb_pln(cb: CbCtx) -> bool:
+    if cb.user_id is None:
+        return False
+    assert cb.tools is not None  # гарантовано needs_tools
+    from .plans import handle_plan_callback
+
+    await cb.ack()
+    return await handle_plan_callback(cb.data, cb.chat_id, int(cb.user_id), cb.tg, cb.tools)
+
+
+@callbacks.callback("cmp:", needs_tools=True)
+async def _cb_cmp(cb: CbCtx) -> bool:
+    if cb.user_id is None:
+        return False
+    assert cb.tools is not None  # гарантовано needs_tools
+    from .computer import handle_computer_callback
+
+    await cb.ack()
+    return await handle_computer_callback(
+        cb.data, cb.chat_id, int(cb.user_id), cb.tg, cb.tools, redis=cb.redis
+    )
+
+
+@callbacks.callback("agt:", needs_tools=True)
+async def _cb_agt(cb: CbCtx) -> bool:
+    if cb.user_id is None:
+        return False
+    assert cb.tools is not None  # гарантовано needs_tools
+    from ..agent_turn import run_agent_turn
+
+    await cb.ack("Обробляю…")
+    await run_agent_turn(
+        cb.tg,
+        cb.tools,
+        cb.chat_id,
+        {
+            "user_id": int(cb.user_id),
+            "chat_id": cb.chat_id,
+            "text": f"Користувач натиснув кнопку ({cb.data}). Відреагуй коротко.",
+            "type": "callback",
+            "mode": "auto",
+        },
+        redis=cb.redis,
+        user_id=int(cb.user_id),
+    )
+    return True
+
+
+@callbacks.callback("mode:")
+async def _cb_mode(cb: CbCtx) -> bool:
+    mode = cb.data.split(":", 1)[1]
+    denied = agent_mode_denied_message(cb.user_id) or computer_mode_denied_message(
+        cb.user_id, mode
+    )
+    if denied:
+        await cb.ack(denied[:200])
+        await cb.tg.send_message(cb.chat_id, denied)
+        return True
+    res = await cb.svc.set_mode(mode)
+    if res.get("error"):
+        toast = f"Помилка: {res['error'][:180]}"
+        text = f"🔴 {esc(res['error'])}"
+    else:
+        mode_name = str(res.get("mode", mode))
+        toast = f"Режим: {mode_name}"
+        text = f"🧠 Режим: <code>{esc(mode_name)}</code>"
+    await _present(
+        cb.tg,
+        cb.chat_id,
+        text,
+        message_id=cb.message_id,
+        reply_markup=mode_keyboard(show_computer=can_use_computer(cb.user_id)),
+    )
+    await cb.ack(toast)
+    return True
+
+
+@callbacks.callback("dash:")
+async def _cb_dash(cb: CbCtx) -> bool:
+    """Dashboard-навігація: menu / help / brief / reminders / status / sync / mode."""
+    data = cb.data
+    if data == "dash:brief":
+        if cb.tools is not None and cb.user_id is not None:
+            await cb.ack("Готую бриф…")
+            await _run_brief(cb.chat_id, int(cb.user_id), cb.tg, cb.svc, cb.tools, cb.redis)
+        else:
+            await cb.ack()
+        return True
+    if data == "dash:reminders":
+        if cb.redis is not None:
+            body = await list_user_reminders(cb.redis, int(cb.user_id or 0))
+            await _present(
+                cb.tg,
+                cb.chat_id,
+                format_reminders_message(body),
+                message_id=cb.message_id,
+                reply_markup=reminders_hint_keyboard(),
+            )
+        await cb.ack()
+        return True
+    if data == "dash:help":
+        await _present(
+            cb.tg,
+            cb.chat_id,
+            format_help(),
+            message_id=cb.message_id,
+            reply_markup=main_menu_keyboard(
+                settings.mini_app_https_url, show_computer=can_use_computer(cb.user_id)
+            ),
+        )
+        await cb.ack()
+        return True
+    # dash:menu | dash:status | dash:sync | dash:mode → панель/режим
+    dash = await cb.svc.dashboard()
+    twin = await cb.svc.twin_status()
+    if data == "dash:mode":
+        text = f"🧠 Режим: <code>{esc(dash.get('agent_mode', '?'))}</code>"
+        markup = mode_keyboard(show_computer=can_use_computer(cb.user_id))
+    elif data == "dash:sync":
+        text = format_dashboard({}, twin) if twin else "🔴 Twin недоступний."
+        markup = main_menu_keyboard(
+            settings.mini_app_https_url, show_computer=can_use_computer(cb.user_id)
+        )
+    else:  # dash:menu | dash:status
+        text = format_dashboard(dash, twin)
+        markup = main_menu_keyboard(
+            settings.mini_app_https_url, show_computer=can_use_computer(cb.user_id)
+        )
+    await _present(cb.tg, cb.chat_id, text, message_id=cb.message_id, reply_markup=markup)
+    await cb.ack()
+    return True
+
+
 async def handle_callback(
     callback: dict[str, Any],
     tg: TelegramClient,
@@ -628,190 +809,27 @@ async def handle_callback(
     redis: Any = None,
     tools: Any = None,
 ) -> None:
-    cq_id = callback.get("id")
+    """Тонкий диспетчер callback_query: класифікує `data` за префіксом → реєстр."""
     data = str(callback.get("data") or "")
     msg = callback.get("message") or {}
     chat_id = msg.get("chat", {}).get("id")
-    message_id = msg.get("message_id")
     user_id = (callback.get("from") or {}).get("id")
     if chat_id is None:
         return
 
-    toast: str | None = None
-
-    if data.startswith("conn:") and user_id is not None:
-        from .auth_link import handle_connect_callback
-
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id), text="Готую посилання…")
-        if await handle_connect_callback(data, int(chat_id), int(user_id), tg, redis):
-            return
-
-    if data.startswith("acc:") and user_id is not None:
-        store = get_access_store()
-        if store is not None:
-            from .access import handle_access_callback
-
-            if cq_id:
-                await tg.answer_callback_query(str(cq_id))
-            if await handle_access_callback(data, int(chat_id), int(user_id), tg, store):
-                return
-
-    if data.startswith("adm:") and redis is not None and user_id is not None:
-        from .admin import handle_admin_callback
-
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id))
-        if await handle_admin_callback(data, int(chat_id), int(user_id), tg, svc, redis):
-            return
-
-    if data.startswith("pln:") and tools is not None and user_id is not None:
-        from .plans import handle_plan_callback
-
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id))
-        if await handle_plan_callback(data, int(chat_id), int(user_id), tg, tools):
-            return
-
-    if data.startswith("cmp:") and tools is not None and user_id is not None:
-        from .computer import handle_computer_callback
-
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id))
-        if await handle_computer_callback(
-            data, int(chat_id), int(user_id), tg, tools, redis=redis
-        ):
-            return
-
-    if data.startswith("agt:") and tools is not None and user_id is not None:
-        from ..agent_turn import run_agent_turn
-
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id), text="Обробляю…")
-        await run_agent_turn(
-            tg,
-            tools,
-            int(chat_id),
-            {
-                "user_id": int(user_id),
-                "chat_id": int(chat_id),
-                "text": f"Користувач натиснув кнопку ({data}). Відреагуй коротко.",
-                "type": "callback",
-                "mode": "auto",
-            },
-            redis=redis,
-            user_id=int(user_id),
-        )
+    message_id = msg.get("message_id")
+    cb = CbCtx(
+        data=data,
+        chat_id=int(chat_id),
+        user_id=int(user_id) if user_id is not None else None,
+        message_id=int(message_id) if message_id is not None else None,
+        cq_id=str(callback["id"]) if callback.get("id") else None,
+        tg=tg,
+        svc=svc,
+        redis=redis,
+        tools=tools,
+    )
+    if await callbacks.dispatch(cb):
         return
-
-    if data.startswith("mode:"):
-        mode = data.split(":", 1)[1]
-        denied = agent_mode_denied_message(user_id) or computer_mode_denied_message(
-            user_id, mode
-        )
-        if denied:
-            if cq_id:
-                await tg.answer_callback_query(str(cq_id), text=denied[:200])
-            await tg.send_message(chat_id, denied)
-            return
-        res = await svc.set_mode(mode)
-        if res.get("error"):
-            toast = f"Помилка: {res['error'][:180]}"
-            text = f"🔴 {esc(res['error'])}"
-        else:
-            mode_name = str(res.get("mode", mode))
-            toast = f"Режим: {mode_name}"
-            text = f"🧠 Режим: <code>{esc(mode_name)}</code>"
-        await _present(
-            tg,
-            int(chat_id),
-            text,
-            message_id=int(message_id) if message_id is not None else None,
-            reply_markup=mode_keyboard(show_computer=can_use_computer(user_id)),
-        )
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id), text=toast)
-        return
-
-    if data == "dash:menu":
-        dash = await svc.dashboard()
-        twin = await svc.twin_status()
-        await _present(
-            tg,
-            int(chat_id),
-            format_dashboard(dash, twin),
-            message_id=int(message_id) if message_id is not None else None,
-            reply_markup=main_menu_keyboard(
-                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
-            ),
-        )
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id))
-        return
-
-    if data == "dash:help":
-        await _present(
-            tg,
-            int(chat_id),
-            format_help(),
-            message_id=int(message_id) if message_id is not None else None,
-            reply_markup=main_menu_keyboard(
-                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
-            ),
-        )
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id))
-        return
-
-    if data == "dash:brief":
-        if tools is not None and user_id is not None:
-            if cq_id:
-                await tg.answer_callback_query(str(cq_id), text="Готую бриф…")
-            await _run_brief(int(chat_id), int(user_id), tg, svc, tools, redis)
-        elif cq_id:
-            await tg.answer_callback_query(str(cq_id))
-        return
-
-    if data == "dash:reminders":
-        if redis is not None:
-            body = await list_user_reminders(redis, int(user_id or 0))
-            await _present(
-                tg,
-                int(chat_id),
-                format_reminders_message(body),
-                message_id=int(message_id) if message_id is not None else None,
-                reply_markup=reminders_hint_keyboard(),
-            )
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id))
-        return
-
-    if data in ("dash:status", "dash:sync", "dash:mode"):
-        dash = await svc.dashboard()
-        twin = await svc.twin_status()
-        if data == "dash:mode":
-            text = f"🧠 Режим: <code>{esc(dash.get('agent_mode', '?'))}</code>"
-            markup = mode_keyboard(show_computer=can_use_computer(user_id))
-        elif data == "dash:sync":
-            text = format_dashboard({}, twin) if twin else "🔴 Twin недоступний."
-            markup = main_menu_keyboard(
-                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
-            )
-        else:
-            text = format_dashboard(dash, twin)
-            markup = main_menu_keyboard(
-                settings.mini_app_https_url, show_computer=can_use_computer(user_id)
-            )
-        await _present(
-            tg,
-            int(chat_id),
-            text,
-            message_id=int(message_id) if message_id is not None else None,
-            reply_markup=markup,
-        )
-        if cq_id:
-            await tg.answer_callback_query(str(cq_id))
-        return
-
-    if cq_id:
-        await tg.answer_callback_query(str(cq_id))
+    # нічого не спожило (невідома кнопка / не виконано guard) → прибрати «годинник»
+    await cb.ack()
