@@ -209,7 +209,7 @@ Toolkit має `calc, web_search, web_fetch, parse_file, code_exec`. Очеви�
 - **`shell_exec`** — небезпечно, але корисно (за whitelistом команд).
 
 Архітектура агент-лупа (фаза 6) робить це питанням 50 рядків Python + JSON-схема
-кожен. Додати в `tools/app/toolkit.py` + `TOOL_SCHEMAS`.
+кожен. Додати в `tools/app/toolkit/` (пакет) + `TOOL_SCHEMAS`.
 
 ### E5. Computer Use (Agent Mode) — керування реальним комп'ютером ✅ інфра · ⏳ автономність
 
@@ -252,4 +252,4 @@ UIA lite, admin gate, vision/screenshot, cursor_task, cascade routing.
 - **Не починати "переписати на FastStream/Celery/тощо"** — поточний async-стек на
   FastAPI + httpx обробляє Telegram-навантаження одного користувача із запасом 100x.
 - **Не вмикати `EnableDockerAI=true`** у Docker Desktop ≤4.76 без фіксу від Docker.
-  Зламає daemon (див. memory/project_jarvis.md).
+  Зламає daemon.

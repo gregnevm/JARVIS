@@ -10,8 +10,12 @@ Framework-нейтральний (без FastAPI) — на відміну від
 
 Споживачі по фазах:
   * PR#1 (зараз): `resolve_context()` у gateway, `whoami`-відповідь.
-  * PR#3: `redis_key(org_id, …)` — org-префіксовані Redis-ключі у tools-сторах.
-  * PR#4: `to_headers()` — `X-JARVIS-*` propagation gateway→tools.
+  * PR#3: `redis_key(org_id, …)` — org-префіксовані Redis-ключі (вже у вжитку:
+    applogin/context_scheduler/ratelimit).
+  * PR#4 (НЕ підключено): `to_headers()` визначений, але gateway→tools client
+    (`tools_client_http`) його ЩЕ не чіпляє — user_id наразі їде в JSON-body, не
+    у `X-JARVIS-*`. Тобто `to_headers()/from_headers()` поки лише інфраструктура під
+    майбутню tenant-propagation (споживач постане з SaaS-mode). Див. FEATURE_AUDIT P2-1.
 """
 from __future__ import annotations
 

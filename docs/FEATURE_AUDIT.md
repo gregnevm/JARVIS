@@ -112,12 +112,28 @@
 - [x] P0-5 /v1 rate-limit (429 на той самий лічильник, що Telegram)
 - [x] P0-4 /v1 user-id binding (caller uid лише з allowed_ids — anti-impersonation)
 
-### Batch 5 — Doc-sync (D1)
-- [ ] P1-11 mobile track sync
-- [ ] P1-9 twin env keys
-- [ ] P1-10 missing env flags
-- [ ] P2-5/6/8/9 doc paths, sqlite-vec, ENV_CHECKLIST, migration renumber
-- [ ] P2-2/3 C1-scope clarify + P10 addressing claim
+### Batch 5 — Doc-sync (D1) ✅
+- [x] P1-11 mobile track sync (AGENTS.md Стовп-C + CLIENTS_ROADMAP CL-3.2/3.4/3.6/3.8 + maturity 7/10)
+- [x] P1-9 twin env keys (validation_alias TWIN_DATA_DIR/REGISTRY_DB/MIN_EVAL_PROMOTE — тепер ЖИВІ)
+- [x] P1-10 missing env flags (15 прапорів додано в .env.example: coding/research/subagent/ollama/push/hooks)
+- [x] P2-1 PR#4 headers — позначено НЕ підключеним (context.py docstring)
+- [x] P2-5 sqlite-vec drift (AGENTS.md: SQLite + in-Python cosine/keyword, НЕ sqlite-vec)
+- [x] P2-8 doc paths (toolkit.py→пакет, tools/main.py, gateway/config.py, broken ref, міграція 003→004)
+- [x] P2-9 ENV_CHECKLIST (REMINDER_POLL 5→20, COMPUTER_PROFILE standard→safe)
+- [x] P2-2/3 C1-scope clarify (паспорт=context_events, raw-RAG=субстрат) + P10 addressing→«заплановано»
+- [x] PRODUCT_ROADMAP CA-5/CA-6 синхронізовано з треком (done)
+
+---
+
+## 6. Підсумок проходу
+
+**Зроблено:** 5 батчів, ~24 пункти. Baseline тестів: 1045 → **1055 passed** (+10 регресій),
+mypy strict чистий усіх 6 сервісів, compose валідний. Кожен фікс має регресійний тест.
+
+**Свідомо відкладено** (нульовий поточний вплив / належить окремому треку — §4):
+- P1-5 memory org_id read-scoping → трек team-ecosystem (owner→policy scope).
+- Native fix-loop → conversational agent (великий CA-трек).
+- code_exec реальний sandbox; SaaS JWT membership; ship APK артефакт; hostagent server-side allowlist.
 
 ---
 
