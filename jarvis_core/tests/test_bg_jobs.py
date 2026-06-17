@@ -5,12 +5,14 @@ from jarvis_core.bg_jobs import JOB_TYPES, normalize_payload, platform_create_me
 
 def test_job_types_complete():
     assert "agent_turn" in JOB_TYPES
-    assert len(JOB_TYPES) == 6
+    assert "coding_task" in JOB_TYPES
+    assert len(JOB_TYPES) == 7
 
 
 def test_platform_create_method_mapping():
     assert platform_create_method("deep_research") == "create_research_job"
     assert platform_create_method("cursor_task") == "create_cursor_job"
+    assert platform_create_method("coding_task") == "create_coding_job"
     assert platform_create_method("agent_turn") == "create_bg_job"
     assert platform_create_method("subagent") == "create_bg_job"
 
@@ -34,6 +36,20 @@ def test_normalize_subagent():
     out = normalize_payload("subagent", {"task": "analyze", "budget_iters": 4})
     assert out["task"] == "analyze"
     assert out["budget_iters"] == 4
+
+
+def test_normalize_coding_task():
+    out = normalize_payload(
+        "coding_task",
+        {"exe": "pytest", "args": ["-q", "tests/"], "path": "/repo", "max_rounds": 3},
+    )
+    assert out["exe"] == "pytest" and out["args"] == ["-q", "tests/"]
+    assert out["path"] == "/repo" and out["max_rounds"] == 3
+
+
+def test_normalize_coding_task_requires_exe():
+    with pytest.raises(ValueError, match="exe required"):
+        normalize_payload("coding_task", {"args": ["-q"]})
 
 
 def test_normalize_unknown_type():

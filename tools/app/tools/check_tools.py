@@ -14,9 +14,10 @@ repo-інструменти (набір `_CODING_TOOLS` у dispatch). `exe` об
 from __future__ import annotations
 
 import re
-from pathlib import PurePath
+from pathlib import PureWindowsPath
 from typing import Any
 
+from . import fix_loop
 from .coding_tools import _cli, _clip, _disabled_message
 
 # Дозволені раннери (basename, lower) — не довільний exe.
@@ -34,7 +35,9 @@ _LINT_RUNNERS = frozenset({
 
 
 def _basename(exe: str) -> str:
-    return PurePath(exe.strip().strip('"')).name.lower()
+    # PureWindowsPath трактує і '/', і '\' як роздільники → коректно для
+    # exe-шляхів від Windows host-agent навіть коли tools крутиться на Linux.
+    return PureWindowsPath(exe.strip().strip('"')).name.lower()
 
 
 def _coerce_args(raw: Any) -> list[str]:
@@ -127,10 +130,19 @@ async def run_tests(
     stdout, stderr = str(data.get("stdout", "")), str(data.get("stderr", ""))
     code = int(data.get("code", -1))
     fw = _detect(e, arglist, framework)
+    blob = stdout + "\n" + stderr
     if fw == "pytest":
-        return _clip(_summarize_pytest(stdout, stderr, code))
-    verdict = "✅ PASS" if code == 0 else "❌ FAIL"
-    return _clip(f"{fw} {verdict} (exit {code})\n---\n{_tail(stdout + chr(10) + stderr)}")
+        summary = _summarize_pytest(stdout, stderr, code)
+        ok = "✅ PASS" in summary
+        failed_names = sorted(re.findall(r"^FAILED\s+(\S+)", blob, re.MULTILINE))
+        sig = "" if ok else fix_loop.fail_signature(failed_names or [_tail(blob, 6)])
+    else:
+        ok = code == 0
+        verdict = "✅ PASS" if ok else "❌ FAIL"
+        summary = f"{fw} {verdict} (exit {code})\n---\n{_tail(blob)}"
+        sig = "" if ok else fix_loop.fail_signature([str(code), _tail(blob, 6)])
+    note = await fix_loop.note_test_result(user_id, ok=ok, signature=sig)
+    return _clip(summary) + note
 
 
 async def run_lint(

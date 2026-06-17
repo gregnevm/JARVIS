@@ -330,13 +330,15 @@ _CODE_EDIT_SCHEMA = _schema(
     "code_edit",
     "Відредагувати файл коду диффом (БЕЗ повного перезапису). Показує diff і чекає "
     "підтвердження. mode='search_replace': old_string→new_string (old_string має бути "
-    "унікальним, інакше додай контекст або replace_all). mode='diff': unified diff.",
+    "унікальним, інакше додай контекст або replace_all). mode='diff': unified diff. "
+    "mode='rename_symbol': word-boundary перейменування ідентифікатора (old_string→"
+    "new_string, усі цілі-слова збіги; безпечно — не чіпає довші імена).",
     {
         "path": {**_STR, "description": "абсолютний шлях до файлу на хості"},
         "mode": {
             "type": "string",
-            "enum": ["search_replace", "diff"],
-            "description": "search_replace (default) | diff",
+            "enum": ["search_replace", "diff", "rename_symbol"],
+            "description": "search_replace (default) | diff | rename_symbol",
         },
         "old_string": {**_STR, "description": "точний фрагмент для заміни (search_replace)"},
         "new_string": {**_STR, "description": "новий фрагмент (search_replace)"},
@@ -344,6 +346,39 @@ _CODE_EDIT_SCHEMA = _schema(
         "replace_all": {"type": "boolean", "description": "замінити всі збіги (default false)"},
     },
     ["path"],
+)
+
+_CODE_EDIT_BATCH_SCHEMA = _schema(
+    "code_edit_batch",
+    "Транзакційно відредагувати КІЛЬКА файлів за один апрув (усе-або-нічого: при "
+    "помилці всі вже застосовані правки відкочуються). dry_run=true → показати всі "
+    "diff-и БЕЗ запису. Кожен елемент edits — як аргументи code_edit (path + "
+    "search_replace/diff/rename_symbol). Для rename/move рефактора: знайди файли через "
+    "repo_refs, потім edits із mode='rename_symbol' (по файлу), спершу dry_run=true. "
+    "Шляхи мають бути різними.",
+    {
+        "edits": {
+            "type": "array",
+            "description": "список правок (кожна — як аргументи code_edit)",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "path": {**_STR, "description": "абсолютний шлях до файлу"},
+                    "mode": {"type": "string", "enum": ["search_replace", "diff", "rename_symbol"]},
+                    "old_string": {**_STR},
+                    "new_string": {**_STR},
+                    "diff": {**_STR},
+                    "replace_all": {"type": "boolean"},
+                },
+                "required": ["path"],
+            },
+        },
+        "dry_run": {
+            "type": "boolean",
+            "description": "лише показати diff-и без запису (default false)",
+        },
+    },
+    ["edits"],
 )
 
 _REPO_SYMBOLS_SCHEMA = _schema(
@@ -384,11 +419,26 @@ _RUN_LINT_SCHEMA = _schema(
     ["exe"],
 )
 
+_REPO_REFS_SCHEMA = _schema(
+    "repo_refs",
+    "Крос-файлові посилання на символ/модуль (read-only): розділяє import-сайти й "
+    "usage-сайти по репо. Основа для rename/move рефактора й огляду залежностей. "
+    "name — ідентифікатор (AgentRunner) або dotted-модуль (tools.app.agent).",
+    {
+        "name": {**_STR, "description": "символ або dotted-модуль для пошуку посилань"},
+        "path": {**_STR, "description": "корінь пошуку (repo root); default cwd"},
+        "glob": {**_STR, "description": "glob-фільтр (default '*.py')"},
+        "max_results": {"type": "integer", "description": "ліміт рядків (default з конфігу)"},
+    },
+    ["name"],
+)
+
 _CODING_SCHEMAS = [
     _REPO_TREE_SCHEMA,
     _REPO_GREP_SCHEMA,
     _CODE_READ_SCHEMA,
     _REPO_SYMBOLS_SCHEMA,
+    _REPO_REFS_SCHEMA,
     _RUN_TESTS_SCHEMA,
     _RUN_LINT_SCHEMA,
 ]
@@ -473,6 +523,7 @@ def agent_tool_schemas(*, computer: bool = False, allow_computer: bool = True) -
             if settings.enable_coding_tools:
                 schemas.extend(_CODING_SCHEMAS)
                 schemas.append(_CODE_EDIT_SCHEMA)
+                schemas.append(_CODE_EDIT_BATCH_SCHEMA)
             schemas.extend(_COMPUTER_SCHEMAS)
             schemas.append(_CLIPBOARD_READ_SCHEMA)
             schemas.append(_CLIPBOARD_WRITE_SCHEMA)
@@ -517,6 +568,7 @@ COMPUTER_TOOL_NAMES = frozenset(
         "fs_read",
         "fs_write",
         "code_edit",
+        "code_edit_batch",
         "capture_screenshot",
         "see_screen",
         "clipboard_read",

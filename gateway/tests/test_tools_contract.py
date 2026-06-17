@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-TOOLS_CLIENT = ROOT / "gateway" / "app" / "tools_client.py"
+# R3: ToolsClient розбито на доменні файли tools_client*.py — контракт-поверхня
+# тепер у кількох файлах (крім низькорівневого транспорту tools_client_http.py).
+TOOLS_CLIENT_FILES = sorted(
+    p
+    for p in (ROOT / "gateway" / "app").glob("tools_client*.py")
+    if p.name != "tools_client_http.py"
+)
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "tools_routes.json"
 
 _SKIP_TOOLS_PATHS = {"/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc"}
@@ -33,7 +39,7 @@ def _normalize_client_path(path: str) -> str:
 
 
 def _parse_tools_client_routes() -> set[tuple[str, str]]:
-    text = TOOLS_CLIENT.read_text(encoding="utf-8")
+    text = "\n".join(p.read_text(encoding="utf-8") for p in TOOLS_CLIENT_FILES)
     routes: set[tuple[str, str]] = set()
 
     for method, path in re.findall(

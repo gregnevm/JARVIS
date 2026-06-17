@@ -34,6 +34,7 @@ from .media import (
     extract_file_attachment,
     message_context,
 )
+from jarvis_core.routing import is_screenshot_request
 from .outbound import deliver
 from .ratelimit import RateLimiter
 from .services import ServicesClient
@@ -51,14 +52,6 @@ _INLINE_TEXT_EXT = frozenset(
     {".txt", ".md", ".csv", ".json", ".log", ".py", ".ini", ".yaml", ".yml", ".xml", ".html"}
 )
 _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
-_SCREENSHOT_RE = re.compile(
-    r"скріншот|screenshot|скрін\s*екран|зроби\s+скрін",
-    re.IGNORECASE,
-)
-
-
-def _is_screenshot_request(text: str) -> bool:
-    return bool(_SCREENSHOT_RE.search(text or ""))
 
 
 def _extract_message(update: dict[str, Any]) -> dict[str, Any] | None:
@@ -150,6 +143,22 @@ async def _ingest_attachment(
     return "\n".join(lines), att.kind, path
 
 
+def classify_update(update: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    """Транспортна класифікація Telegram-апдейту (R5: розділення транспорт↔логіка).
+
+    Повертає (тип, дані): callback_query | inline_query | message_reaction |
+    chosen_inline_result | message | unknown. Лише розбір форми — жодної бізнес-логіки.
+    """
+    for key in ("callback_query", "inline_query", "message_reaction", "chosen_inline_result"):
+        val = update.get(key)
+        if isinstance(val, dict):
+            return key, val
+    message = _extract_message(update)
+    if message is not None:
+        return "message", message
+    return "unknown", None
+
+
 async def handle_update(
     update: dict[str, Any],
     tg: TelegramClient,
@@ -160,39 +169,40 @@ async def handle_update(
     redis: aioredis.Redis,
     tts: TtsClient | None = None,
 ) -> None:
-    callback = update.get("callback_query")
-    if isinstance(callback, dict):
-        user_id = (callback.get("from") or {}).get("id")
-        if not is_allowed(user_id):
+    """Тонкий диспетчер: класифікує апдейт і делегує. Логіка кожного типу — окремо."""
+    kind, data = classify_update(update)
+    if data is None:
+        return
+    if kind == "callback_query":
+        if not is_allowed((data.get("from") or {}).get("id")):
             return
-        await handle_callback(callback, tg, svc, redis, tools)
-        return
-
-    # Inline-режим: @bot <запит> у будь-якому чаті.
-    inline = update.get("inline_query")
-    if isinstance(inline, dict):
-        await _handle_inline_query(inline, tg, tools)
-        return
-
-    # Реакція (emoji) користувача на повідомлення бота.
-    reaction = update.get("message_reaction")
-    if isinstance(reaction, dict):
-        await _handle_reaction(reaction, tg, tools, limiter, redis)
-        return
-
-    chosen = update.get("chosen_inline_result")
-    if isinstance(chosen, dict):
+        await handle_callback(data, tg, svc, redis, tools)
+    elif kind == "inline_query":
+        await _handle_inline_query(data, tg, tools)
+    elif kind == "message_reaction":
+        await _handle_reaction(data, tg, tools, limiter, redis)
+    elif kind == "chosen_inline_result":
         logger.info(
             "chosen_inline_result user=%s result_id=%s",
-            (chosen.get("from") or {}).get("id"),
-            chosen.get("result_id"),
+            (data.get("from") or {}).get("id"),
+            data.get("result_id"),
         )
-        return
+    elif kind == "message":
+        await _handle_message(update, data, tg, tools, svc, stt, limiter, redis, tts)
 
-    message = _extract_message(update)
-    if message is None:
-        return
 
+async def _handle_message(
+    update: dict[str, Any],
+    message: dict[str, Any],
+    tg: TelegramClient,
+    tools: ToolsClient,
+    svc: ServicesClient,
+    stt: WhisperClient,
+    limiter: RateLimiter,
+    redis: aioredis.Redis,
+    tts: TtsClient | None = None,
+) -> None:
+    """Обробка message/edited_message: auth → rate-limit → ingest → команда/quick/agent."""
     if update.get("edited_message") and settings.ignore_edited_messages:
         chat_id = message.get("chat", {}).get("id")
         if chat_id is not None:
@@ -279,7 +289,7 @@ async def handle_update(
         ):
             return
 
-    if _is_screenshot_request(text):
+    if is_screenshot_request(text):
         from .auth import computer_denied_message
 
         denied = computer_denied_message(int(user_id))

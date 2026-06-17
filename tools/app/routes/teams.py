@@ -39,10 +39,14 @@ def register(router: APIRouter) -> None:
 
         task = require_text(body.task)
         budget = clamp_budget(body.budget_per_role)
+        # CA-5.2: kind="coding" і без явних ролей → Coder→Reviewer→Tester.
+        roles = body.roles
+        if not roles and body.kind.strip().lower() == "coding":
+            roles = list(teams.CODING_ROLES)
         rec = await teams.create_team(
             body.user_id,
             task,
-            roles=body.roles,
+            roles=roles,
             budget_per_role=budget,
         )
         if body.async_mode:
@@ -51,7 +55,7 @@ def register(router: APIRouter) -> None:
                 task,
                 team_id=rec["id"],
                 budget_per_role=budget,
-                roles=body.roles,
+                roles=roles,
             )
             rec["job_id"] = job.get("id")
         else:

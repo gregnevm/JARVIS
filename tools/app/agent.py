@@ -7,11 +7,12 @@
 """
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
 from typing import Any
 
@@ -19,6 +20,7 @@ from .config import settings
 from .memory_client import MemoryClient
 from .thread_context import build_thread_context
 from .user_profile import profile_prompt_block
+from jarvis_core.agent.tool_loop import ToolStepResult, run_tool_loop
 from jarvis_core.llm.chat import ChatBackend
 from jarvis_core.llm.parsers import extract_json_object
 from .toolkit import agent_tool_schemas, coerce_args, dispatch, image_gen_enabled
@@ -29,6 +31,48 @@ FALLBACK = "Не зміг сформувати відповідь. Спробу�
 
 PLAN_MARKER = "[[PLAN_CONFIRM:{id}]]"
 _PLAN_MAX_STEPS = 8
+
+# CA-3.2 fix-orchestration: вузький набір coding-інструментів для петлі «тест→правка→тест».
+_FIX_TOOLS = frozenset(
+    {
+        "code_read", "repo_grep", "repo_tree", "repo_symbols", "repo_refs",
+        "code_edit", "run_tests", "run_lint",
+    }
+)
+_FIX_INNER_STEPS = 4  # модельних кроків (read/grep/edit) у межах одного раунду
+
+
+def _strip_code_fences(text: str) -> str:
+    """Прибирає обгортку ```lang ... ``` навколо повернутого моделлю вмісту файлу (CA-6.3)."""
+    s = text.strip()
+    if not s.startswith("```"):
+        return text
+    lines = s.split("\n")
+    lines = lines[1:]  # перший рядок: ``` або ```python
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines)
+
+
+def _fix_system() -> str:
+    return (
+        "Ти JARVIS — інженер, що лагодить падіння тестів. Працюй вузько: 1) прочитай "
+        "вивід тестів і локалізуй причину (code_read/repo_grep/repo_symbols); 2) внеси "
+        "мінімальну правку через code_edit (diff), не переписуй файл цілком; 3) НЕ вгадуй — "
+        "спирайся на текст помилки. Після твоєї правки систему тестів буде перезапущено "
+        "автоматично. Якщо причина неясна — спершу читай код, не редагуй наосліп. "
+        "Відповідай українською, стисло."
+    )
+
+
+def _fix_user_prompt(task: str, exe: str, args: list[str], path: str, verdict: str) -> str:
+    cmd = (exe + " " + " ".join(args)).strip()
+    where = f" у {path}" if path else ""
+    extra = f"\nКонтекст задачі: {task}" if task else ""
+    return (
+        f"Падають тести (команда: `{cmd}`{where}). Локалізуй і виправ диффом, "
+        f"мінімально.{extra}\n\nПоточний вивід:\n{verdict}"
+    )
 _TOOL_MEDIA_RE = re.compile(
     r"\[\[\s*(?:photo|image|document|file)\s*:\s*[^\]]+\]\]",
     re.IGNORECASE,
@@ -174,10 +218,12 @@ _TOOL_STATUS = {
     "fs_read": "📄 читаю файл…",
     "fs_write": "✍️ записую файл…",
     "code_edit": "🩹 редагую код (diff)…",
+    "code_edit_batch": "🩹 правлю кілька файлів (diff)…",
     "repo_tree": "🌳 дерево репо…",
     "repo_grep": "🔎 шукаю в коді…",
     "code_read": "📄 читаю рядки…",
     "repo_symbols": "🧭 символи файлу…",
+    "repo_refs": "🔗 шукаю посилання…",
     "run_tests": "🧪 ганяю тести…",
     "run_lint": "🔬 лінт/типи…",
     "capture_screenshot": "📸 знімаю екран…",
@@ -261,11 +307,8 @@ def _max_iters(*, computer: bool = False, override: int | None = None) -> int:
     return settings.max_agent_iters
 
 
-def _assistant_msg(msg: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {"role": "assistant", "content": msg.get("content") or ""}
-    if msg.get("tool_calls"):
-        out["tool_calls"] = msg["tool_calls"]
-    return out
+def _tool_message(name: str, result: str) -> dict[str, Any]:
+    return {"role": "tool", "content": f"[{name}] {result}"}
 
 
 def _sys_with_ctx(base: str, ctx: str) -> str:
@@ -483,6 +526,54 @@ class AgentRunner:
         ):
             yield delta
 
+    def _agent_chat(
+        self, tools: list[dict[str, Any]]
+    ) -> "Callable[[list[dict[str, Any]]], Awaitable[dict[str, Any]]]":
+        """Один крок AGENT-моделі з тулами — інжектується у run_tool_loop."""
+
+        async def chat(messages: list[dict[str, Any]]) -> dict[str, Any]:
+            return await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
+
+        return chat
+
+    def _make_executor(
+        self, user_id: int, origin_text: str, *, allow_computer: bool, streaming: bool
+    ) -> "Callable[[str, Any], Awaitable[ToolStepResult]]":
+        """Сервіс-специфічне виконання інструмента (dispatch + post_tool hook +
+        confirm-рендеринг + лог) — інжектується у run_tool_loop. Confirm рендериться
+        по-різному для sync (inline-маркер) і stream (окрема подія + людський текст)."""
+
+        async def execute(name: str, args: Any) -> ToolStepResult:
+            result = await dispatch(name, args, user_id, allow_computer=allow_computer)
+            from . import hooks as agent_hooks
+
+            hook_out = await agent_hooks.run_post_tool(
+                {"user_id": user_id, "tool": name, "args": args, "result": result}
+            )
+            result = str(hook_out.get("result") or result)
+            done_text = result
+            event: dict[str, Any] | None = None
+            confirm = _parse_confirm(result)
+            if confirm:
+                from .computer_confirm import save_origin
+
+                await save_origin(user_id, origin_text)
+                if streaming:
+                    event = {"confirm": confirm}
+                    result = (
+                        f"Очікую підтвердження в Telegram (код {confirm['code']}): "
+                        f"{confirm['desc']}"
+                    )
+                else:
+                    result = (
+                        f"[[COMPUTER_CONFIRM:{confirm['code']}]] "
+                        f"Очікую підтвердження: {confirm['desc']}"
+                    )
+            logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
+            return ToolStepResult(text=result, done_text=done_text, event=event)
+
+        return execute
+
     async def _agent_events(
         self,
         text: str,
@@ -496,10 +587,10 @@ class AgentRunner:
     ) -> AsyncIterator[dict[str, Any]]:
         """Тул-луп зі стрімом: статус на кожен виклик інструмента + фінальний текст.
 
-        Паралельний до _agent() (не змінюємо синхронний шлях). Фінальну відповідь
-        у звичайному завершенні модель уже згенерувала разом із рішенням «тулів
-        більше нема» — віддаємо її одним delta; лише при вичерпанні ітерацій
-        примусова відповідь без тулів стрімиться токенами.
+        Тонкий споживач спільного run_tool_loop (R1). Фінальну відповідь у звичайному
+        завершенні модель уже згенерувала разом із рішенням «тулів більше нема» —
+        віддаємо її одним delta; лише при вичерпанні ітерацій примусова відповідь без
+        тулів стрімиться токенами.
         """
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": _agent_system(ctx, computer=computer, profile=profile)},
@@ -507,56 +598,31 @@ class AgentRunner:
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
         limit = _max_iters(computer=computer, override=max_iters_override)
-        for i in range(1, limit + 1):
-            msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
-            messages.append(_assistant_msg(msg))
-            calls = msg.get("tool_calls") or []
-            content = msg.get("content") or ""
-            if not calls:
-                calls = _parse_inline_tool_calls(content)
-            if not calls:
-                if content.strip():
-                    yield {"delta": _ensure_tool_media(content.strip(), messages)}
-                yield {"iters": i}
+        async for ev in run_tool_loop(
+            messages=messages,
+            limit=limit,
+            chat=self._agent_chat(tools),
+            coerce=coerce_args,
+            execute=self._make_executor(user_id, text, allow_computer=allow_computer, streaming=True),
+            inline_parser=_parse_inline_tool_calls,
+            tool_message=_tool_message,
+            emit_status=lambda name: {"status": _tool_status(name)},
+        ):
+            if "final" in ev:
+                content = str(ev["final"])
+                if content:
+                    yield {"delta": _ensure_tool_media(content, messages)}
+                yield {"iters": int(ev["iters"])}
                 return
-            for call in calls:
-                fn = call.get("function") or {}
-                name = str(fn.get("name", ""))
-                args = coerce_args(fn.get("arguments"))
-                yield {"status": _tool_status(name)}
-                yield {"tool_start": {"name": name, "args": args}}
-                result = await dispatch(name, args, user_id, allow_computer=allow_computer)
-                from . import hooks as agent_hooks
-
-                hook_out = await agent_hooks.run_post_tool(
-                    {
-                        "user_id": user_id,
-                        "tool": name,
-                        "args": args,
-                        "result": result,
-                    }
+            if "need_final" in ev:
+                messages.append(
+                    {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
                 )
-                result = str(hook_out.get("result") or result)
-                yield {"tool_done": {"name": name, "result": result}}
-                confirm = _parse_confirm(result)
-                if confirm:
-                    from .computer_confirm import save_origin
-
-                    await save_origin(user_id, text)
-                    yield {"confirm": confirm}
-                    result = (
-                        f"Очікую підтвердження в Telegram (код {confirm['code']}): "
-                        f"{confirm['desc']}"
-                    )
-                logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
-                messages.append({"role": "tool", "content": f"[{name}] {result}"})
-
-        messages.append(
-            {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
-        )
-        async for delta in self._llm.chat_stream(settings.ollama_model_agent, messages):
-            yield {"delta": delta}
-        yield {"iters": limit}
+                async for delta in self._llm.chat_stream(settings.ollama_model_agent, messages):
+                    yield {"delta": delta}
+                yield {"iters": int(ev["iters"])}
+                return
+            yield ev
 
     async def _chat(self, text: str, ctx: str, profile: str = "") -> str:
         msg = await self._llm.chat(
@@ -585,50 +651,25 @@ class AgentRunner:
         ]
         tools = agent_tool_schemas(computer=computer, allow_computer=allow_computer)
         limit = _max_iters(computer=computer, override=max_iters_override)
-        for i in range(1, limit + 1):
-            msg = await self._llm.chat(settings.ollama_model_agent, messages, tools=tools)
-            messages.append(_assistant_msg(msg))
-            calls = msg.get("tool_calls") or []
-            content = msg.get("content") or ""
-            if not calls:
-                # Фолбек: модель могла віддати tool call текстом (inline XML/JSON).
-                calls = _parse_inline_tool_calls(content)
-            if not calls:
-                return _ensure_tool_media(content.strip(), messages), i
-            for call in calls:
-                fn = call.get("function") or {}
-                name = str(fn.get("name", ""))
-                args = coerce_args(fn.get("arguments"))
-                result = await dispatch(name, args, user_id, allow_computer=allow_computer)
-                from . import hooks as agent_hooks
-
-                hook_out = await agent_hooks.run_post_tool(
-                    {
-                        "user_id": user_id,
-                        "tool": name,
-                        "args": args,
-                        "result": result,
-                    }
+        async for ev in run_tool_loop(
+            messages=messages,
+            limit=limit,
+            chat=self._agent_chat(tools),
+            coerce=coerce_args,
+            execute=self._make_executor(user_id, text, allow_computer=allow_computer, streaming=False),
+            inline_parser=_parse_inline_tool_calls,
+            tool_message=_tool_message,
+        ):
+            if "final" in ev:
+                return _ensure_tool_media(str(ev["final"]), messages), int(ev["iters"])
+            if "need_final" in ev:
+                # Ітерації вичерпано — змусимо модель дати текстову відповідь без тулів.
+                messages.append(
+                    {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
                 )
-                result = str(hook_out.get("result") or result)
-                confirm = _parse_confirm(result)
-                if confirm:
-                    from .computer_confirm import save_origin
-
-                    await save_origin(user_id, text)
-                    result = (
-                        f"[[COMPUTER_CONFIRM:{confirm['code']}]] "
-                        f"Очікую підтвердження: {confirm['desc']}"
-                    )
-                logger.info("tool[%s] -> %.80s", name, result.replace("\n", " "))
-                messages.append({"role": "tool", "content": f"[{name}] {result}"})
-
-        # Ітерації вичерпано — змусимо модель дати текстову відповідь без тулів.
-        messages.append(
-            {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
-        )
-        final = await self._llm.chat(settings.ollama_model_agent, messages)
-        return _ensure_tool_media((final.get("content") or "").strip(), messages), limit
+                final = await self._llm.chat(settings.ollama_model_agent, messages)
+                return _ensure_tool_media((final.get("content") or "").strip(), messages), int(ev["iters"])
+        return _ensure_tool_media("", messages), limit  # недосяжно: луп завжди ʼїлдить final|need_final
 
     async def plan(self, user_id: int, text: str) -> dict[str, Any]:
         """Structured plan JSON → Redis (status pending) + marker для Telegram."""
@@ -661,6 +702,162 @@ class AgentRunner:
         )
         rec["marker"] = PLAN_MARKER.format(id=rec["id"])
         return rec
+
+    async def code_plan(self, user_id: int, text: str) -> dict[str, Any]:
+        """Code-specific план (CA-4.1): кроки з file-targets {file, action, rationale, risk}.
+
+        Один апрув на весь план (CA-4.2) — через звичайний approve-flow P3 (маркер).
+        """
+        from . import plans
+
+        prompt = (
+            "Склади план зміни коду під запит. Поверни ЛИШЕ JSON без пояснень:\n"
+            '{"summary":"короткий опис","steps":[{"file":"відносний/шлях.py",'
+            '"action":"що зробити у файлі","rationale":"чому","risk":"low|medium|high"}],'
+            '"risks":["загальні ризики"]}\n'
+            f"Максимум {_PLAN_MAX_STEPS} кроків, кожен прив'язаний до конкретного файлу. "
+            f"Запит: {text}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Ти планувальник змін коду JARVIS. Кожен крок прив'язаний до файлу. "
+                        "Відповідай лише валідним JSON."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = (msg.get("content") or "").strip()
+        parsed = extract_json_object(content)
+        if not parsed:
+            parsed = {
+                "summary": content[:500] or text[:200],
+                "steps": [{"file": "", "action": text[:200], "rationale": text, "risk": "medium"}],
+                "risks": [],
+            }
+        # CA-4.2: у вікні session-trust (як computer) план авто-апрувиться — без
+        # ручного ✅; поза вікном — звичайний pending + confirm-маркер.
+        from .computer_trust import trust_level
+
+        auto = (await trust_level(user_id)) is not None
+        rec = await plans.create_plan(
+            user_id,
+            summary=str(parsed.get("summary") or text[:500]),
+            steps=parsed.get("steps") or [],
+            risks=parsed.get("risks") if isinstance(parsed.get("risks"), list) else [],
+            source_text=text,
+            status="approved" if auto else "pending",
+        )
+        rec["marker"] = "" if auto else PLAN_MARKER.format(id=rec["id"])
+        rec["kind"] = "code"
+        rec["auto_approved"] = auto
+        return rec
+
+    async def code_review(
+        self, user_id: int, *, diff: str = "", context: str = ""
+    ) -> dict[str, Any]:
+        """Self-review pass (CA-5.1): unified diff → структуровані зауваження.
+
+        Повертає {summary, verdict: approve|changes_requested, findings:[{severity,
+        file, line, comment}]}. Будівельний блок для «fix перед звітом» і P9 Reviewer.
+        """
+        if not (diff or "").strip():
+            return {"summary": "Порожній diff — нема що рев'ювити.", "verdict": "skip", "findings": []}
+        ctx = f"\nКонтекст: {context}" if context else ""
+        prompt = (
+            "Зроби код-рев'ю наведеного unified diff. Шукай: баги, регресії, edge-cases, "
+            "відсутні перевірки, безпеку, читабельність. Поверни ЛИШЕ JSON:\n"
+            '{"summary":"...","verdict":"approve|changes_requested",'
+            '"findings":[{"severity":"low|medium|high","file":"шлях","line":0,"comment":"..."}]}'
+            f"{ctx}\n\nDiff:\n{diff[:8000]}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": "Ти прискіпливий код-рев'юер JARVIS. Відповідай лише валідним JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        content = (msg.get("content") or "").strip()
+        parsed = extract_json_object(content) or {}
+        raw = parsed.get("findings")
+        findings: list[dict[str, Any]] = []
+        for f in (raw if isinstance(raw, list) else [])[:30]:
+            if not isinstance(f, dict):
+                continue
+            try:
+                line = int(f.get("line") or 0)
+            except (TypeError, ValueError):
+                line = 0
+            sev = str(f.get("severity") or "medium").lower()
+            findings.append(
+                {
+                    "severity": sev if sev in ("low", "medium", "high") else "medium",
+                    "file": str(f.get("file") or "")[:200],
+                    "line": line,
+                    "comment": str(f.get("comment") or "")[:500],
+                }
+            )
+        verdict = str(parsed.get("verdict") or "").lower()
+        if verdict not in ("approve", "changes_requested"):
+            verdict = "changes_requested" if findings else "approve"
+        return {
+            "summary": str(parsed.get("summary") or content[:300] or "—"),
+            "verdict": verdict,
+            "findings": findings,
+        }
+
+    async def code_edit_propose(
+        self, user_id: int, *, path: str, instruction: str, content: str = ""
+    ) -> dict[str, Any]:
+        """IDE-міст (CA-6.3): запропонувати правку файлу як unified diff, БЕЗ apply.
+
+        Редактор надсилає поточний вміст + інструкцію; модель повертає оновлений вміст,
+        ми рахуємо diff локально (difflib) і віддаємо `{path, diff, proposed, changed}`.
+        Inline-diff показує/застосовує сам IDE — нічого не пишемо на диск (S4, dry-run).
+        """
+        if not (instruction or "").strip():
+            return {"path": path, "diff": "", "proposed": content, "changed": False,
+                    "error": "instruction required"}
+        prompt = (
+            "Онови вміст файлу згідно з інструкцією. Поверни ЛИШЕ повний новий вміст файлу — "
+            "без пояснень, без markdown-огорожі (```), без коментарів поза кодом.\n"
+            f"Файл: {path}\nІнструкція: {instruction}\n\n--- ПОТОЧНИЙ ВМІСТ ---\n{content}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Ти редагуєш файли коду JARVIS точковими правками. Зберігай стиль і "
+                        "відступи. Виводь лише повний оновлений вміст файлу."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        proposed = _strip_code_fences((msg.get("content") or ""))
+        old_lines = content.splitlines(keepends=True)
+        new_lines = proposed.splitlines(keepends=True)
+        diff = "".join(
+            difflib.unified_diff(
+                old_lines, new_lines, fromfile=f"a/{path}", tofile=f"b/{path}"
+            )
+        )
+        return {
+            "path": path,
+            "diff": diff,
+            "proposed": proposed,
+            "changed": proposed != content,
+        }
 
     async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:
         """Покрокове виконання схваленого плану (sync MVP, max 8 steps)."""
@@ -699,3 +896,158 @@ class AgentRunner:
         await plans.finish_plan(plan_id, result=result, status="done")
         final = await plans.get_plan(plan_id)
         return {"plan": final, "result": result}
+
+    async def _fix_round_edit(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        user_id: int,
+    ) -> None:
+        """Один раунд «локалізуй+прав»: до _FIX_INNER_STEPS модельних кроків з тулами.
+
+        Перезапуск тестів — НЕ тут (його робить fix_tests як авторитетний гейт);
+        тут модель читає код і вносить правку через code_edit.
+        """
+        async def execute(name: str, args: Any) -> ToolStepResult:
+            result = await dispatch(name, args, user_id, allow_computer=True)
+            logger.info("fix.tool[%s] -> %.80s", name, result.replace("\n", " "))
+            return ToolStepResult(text=result)
+
+        async for ev in run_tool_loop(
+            messages=messages,
+            limit=_FIX_INNER_STEPS,
+            chat=self._agent_chat(tools),
+            coerce=coerce_args,
+            execute=execute,
+            inline_parser=_parse_inline_tool_calls,
+            tool_message=_tool_message,
+        ):
+            # fix-раунд лише читає/править; на завершенні (final|need_final) — стоп,
+            # перезапуск тестів робить fix_tests як авторитетний гейт. Tool-події ігноруємо.
+            if "final" in ev or "need_final" in ev:
+                return
+
+    async def _session_diff(self, path: str) -> str:
+        """Робочий git-diff робочого дерева (для post-fix self-review).
+
+        Порожньо, якщо git/host-agent недоступні — self-review тоді тихо пропускається.
+        """
+        from .tools import coding_tools
+
+        try:
+            res = await coding_tools._cli("git", ["diff", "--no-color"], path or None)
+        except Exception:  # noqa: BLE001
+            return ""
+        if not isinstance(res, dict) or res.get("error"):
+            return ""
+        return str(res.get("stdout") or "")[:8000]
+
+    async def _self_review_gate(
+        self,
+        user_id: int,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        path: str,
+        run_fn: Callable[[], Awaitable[str]],
+    ) -> dict[str, Any]:
+        """CA-5.1 review-перед-звітом: рев'ю робочого diff; за changes_requested із
+        high/medium зауваженнями — один раунд правок «під зауваження» + re-test.
+
+        Повертає review-дікт (+ fix_attempted/tests_after_fix), або skip, якщо diff порожній.
+        """
+        diff = await self._session_diff(path)
+        if not diff.strip():
+            return {"verdict": "skip", "summary": "Немає робочого diff для self-review.", "findings": []}
+        review = await self.code_review(user_id, diff=diff, context="post-fix self-review")
+        actionable = [
+            f for f in review.get("findings", []) if f.get("severity") in ("high", "medium")
+        ]
+        if review.get("verdict") != "changes_requested" or not actionable:
+            return review
+        notes = "\n".join(
+            f"- [{f['severity']}] {f.get('file') or '?'}:{f.get('line') or 0} {f['comment']}"
+            for f in actionable
+        )
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Код-рев'ю знайшло проблеми у твоїх правках — виправ їх перед звітом, "
+                    f"не ламаючи тести:\n{notes}"
+                ),
+            }
+        )
+        await self._fix_round_edit(messages, tools, user_id)
+        after = await run_fn()
+        review["fix_attempted"] = True
+        review["tests_after_fix"] = "pass" if "✅ PASS" in after else "fail"
+        return review
+
+    async def fix_tests(
+        self,
+        user_id: int,
+        *,
+        exe: str,
+        args: list[str] | None = None,
+        path: str = "",
+        task: str = "",
+        max_rounds: int | None = None,
+        review: bool = False,
+    ) -> dict[str, Any]:
+        """Виділена fix-orchestration (CA-3.2): тест → локалізація → code_edit → re-test.
+
+        Стоп-умови: green / max-rounds (config `coding_fix_max_rounds`) / no-progress
+        (той самий набір впалих тестів двічі поспіль). code_edit лишається за confirm/
+        session-trust — петля нічого не обходить (S4).
+
+        `review=True` (+ `CODING_REVIEW_AFTER_FIX`) → після green прогнати self-review на
+        робочому diff і авто-fix зауважень перед звітом (CA-5.1). Результат у `report["review"]`.
+
+        Повертає {status, rounds, report}: status ∈ already_green|fixed|no_progress|stuck.
+        """
+        from .tools import check_tools, fix_loop
+
+        arglist = list(args or [])
+        rounds = max(1, max_rounds if max_rounds is not None else settings.coding_fix_max_rounds)
+        do_review = bool(review and settings.coding_review_after_fix)
+
+        async def _run() -> str:
+            return await check_tools.run_tests(exe, args=arglist, path=path, user_id=user_id)
+
+        baseline = await _run()
+        if "✅ PASS" in baseline:
+            return {"status": "already_green", "rounds": 0, "report": baseline}
+
+        tools = [
+            s
+            for s in agent_tool_schemas(computer=True, allow_computer=True)
+            if s.get("function", {}).get("name") in _FIX_TOOLS
+        ]
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": _fix_system()},
+            {"role": "user", "content": _fix_user_prompt(task, exe, arglist, path, baseline)},
+        ]
+
+        prev_sig = fix_loop.summary_signature(baseline)
+        verdict = baseline
+        for rnd in range(1, rounds + 1):
+            await self._fix_round_edit(messages, tools, user_id)
+            verdict = await _run()
+            if "✅ PASS" in verdict:
+                out: dict[str, Any] = {"status": "fixed", "rounds": rnd, "report": verdict}
+                if do_review:
+                    out["review"] = await self._self_review_gate(
+                        user_id, messages, tools, path, _run
+                    )
+                return out
+            sig = fix_loop.summary_signature(verdict)
+            if sig == prev_sig:
+                return {"status": "no_progress", "rounds": rnd, "report": verdict}
+            prev_sig = sig
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Тести все ще падають — спробуй інший підхід:\n{verdict}",
+                }
+            )
+        return {"status": "stuck", "rounds": rounds, "report": verdict}

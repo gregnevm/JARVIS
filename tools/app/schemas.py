@@ -62,6 +62,36 @@ class PlanUserRequest(BaseModel):
     user_id: int
 
 
+class CodeReviewRequest(BaseModel):
+    user_id: int
+    diff: str
+    context: str = ""
+
+
+class RepoTreeRequest(BaseModel):
+    user_id: int
+    path: str = ""
+    max_depth: int = 3
+
+
+class CodeEditRequest(BaseModel):
+    user_id: int
+    path: str
+    instruction: str
+    content: str = ""
+
+
+class CodeFixRequest(BaseModel):
+    user_id: int
+    exe: str
+    args: list[str] | None = None
+    path: str = ""
+    task: str = ""
+    max_rounds: int | None = None
+    no_confirm: bool = False  # CA-6.4: headless auto-apply (за policy gate)
+    review: bool = False  # CA-5.1: self-review + авто-fix зауважень перед звітом
+
+
 class FilePathRequest(BaseModel):
     user_id: int
     path: str
@@ -94,6 +124,11 @@ class BgJobCreate(BaseModel):
     mode: str = "auto"
     job_type: str = "agent_turn"
     max_hops: int = 3
+    # coding_task (CA-5.3): раннер + аргументи + cwd + стеля раундів fix-петлі.
+    exe: str = ""
+    args: list[str] | None = None
+    path: str = ""
+    max_rounds: int = 0
 
 
 class ResearchRunRequest(BaseModel):
@@ -149,6 +184,7 @@ class TeamSpawnBody(BaseModel):
     task: str
     budget_per_role: int = 3
     roles: list[str] | None = None
+    kind: str = ""  # "coding" → пресет Coder→Reviewer→Tester (CA-5.2)
     async_mode: bool = True
 
 

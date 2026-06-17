@@ -63,6 +63,29 @@ async def create_research_job(user_id: int, query: str, max_hops: int = 3) -> di
     )
 
 
+async def create_coding_job(
+    user_id: int,
+    exe: str,
+    *,
+    args: list[str] | None = None,
+    path: str = "",
+    task: str = "",
+    max_rounds: int = 0,
+) -> dict[str, Any]:
+    """Фоновий coding-task (CA-5.3): виконавець — `/agent/code/fix` (fix_tests)."""
+    return await create_typed_job(
+        user_id,
+        "coding_task",
+        {
+            "exe": exe,
+            "args": list(args or []),
+            "path": path,
+            "task": task,
+            "max_rounds": max_rounds,
+        },
+    )
+
+
 async def create_subagent_job(
     user_id: int,
     task: str,

@@ -7,9 +7,15 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from jarvis_core.pipeline.handlers import screen_text
 
-from ..schemas import AgentRequest, PlanCreateRequest, PlanUserRequest
+from ..schemas import (
+    AgentRequest,
+    CodeEditRequest,
+    CodeFixRequest,
+    CodeReviewRequest,
+    PlanCreateRequest,
+    PlanUserRequest,
+)
 from ._helpers import ndjson, require_found, require_text
 
 logger = logging.getLogger("jarvis.tools.agent_routes")
@@ -30,16 +36,12 @@ def register(router: APIRouter) -> None:
 
     @router.post("/agent/stream")
     async def agent_stream_ep(req: AgentRequest, request: Request) -> StreamingResponse:
-        safe, block = screen_text(req.text)
-
         async def gen() -> AsyncIterator[bytes]:
-            if block is not None:
-                yield ndjson({"done": True, "mode": block.mode, "iters": 0, "text": block.text})
-                return
             try:
-                hint = req.mode if req.mode and req.mode != "auto" else None
-                async for ev in request.app.state.agent.run_stream(
-                    req.user_id, safe or req.text, mode=hint, mode_hint=hint
+                # R2: стрім теж через facade (safety-скрин усередині chat_stream),
+                # а не повз нього напряму в runner.
+                async for ev in request.app.state.jarvis.chat_stream(
+                    req.user_id, req.text, mode=req.mode
                 ):
                     yield ndjson(ev)
             except Exception:  # noqa: BLE001
@@ -62,6 +64,64 @@ def register(router: APIRouter) -> None:
             return await request.app.state.agent.plan(req.user_id, text)
         except Exception as exc:  # noqa: BLE001
             logger.exception("agent plan failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @router.post("/agent/code/plan")
+    async def agent_code_plan_ep(req: PlanCreateRequest, request: Request) -> dict[str, Any]:
+        """Code-specific план із file-targets (CA-4.1). Той самий approve/execute flow."""
+        text = require_text(req.text)
+        try:
+            return await request.app.state.agent.code_plan(req.user_id, text)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent code plan failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @router.post("/agent/code/review")
+    async def agent_code_review_ep(req: CodeReviewRequest, request: Request) -> dict[str, Any]:
+        """Self-review pass (CA-5.1): unified diff → структуровані зауваження."""
+        try:
+            return await request.app.state.agent.code_review(
+                req.user_id, diff=req.diff, context=req.context
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent code review failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @router.post("/agent/code/fix")
+    async def agent_code_fix_ep(req: CodeFixRequest, request: Request) -> dict[str, Any]:
+        """Виділена fix-orchestration (CA-3.2): тест→правка→тест до green/max/no-progress."""
+        if not (req.exe or "").strip():
+            raise HTTPException(status_code=400, detail="exe required")
+        from ..headless import authorize_headless_apply
+
+        denial = await authorize_headless_apply(req.user_id, req.no_confirm)
+        if denial:
+            return {"status": "policy_denied", "rounds": 0, "report": denial}
+        try:
+            return await request.app.state.agent.fix_tests(
+                req.user_id,
+                exe=req.exe,
+                args=req.args,
+                path=req.path,
+                task=req.task,
+                max_rounds=req.max_rounds,
+                review=req.review,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent code fix failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @router.post("/agent/code/edit")
+    async def agent_code_edit_ep(req: CodeEditRequest, request: Request) -> dict[str, Any]:
+        """IDE-міст (CA-6.3): запропонувати unified diff для файлу, без apply (dry-run)."""
+        if not (req.instruction or "").strip():
+            raise HTTPException(status_code=400, detail="instruction required")
+        try:
+            return await request.app.state.agent.code_edit_propose(
+                req.user_id, path=req.path, instruction=req.instruction, content=req.content
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent code edit failed")
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @router.get("/agent/plan/{plan_id}")

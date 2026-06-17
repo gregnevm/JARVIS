@@ -1,4 +1,4 @@
-from jarvis_core.routing import RouteContext, classify_mode
+from jarvis_core.routing import RouteContext, classify_mode, is_screenshot_request
 
 
 def test_forced_hint():
@@ -36,3 +36,15 @@ def test_hybrid_computer_what_on_screen():
 def test_hybrid_computer_cursor_prefix():
     ctx = RouteContext(agent_mode="hybrid", enable_computer=True, computer_allowed=True)
     assert classify_mode("cursor: fix tests", ctx) == "computer"
+
+
+# R4 — screenshot-shortcut патерн (перенесено з gateway-транспорту в routing)
+def test_is_screenshot_request_matches() -> None:
+    assert is_screenshot_request("зроби скріншот")
+    assert is_screenshot_request("take a screenshot please")
+    assert is_screenshot_request("скрін екран зараз")
+
+
+def test_is_screenshot_request_negatives() -> None:
+    assert not is_screenshot_request("розкажи жарт")
+    assert not is_screenshot_request("")

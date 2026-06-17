@@ -1,10 +1,19 @@
-# Build-контекст цього сервісу = ./gateway. Тримаємо його малим і чистим.
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-tests/
-conftest.py
+# Build context = repo root (shared jarvis_core)
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+gateway/tests/
+gateway/conftest.py
+tools/
+memory/
+twin/
+tts/
+training/
+edge/
+scripts/
+docs/
+data/
 *.md
 .env
 .env.*

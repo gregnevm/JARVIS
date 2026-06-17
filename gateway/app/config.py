@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from jarvis_core.auth_ids import parse_comma_separated_ids
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
@@ -152,49 +154,18 @@ class Settings(BaseSettings):
     @property
     def allowed_ids(self) -> set[int]:
         """ALLOWED_USER_IDS ('1,2,3') → set[int]. Порожньо = нікого не пускаємо."""
-        ids: set[int] = set()
-        for part in self.allowed_user_ids.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            try:
-                ids.add(int(part))
-            except ValueError:
-                continue
-        return ids
+        return parse_comma_separated_ids(self.allowed_user_ids)
 
     @property
     def health_alert_ids(self) -> set[int]:
-        raw = self.health_alert_user_ids.strip()
-        if not raw:
-            return set()
-        ids: set[int] = set()
-        for part in raw.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            try:
-                ids.add(int(part))
-            except ValueError:
-                continue
-        return ids
+        return parse_comma_separated_ids(self.health_alert_user_ids)
 
     @property
     def admin_ids(self) -> set[int]:
         """ADMIN_USER_IDS. Порожньо → адміни = ALLOWED_USER_IDS."""
-        raw = self.admin_user_ids.strip()
-        if not raw:
+        if not self.admin_user_ids.strip():
             return self.allowed_ids
-        ids: set[int] = set()
-        for part in raw.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            try:
-                ids.add(int(part))
-            except ValueError:
-                continue
-        return ids
+        return parse_comma_separated_ids(self.admin_user_ids)
 
     @property
     def context_scheduler_ids(self) -> set[int]:

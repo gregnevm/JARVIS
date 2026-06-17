@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.0 (2026-06-15)
+> **Версія:** 1.17 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -72,13 +72,13 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
-| Виконання команд/тестів | **8/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); fix-цикл через ReAct-луп; бракує виділеної fix-orchestration (CA-3.2) |
-| Редагування файлів | **7/10** | `code_edit` diff/apply (search_replace+unified diff) + git-safety `.jarvis_backup`; бракує лише транзакційного multi-file (CA-4.3) |
-| Repo-контекст | **7/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), scoped-RAG індекс project-файлів + token-бюджет; бракує крос-файлового symbol-графа (CA-4.5) |
+| Виконання команд/тестів | **9/10** | `run_tests`/`run_lint` структуровані (CA-3.1/3.3); виділена fix-orchestration `fix_tests` (CA-3.2) + no-progress stop (CA-3.4); лишається live-fix eval (CA-3.5) |
+| Редагування файлів | **9/10** | `code_edit` diff/apply + git-safety + транзакційний multi-file `code_edit_batch` (dry-run) + word-boundary `rename_symbol` (CA-4.3/4.4/4.5); лишається інтеграція з повним symbol-графом |
+| Repo-контекст | **8/10** | дерево (repo_tree), grep, symbol-outline (repo_symbols), крос-файлові посилання (repo_refs), scoped-RAG + token-бюджет; повний symbol-граф із типами — попереду |
 | Планування коду | **5/10** | P3 Planning є, не інтегрований у coding-контур |
-| Self-review | **4/10** | P9 teams (Reviewer) є як bg job, не в coding-лупі |
-| UX (coding-специфічний) | **3/10** | Workbench загальний; немає diff-viewer, repo-tree, test-panel |
-| CLI / IDE | **1/10** | немає `jarvis code`; Continue лише як міст |
+| Self-review | **7/10** | `code_review` self-pass (CA-5.1) + **review-after-fix gate** (`fix_tests(review=True)`: рев'ю diff → авто-fix зауважень перед звітом); P9 teams (Reviewer) як bg job; повна P9-інтеграція (Reviewer викликає structured review) — попереду |
+| UX (coding-специфічний) | **6/10** | Platform **Coding tab** (CA-6.5): file-targeted план, diff-viewer (review→findings), repo-tree, fix-job test-panel; SSE-стрім fix-логу — попереду |
+| CLI / IDE | **8/10** | `jarvis code` CLI (run/plan/review/fix/**edit**) + key/base auth + headless `--no-confirm` (CA-6.1/6.2/6.4) + **VS Code extension** (inline diff, CA-6.3); багатший LSP-режим — опційно попереду |
 | Модель | **4/10** | qwen2.5:7b слабка для складного multi-file; потрібна 14b+/cloud opt-in |
 
 ### 2.3 Розриви (gap list)
@@ -87,11 +87,11 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 |---|-----|-------|
 | ~~CB1~~ ✅ | ~~Немає `code_edit` (diff/apply)~~ → `code_edit` (search_replace+diff, confirm, diff-preview) | Закрито (CA-1.1/1.2) |
 | ~~CB2~~ ✅ | ~~Немає git-safety~~ → `.jarvis_backup/<name>.<ts>.bak` перед кожним записом | Закрито (CA-1.3) |
-| CB3↓ | Repo-контекст: дерево/grep/symbol-outline + scoped-RAG індекс project-файлів є; лишається крос-файловий symbol-граф (CA-4.5) | Структура файлу видима; крос-файлові залежності — ще ні |
+| ~~CB3~~ ✅ | дерево/grep/symbol-outline + scoped-RAG + **`repo_refs`** (крос-файлові import/usage-сайти) | Крос-файлові залежності тепер видимі (основа під CA-4.5 rename) |
 | CB4 | Тест-луп не первинна операція (через generic PS) | Немає структурованого fail→fix циклу |
 | CB5 | Planning не coding-специфічний (немає file-targets у кроках) | План не прив'язаний до файлів |
-| CB6 | Немає diff-viewer / repo-tree / test-panel у Platform | Огляд правок лише через текст |
-| CB7 | Немає `jarvis code` CLI та IDE-режиму | Не drop-in для розробника за клавіатурою |
+| ~~CB6~~ ✅ | ~~Немає diff-viewer / repo-tree / test-panel у Platform~~ → Platform **Coding tab** (план/review-diff/repo-tree/fix-job) | Закрито (CA-6.5) |
+| ~~CB7~~ ✅ | ~~Drop-in із терміналу/IDE~~ → `jarvis code` CLI (run/plan/review/fix/edit) + VS Code extension (inline diff) | Закрито (CA-6.1/6.2/6.3) |
 | CB8 | Модель 7B слабка для multi-file | Потрібна 14b+/cloud planner opt-in (як AM-2.4) |
 
 ---
@@ -159,10 +159,10 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
 | CA-3.1 | `run_tests` tool — обгортка (pytest/npm/…) з парсингом fail-summary | Структурований `{passed, failed[], output_tail}` | [x] `check_tools.run_tests` (runner-allowlist, pytest-парсер) |
-| CA-3.2 | Fix-loop у `AgentRunner`: fail → локалізація файлу → `code_edit` → re-run | Max N ітерацій (config) | [~] вмикається наявним ReAct-лупом (run_tests→code_edit→run_tests); виділеної orchestration-петлі ще нема |
+| CA-3.2 | Fix-loop у `AgentRunner`: fail → локалізація файлу → `code_edit` → re-run | Max N ітерацій (config) | [x] `AgentRunner.fix_tests` — виділена петля «тест→правка→тест», `coding_fix_max_rounds`, авторитетний re-run як гейт, стоп green/max/no-progress |
 | CA-3.3 | Build/lint tool (mypy/ruff/tsc) з тим самим патерном | Структурований вивід | [x] `check_tools.run_lint` (mypy/ruff/generic парсер) |
-| CA-3.4 | Stop-conditions: green / max-iters / no-progress (однаковий fail двічі) | Graceful звіт | [~] max-iters є в агент-лупі; no-progress детектор — ще ні |
-| CA-3.5 | Golden trace: навмисно зламаний тест → агент полагодив до green | `tools/tests/golden/` | [~] детермінований golden парсингу (`check_output.json`); live-fix eval — попереду |
+| CA-3.4 | Stop-conditions: green / max-iters / no-progress (однаковий fail двічі) | Graceful звіт | [x] `fix_loop.note_test_result` — per-user fail-сигнатура (Redis, TTL); повтор → підказка «зміни підхід / зупинись»; max-iters в агент-лупі |
+| CA-3.5 | Golden trace: навмисно зламаний тест → агент полагодив до green | `tools/tests/golden/` | [x] `golden/fix_tests.json` + `test_fix_tests_golden.py` — live-fix через СПРАВЖНІЙ run_tests-парсер (зламано→правка→green / already_green / no_progress), host-agent `/cli` замокано |
 
 **Вихід CA-3:** «полагодь падіння в `tests/`» → агент ітерує до green або чесно звітує, що застряг.
 
@@ -174,11 +174,11 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-4.1 | `POST /agent/code/plan` — кроки з `{file, action, rationale, risk}` | JSON schema (розширення P3) | [ ] |
-| CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [ ] |
-| CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [ ] |
-| CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [ ] |
-| CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [ ] |
+| CA-4.1 | `POST /agent/code/plan` — кроки з `{file, action, rationale, risk}` | JSON schema (розширення P3) | [x] `AgentRunner.code_plan` + route; `_normalize_steps` зберігає code-поля (file/action/rationale/risk) |
+| CA-4.2 | Один ✅ на план (не на кожен файл); session-trust як computer | Redis TTL як P3 plans | [x] один апрув на план (P3 approve-flow + маркер); у вікні session-trust (`computer_trust`) — авто-апрув без ✅ (`auto_approved`, маркер порожній) |
+| CA-4.3 | Multi-file apply транзакційно (усе або відкат) | Rollback при fail у середині | [x] host-agent `/fs/edit_batch` (план-усіх→запис-усіх, відкат із пам'яті, дедуп, `edit_batch_max`) + tool `code_edit_batch` (T1, mutating→confirm, owner-gated) |
+| CA-4.4 | Dry-run: показати всі diff-и без apply | `/code plan --dry` | [x] `code_edit_batch(dry_run=true)` — усі diff-и без запису, read-only (без confirm) |
+| CA-4.5 | Rename/move рефактор з оновленням імпортів (symbol-граф із CA-2.3) | Golden trace | [x] word-boundary `mode='rename_symbol'` (host-agent, безпечно — не чіпає довші імена) composable: `repo_refs` → `code_edit_batch(rename_symbol, dry_run)` → один апрув; golden у `hostagent/tests/test_fs_edit.py` |
 
 **Вихід CA-4:** «винеси `_helpers` у `jarvis_core`» → план на 5 файлів → один апрув → консистентний apply.
 
@@ -190,11 +190,11 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [ ] |
-| CA-5.2 | Coder→Reviewer→Tester team-pipeline для coding-задач | Reuse `teams.py` | [ ] |
-| CA-5.3 | bg job type `coding_task` — довгі задачі з progress/cancel | Reuse `bg_jobs.py` + AM-2.2 | [ ] |
-| CA-5.4 | Subagent на під-задачу (напр. окремий файл) з budget_iters | Reuse `subagents.py` | [ ] |
-| CA-5.5 | Hooks: pre-commit lint/test gate (P10 hooks) | `data/hooks/` post_tool | [ ] |
+| CA-5.1 | `code_review` self-pass: diff → зауваження → fix перед звітом | Інтеграція з P9 Reviewer | [x] `AgentRunner.code_review` (diff→findings+verdict) + `POST /agent/code/review`; **review-after-fix gate**: `fix_tests(review=True)` за `CODING_REVIEW_AFTER_FIX` після green рев'ює робочий git-diff і за changes_requested+high/medium робить один раунд правок «під зауваження» + re-test ПЕРЕД звітом (`report["review"]`); `jarvis code fix --review` |
+| CA-5.2 | Coder→Reviewer→Tester team-pipeline для coding-задач | Reuse `teams.py` | [x] `teams.CODING_ROLES` + `tester` роль; `/teams/spawn {kind:"coding"}` → Coder→Reviewer→Tester |
+| CA-5.3 | bg job type `coding_task` — довгі задачі з progress/cancel | Reuse `bg_jobs.py` + AM-2.2 | [x] job type `coding_task` + `bg_jobs.create_coding_job` + виконавець `POST /agent/code/fix`; **gateway-воркер dispatch**: `_handle_coding_task` (`ToolsClient.run_coding_task`, headless `no_confirm=True`), `/bgjobs` приймає coding-payload (exe/args/path/max_rounds), Platform create-method мапінг; cancel/list — як у решти bg jobs |
+| CA-5.4 | Subagent на під-задачу (напр. окремий файл) з budget_iters | Reuse `subagents.py` | [x] `spawn_subagent` tool (P8): делегує під-задачу з `budget_iters` 1–8 → `create_subagent_job` |
+| CA-5.5 | Hooks: pre-commit lint/test gate (P10 hooks) | `data/hooks/` post_tool | [x] turnkey built-in `precommit_gate.run` (post_tool) — після code_edit/code_edit_batch/rename_symbol авто-lint, підсумок дописується до результату; вмикається `CODING_PRECOMMIT_GATE` (без копіювання файлів) |
 
 **Вихід CA-5:** велика задача йде як фоновий job; Reviewer ловить баги до звіту; видно progress.
 
@@ -206,11 +206,11 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CA-6.1 | `jarvis code "<task>"` CLI — локальний агент проти cwd-репо | Streaming у термінал | [ ] |
-| CA-6.2 | CLI auth через `/v1` ключ (Стовп A) | `JARVIS_API_KEY` + `base_url` | [ ] |
-| CA-6.3 | IDE-міст: LSP-обгортка або VS Code extension (поверх `/v1`) | Inline diff в IDE | [ ] |
-| CA-6.4 | Headless-режим (CI): `jarvis code --apply --no-confirm` за політикою | Policy gate (AM-4) | [ ] |
-| CA-6.5 | Platform Coding tab: repo-tree, diff-viewer, test-panel (закриває CB6) | SSE як Workbench | [ ] |
+| CA-6.1 | `jarvis code "<task>"` CLI — локальний агент проти cwd-репо | Streaming у термінал | [x] `tools/app/cli.py` (`python -m app.cli`): run/plan/review/fix підкоманди → agent REST; стрім-у-термінал (зараз фінальна відповідь) — рефайн попереду |
+| CA-6.2 | CLI auth через `/v1` ключ (Стовп A) | `JARVIS_API_KEY` + `base_url` | [x] `JARVIS_API_KEY` (Bearer) + `JARVIS_TOOLS_URL` base + `JARVIS_USER_ID` у `cli.py` |
+| CA-6.3 | IDE-міст: LSP-обгортка або VS Code extension (поверх `/v1`) | Inline diff в IDE | [x] VS Code extension `clients/vscode-jarvis/` (zero-build JS) + бекенд `POST /agent/code/edit` (`code_edit_propose`: вміст+інструкція → unified diff через difflib, **dry-run**, без apply) + `jarvis code edit --file --instruction [--apply]`. Inline diff у нативному diff-view, apply лише за згодою; git-safety/policy — на бекенді |
+| CA-6.4 | Headless-режим (CI): `jarvis code --apply --no-confirm` за політикою | Policy gate (AM-4) | [x] `jarvis code fix --no-confirm/--apply` → policy gate `CODING_HEADLESS_APPLY` (`headless.authorize_headless_apply`): дозвіл → короткий session-trust (apply без ✅); інакше `policy_denied` |
+| CA-6.5 | Platform Coding tab: repo-tree, diff-viewer, test-panel (закриває CB6) | SSE як Workbench | [x] `platform/coding.py` + `Coding` tab у `platform.html`: file-targeted **план**, **self-review diff** (diff-viewer→findings), **repo-tree** (`/coding/repo_tree` route), **fix-петля** як coding_task bg job (test-panel; результат у Jobs). Мутації — лише через bg job (headless-гейт) |
 
 **Вихід CA-6:** `jarvis code "fix lint"` у терміналі = той самий агент, що з Telegram; видно diff в IDE/Platform.
 
@@ -267,6 +267,18 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.17 | **CA-5/6 фінал**: CA-5.1 review-after-fix gate (`fix_tests(review=True)`), CA-5.3 gateway-воркер dispatch для `coding_task`, CA-6.5 Platform Coding tab (закриває CB6), CA-6.3 VS Code extension + `POST /agent/code/edit` + `jarvis code edit` (закриває CB7). **Фази CA-5/CA-6 повністю закрито** |
+| 2026-06-16 | 1.16 | follow-ups: CA-3.5 live-fix golden, CA-5.5 turnkey pre-commit lint gate, CA-4.2 session-trust auto-approve планів, CA-6.4 headless `--no-confirm` за policy-gate |
+| 2026-06-16 | 1.15 | CA-6.1/6.2 `jarvis code` CLI (`app/cli.py`: run/plan/review/fix + key/base auth); CA-5.3 (часткою) coding_task job type + `/agent/code/fix`; CA-5.4 ✅ (spawn_subagent) |
+| 2026-06-16 | 1.14 | CA-4.5 word-boundary `rename_symbol` mode (host-agent) — безпечний rename, composable repo_refs→code_edit_batch; **CA-4 повністю закрито** |
+| 2026-06-16 | 1.13 | `repo_refs` — крос-файловий reference finder (import/usage), закриває CB3 та закладає основу під CA-4.5 rename |
+| 2026-06-16 | 1.12 | CA-5.2 coding team-pipeline (`CODING_ROLES` coder→reviewer→tester + `tester` роль + `/teams/spawn {kind:"coding"}`) |
+| 2026-06-16 | 1.11 | CA-5.1 (часткою) self-review pass `AgentRunner.code_review` (diff→findings+verdict) + `POST /agent/code/review` |
+| 2026-06-16 | 1.10 | CA-4.1 code-plan (`code_plan` + `POST /agent/code/plan`, file-targeted кроки) + CA-4.2 (один апрув на план через P3 flow) |
+| 2026-06-16 | 1.9 | CA-4.3/4.4 завершено: tool `code_edit_batch` (T1, confirm на запис, dry-run read-only) поверх `/fs/edit_batch` — повний контур транзакційної multi-file правки |
+| 2026-06-16 | 1.8 | CA-4.3/4.4 (host-side) транзакційний `/fs/edit_batch` (усе-або-нічого, dry-run, дедуп, `edit_batch_max`) + рефактор `_plan_edit`/`_write_planned` |
+| 2026-06-16 | 1.7 | CA-3.2 виділена fix-orchestration `AgentRunner.fix_tests` (петля тест→правка→тест, `coding_fix_max_rounds`, стоп green/max/no-progress) |
+| 2026-06-16 | 1.6 | CA-3.4 no-progress детектор (`fix_loop.py` — per-user fail-сигнатура в Redis, повтор → підказка стоп/зміна підходу) + крос-платформний `_basename` (PureWindowsPath) |
 | 2026-06-15 | 1.5 | CA-3.1 `run_tests` + CA-3.3 `run_lint` (структуровані раннери, `check_tools.py`) + golden парсингу |
 | 2026-06-15 | 1.4 | CA-2.4 scoped-RAG індекс project-файлів (embed+reindex) + CA-2.5 token-бюджет (`budget.py`) |
 | 2026-06-15 | 1.3 | CA-2.3 `repo_symbols` (Python ast + regex-фолбек) + CA-1.6 golden trace (apply/revert) |

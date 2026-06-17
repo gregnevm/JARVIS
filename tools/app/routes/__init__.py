@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 from . import (
     agent,
     bgjobs,
+    coding,
     computer,
     connectors,
     context,
@@ -33,6 +34,7 @@ _ROUTE_MODULES = (
     dataset,
     scheduler,
     bgjobs,
+    coding,
     research,
     mcp,
     connectors,
