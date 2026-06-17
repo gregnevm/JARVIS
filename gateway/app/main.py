@@ -218,6 +218,10 @@ app.include_router(platform_router)
 app.include_router(openai_router)
 app.include_router(client_api_router)
 
+from .saas import routes as saas_routes  # noqa: E402
+
+saas_routes.register(app)
+
 
 @app.middleware("http")
 async def _request_id_middleware(

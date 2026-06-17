@@ -147,6 +147,8 @@ class Settings(BaseSettings):
     enable_openai_api: bool = False
     openai_api_key: str = ""
     openai_default_user_id: int = 0
+    # AP-4: per-key rate limit (запитів/хв на керований ключ). 0 = без обмеження.
+    openai_key_rate_limit_per_min: int = 0
 
     # Context ingest API (Стовп C / CL-3) — збір контексту з паспортами (P9/P10).
     # Вхід для APK/скриптів/платформи → memory /context/*. За прапором (S2): дефолт off.

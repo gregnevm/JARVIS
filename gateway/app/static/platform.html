@@ -207,6 +207,12 @@
         <button type="button" class="navitem" data-tab="models" role="tab" aria-selected="false"><span class="ic">📦</span> Моделі / Models</button>
         <button type="button" class="navitem" data-tab="improve" role="tab" aria-selected="false"><span class="ic">✨</span> Покращення / Improve</button>
       </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Платформа API / Developer</div>
+        <button type="button" class="navitem" data-tab="developer" role="tab" aria-selected="false"><span class="ic">🔑</span> API ключі / API Keys</button>
+        <button type="button" class="navitem" data-tab="playground" role="tab" aria-selected="false"><span class="ic">🛝</span> Playground</button>
+        <button type="button" class="navitem" data-tab="apilogs" role="tab" aria-selected="false"><span class="ic">📡</span> API Logs</button>
+      </div>
     </nav>
     <div class="side-foot">
       Self-hosted · без зовнішніх API.<br />
@@ -244,6 +250,9 @@
     <section class="panel" id="panel-users" role="tabpanel"></section>
     <section class="panel" id="panel-models" role="tabpanel"></section>
     <section class="panel" id="panel-improve" role="tabpanel"></section>
+    <section class="panel" id="panel-developer" role="tabpanel"></section>
+    <section class="panel" id="panel-playground" role="tabpanel"></section>
+    <section class="panel" id="panel-apilogs" role="tabpanel"></section>
   </main>
 </div>
 <div class="drawer-backdrop" id="projDrawerBg"></div>
@@ -274,6 +283,7 @@ const TITLES = {
   subagents: "Subagents", teams: lbl("Команди", "Teams"), coding: "Coding", team: lbl("Команда", "Team"), hooks: "Hooks",
   logs: lbl("Логи", "Logs"), settings: lbl("Налаштування", "Settings"), users: lbl("Доступ", "Access"),
   models: lbl("Моделі", "Models"), improve: lbl("Покращення", "Improve"),
+  developer: lbl("API ключі", "API Keys"), playground: "Playground", apilogs: "API Logs",
 };
 
 let pendingAction = null;
@@ -1608,11 +1618,151 @@ async function teamGraphShow() {
   } catch (e) { showErr(e.message); out.innerHTML = ""; }
 }
 
+// ---------------- Developer / API Keys (AP-3) ----------------
+let devLastKey = null;
+async function renderDeveloper() {
+  const el = document.getElementById("panel-developer");
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  let d, u;
+  try { d = await api("/platform/api/developer/keys"); }
+  catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  try { u = await api("/platform/api/developer/usage?key_id=root&days=7"); }
+  catch (e) { u = { total_requests: 0, by_endpoint: {} }; }
+
+  const scopes = ["chat", "embeddings", "jobs", "models"];
+  let h = '<div class="section">' + lbl("Створити ключ", "Create key") + '</div>';
+  h += '<div class="card wide"><div class="toolbar">' +
+    '<input id="devName" placeholder="' + lbl("назва", "name") + '" />' +
+    scopes.map((s) => `<label class="sm"><input type="checkbox" class="devScope" value="${s}" checked> ${s}</label>`).join(" ") +
+    '<button type="button" id="devCreate">+ ' + lbl("створити", "create") + '</button></div>';
+  if (devLastKey) {
+    h += '<div class="card" style="margin-top:8px;border-color:var(--acc)"><b>' +
+      lbl("Скопіюй зараз — більше не покажемо:", "Copy now — shown only once:") +
+      '</b><div class="mono" style="word-break:break-all;margin-top:4px">' + esc(devLastKey) + '</div></div>';
+  }
+  h += '</div>';
+
+  const keys = d.data || [];
+  h += '<div class="section">' + lbl("Ключі", "Keys") + ' (' + keys.length + ')</div>';
+  if (!keys.length) h += '<div class="empty">' + lbl("Немає ключів", "No keys yet") + '</div>';
+  else {
+    let tbl = "<table><tr><th>" + lbl("Назва", "Name") + "</th><th>Prefix</th><th>Scopes</th><th>" +
+      lbl("Стан", "Status") + "</th><th></th></tr>";
+    for (const k of keys) {
+      const badge = k.revoked
+        ? '<span class="badge">' + lbl("відкликано", "revoked") + '</span>'
+        : '<span class="badge on">' + lbl("активний", "active") + '</span>';
+      const act = k.revoked ? "" :
+        `<button type="button" data-revoke="${esc(k.id)}">` + lbl("відкликати", "revoke") + `</button>`;
+      tbl += `<tr><td>${esc(k.name || "—")}</td><td class="mono">${esc(k.prefix)}…</td>` +
+        `<td class="sm">${esc((k.scopes || []).join(", "))}</td><td>${badge}</td>` +
+        `<td style="text-align:right">${act}</td></tr>`;
+    }
+    h += '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+  }
+  h += '<div class="section">Usage — root, 7d</div>';
+  h += '<div class="grid">' + card(lbl("Запитів", "Requests"), String(u.total_requests || 0), "sm") + '</div>';
+
+  // AP-3.5: Quickstart panel (host підставлено; ключ — з вкладки вище)
+  const base = location.origin + "/v1";
+  const py = 'from openai import OpenAI\n' +
+    'client = OpenAI(base_url="' + base + '", api_key="sk-jarvis-…")\n' +
+    'print(client.chat.completions.create(\n' +
+    '    model="jarvis",\n' +
+    '    messages=[{"role":"user","content":"привіт"}],\n' +
+    ').choices[0].message.content)';
+  const curl = 'curl -s ' + base + '/chat/completions \\\n' +
+    '  -H "Authorization: Bearer sk-jarvis-…" -H "Content-Type: application/json" \\\n' +
+    '  -d \'{"model":"jarvis","messages":[{"role":"user","content":"hi"}]}\'';
+  h += '<div class="section">Quickstart</div>';
+  h += '<div class="card wide"><div class="sm muted">base_url</div>' +
+    '<div class="mono" style="word-break:break-all">' + esc(base) + '</div>' +
+    '<div class="sm muted" style="margin-top:8px">Python (OpenAI SDK)</div>' +
+    '<pre class="mono" style="white-space:pre-wrap">' + esc(py) + '</pre>' +
+    '<div class="sm muted">curl</div>' +
+    '<pre class="mono" style="white-space:pre-wrap">' + esc(curl) + '</pre></div>';
+  el.innerHTML = h;
+  devLastKey = null;  // show-once
+  el.querySelector("#devCreate").addEventListener("click", devCreate);
+  el.querySelectorAll("[data-revoke]").forEach((b) =>
+    b.addEventListener("click", () => devRevoke(b.dataset.revoke)));
+}
+async function devCreate() {
+  const name = (document.getElementById("devName").value || "").trim();
+  const scopes = [...document.querySelectorAll(".devScope:checked")].map((c) => c.value);
+  try {
+    const r = await api("/platform/api/developer/keys", { method: "POST", body: { name, scopes } });
+    devLastKey = r.key;
+    toast(lbl("ключ створено", "key created"));
+    await renderDeveloper();
+  } catch (e) { showErr(e.message); }
+}
+function devRevoke(id) {
+  confirmModal(lbl("Відкликати ключ?", "Revoke key?"),
+    lbl("Ключ перестане працювати негайно.", "The key stops working immediately."),
+    async () => {
+      try { await api("/platform/api/developer/keys/" + encodeURIComponent(id), { method: "DELETE" }); toast(lbl("відкликано", "revoked")); await renderDeveloper(); }
+      catch (e) { showErr(e.message); }
+    });
+}
+
+// ---------------- Playground (AP-3.3) ----------------
+function renderPlayground() {
+  const el = document.getElementById("panel-playground");
+  el.innerHTML =
+    '<div class="section">' + lbl("Пробний /v1 виклик", "Try /v1") + '</div>' +
+    '<div class="card wide"><div class="toolbar">' +
+    '<select id="pgMode"><option value="auto">auto</option><option value="agent">agent</option>' +
+    '<option value="chat">chat</option></select>' +
+    '<button type="button" id="pgRun">▶ ' + lbl("Запустити", "Run") + '</button></div>' +
+    '<textarea id="pgInput" rows="4" placeholder="' + lbl("Запит…", "Prompt…") + '" style="width:100%;margin-top:8px"></textarea>' +
+    '<div id="pgOut" class="mono" style="white-space:pre-wrap;margin-top:10px;color:var(--muted)"></div></div>';
+  el.querySelector("#pgRun").addEventListener("click", pgRun);
+}
+async function pgRun() {
+  const input = (document.getElementById("pgInput").value || "").trim();
+  const mode = document.getElementById("pgMode").value;
+  if (!input) { showErr(lbl("Введи запит", "Enter a prompt")); return; }
+  const out = document.getElementById("pgOut");
+  out.textContent = LOADING;
+  try {
+    const r = await api("/platform/api/developer/playground", { method: "POST", body: { input, mode } });
+    out.textContent = r.output || "—";
+  } catch (e) { out.textContent = ""; showErr(e.message); }
+}
+
+// ---------------- API Logs (AP-3.4) ----------------
+async function renderApiLogs() {
+  const el = document.getElementById("panel-apilogs");
+  el.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  let d;
+  try { d = await api("/platform/api/developer/logs?limit=100"); }
+  catch (e) { showErr(e.message); el.innerHTML = ""; return; }
+  const rows = d.data || [];
+  let h = '<div class="section">' + lbl("Останні /v1 запити", "Recent /v1 requests") + ' (' + rows.length + ')</div>';
+  if (!rows.length) h += '<div class="empty">' + lbl("Поки порожньо", "Nothing yet") + '</div>';
+  else {
+    let tbl = "<table><tr><th>" + lbl("Час", "Time") + "</th><th>" + lbl("Метод", "Method") +
+      "</th><th>Endpoint</th><th>Status</th><th>ms</th><th>key</th></tr>";
+    for (const r of rows) {
+      const when = new Date((r.ts || 0) * 1000).toLocaleTimeString();
+      const bad = (r.status || 0) >= 400;
+      tbl += `<tr><td class="sm">${esc(when)}</td><td class="mono">${esc(r.method)}</td>` +
+        `<td class="mono sm">${esc(r.path)}</td>` +
+        `<td><span class="badge ${bad ? "" : "on"}">${esc(r.status)}</span></td>` +
+        `<td>${esc(r.ms)}</td><td class="mono sm">${esc(r.key_id)}</td></tr>`;
+    }
+    h += '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+  }
+  el.innerHTML = h;
+}
+
 const RENDER = { overview: renderOverview, workbench: renderWorkbench, memory: renderMemory,
   projects: renderProjects, jobs: renderJobs, planning: renderPlanning, research: renderResearch,
   mcp: renderMcp, connectors: renderConnectors, skills: renderSkills, subagents: renderSubagents,
   teams: renderTeams, coding: renderCoding, team: renderTeam, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers,
-  models: renderModels, improve: renderImprove };
+  models: renderModels, improve: renderImprove, developer: renderDeveloper,
+  playground: renderPlayground, apilogs: renderApiLogs };
 
 const initTab = (location.hash || "#overview").slice(1);
 switchTab(TITLES[initTab] ? initTab : "overview", false);

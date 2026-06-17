@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.0 (2026-06-15)
+> **Версія:** 1.15 (2026-06-16)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -112,20 +112,20 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 ---
 
-## AP-1 — API-ключі (per-org) · **блокується SAAS PR#0/#1**
+## AP-1 — API-ключі · **керовані ключі ✅ (self-hosted); per-org tenant — попереду**
 
-**Мета:** замість одного `.env`-ключа — керовані per-org ключі.
+**Мета:** замість одного `.env`-ключа — керовані ключі з create/list/revoke + scopes.
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-1.0 | **SAAS PR#0** — IDOR fix (`get_by_id` ownership) | Cross-tenant get → 404 | [ ] |
-| AP-1.1 | **SAAS PR#1** — `jarvis_core/context.py` RequestContext + tenant headers | `X-JARVIS-Org-Id/User-Id` | [ ] |
-| AP-1.2 | `api_keys` таблиця (prefix, hash, scopes, revoked_at) | Міграція `004_saas_tenant` (003 зайнято `003_context_passports`) | [ ] |
-| AP-1.3 | `gateway/app/saas/api_keys.py` — CRUD + lookup by prefix | bcrypt hash, show-once | [ ] |
-| AP-1.4 | `/v1` auth → per-org key замість глобального; fallback на global для self-hosted | Backward compat | [ ] |
-| AP-1.5 | Scopes enforcement (`chat`, `embeddings`, `jobs`) | 403 поза scope | [ ] |
+| AP-1.0 | **SAAS PR#0** — IDOR fix (`get_by_id` ownership) | Cross-tenant get → 404 | [ ] (per-org tenant) |
+| AP-1.1 | **SAAS PR#1** — `jarvis_core/context.py` RequestContext + tenant headers | `X-JARVIS-Org-Id/User-Id` | [ ] (per-org tenant) |
+| AP-1.2 | Сховище ключів (prefix, hash, scopes, revoked) | show-once | [x] `gateway/app/saas/api_keys.py` `ApiKeyStore` (Redis; sha256+prefix; constant-time verify; per-org — поверх через tenant ctx) |
+| AP-1.3 | Management endpoints — create / list / revoke | root-gated | [x] `POST/GET/DELETE /saas/api/keys` (`saas/routes.py`, лише root-ключ) |
+| AP-1.4 | `/v1` auth → керований ключ АБО глобальний (self-hosted fallback) | Backward compat | [x] `_authenticate` приймає root АБО `sk-jarvis-…`; revoke → 401 |
+| AP-1.5 | Scopes enforcement (`chat`, `models`, `embeddings`, `jobs`) | 403 поза scope | [x] `require_scope(...)`; root має всі скоупи |
 
-**Вихід AP-1:** `POST /saas/api/keys` створює `sk-jarvis-live-…`; `/v1` приймає його; revoke працює.
+**Вихід AP-1:** `POST /saas/api/keys` створює `sk-jarvis-…` (показ один раз); `/v1` приймає його зі scope-перевіркою; revoke миттєво відхиляє. Зберігається лише `sha256(key)` + prefix — сирий ключ ніколи. Per-org розшарування (multi-tenant) додасться зверху через SAAS tenant-context, не змінюючи API.
 
 ---
 
@@ -135,12 +135,12 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [ ] |
-| AP-2.2 | `POST /v1/responses` (агентний, tool-use) — мапа на `AgentRunner` | tools[] + tool_calls | [ ] |
-| AP-2.3 | `GET /v1/models` із реальним каталогом (CHAT/AGENT/VISION/EMBED/LoRA) | tags із Ollama | [ ] |
-| AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [ ] |
-| AP-2.5 | `POST /v1/jobs` + `GET /v1/jobs/{id}` — async (research/team/coding) | Reuse bg_jobs | [ ] |
-| AP-2.6 | Error-codes per OpenAI (401/402/404/429) | Сумісні тіла помилок | [ ] |
+| AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [x] memory `/embed`; str\|list[str]; 400 empty / 502 backend; `nomic-embed-text` у `/models` |
+| AP-2.2 | `POST /v1/responses` (агентний, tool-use) — мапа на `AgentRunner` | tools[] + tool_calls | [x] мапа на агент-луп (mode=agent); input рядок\|item-список; Responses-формат (`output[]`+`output_text`) |
+| AP-2.3 | `GET /v1/models` із реальним каталогом (CHAT/AGENT/VISION/EMBED/LoRA) | tags із Ollama | [x] merge Ollama-каталогу (`svc.dashboard`+`_ollama_tags`), dedupe, best-effort fallback на статичний список |
+| AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [x] `UsageStore` (Redis hash/день); best-effort запис у `_authenticate`; `GET /v1/usage?days=N` по ключу-викликачу |
+| AP-2.5 | `POST /v1/jobs` + `GET /v1/jobs/{id}` — async (research/team/coding) | Reuse bg_jobs | [x] `create_bg_job`/`get_bg_job`; 400 empty / 502 backend / 404 missing; `require_scope('jobs')` |
+| AP-2.6 | Error-codes per OpenAI (401/402/404/429) | Сумісні тіла помилок | [x] `_OpenAIErrorRoute` → `{error:{message,type,code}}` лише на `/v1` |
 
 **Вихід AP-2:** `openai.OpenAI(base_url=…).chat/embeddings/models` працюють незмінно.
 
@@ -152,11 +152,11 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-3.1 | Tab **API Keys** — create/list/revoke, show-once | `platform.html` + `saas/api_keys` | [ ] |
-| AP-3.2 | Tab **Usage** — графіки токенів/запитів, per-key breakdown | `/v1/usage` charts | [ ] |
-| AP-3.3 | Tab **Playground** — `/v1` запит із UI (model, messages, stream) | Reuse Workbench SSE | [ ] |
-| AP-3.4 | Tab **API Logs** — останні запити (status, latency, tokens) | request_id трейс | [ ] |
-| AP-3.5 | **Quickstart** панель — curl/python/node snippet із підставленим ключем | Copy-paste готовий | [ ] |
+| AP-3.1 | Tab **API Keys** — create/list/revoke, show-once | `platform.html` + `saas/api_keys` | [x] nav-таб «API ключі» у `platform.html`: create (scopes) + show-once + list + revoke; data — `/platform/api/developer/keys` |
+| AP-3.2 | Tab **Usage** — графіки токенів/запитів, per-key breakdown | `/v1/usage` charts | [~] data-шар є: `/platform/api/developer/usage?key_id=&days=`; графіки — попереду |
+| AP-3.3 | Tab **Playground** — `/v1` запит із UI (model, messages, stream) | Reuse Workbench SSE | [x] console Playground tab + `/platform/api/developer/playground` (mode auto/agent/chat, admin-сесія) |
+| AP-3.4 | Tab **API Logs** — останні запити (status, latency, tokens) | request_id трейс | [x] `RequestLogStore` (capped Redis list, лог у `_OpenAIErrorRoute`: status+ms) + `/platform/api/developer/logs` + console tab |
+| AP-3.5 | **Quickstart** панель — curl/python/node snippet із підставленим ключем | Copy-paste готовий | [x] панель у Developer-табі: base_url (live host) + Python(OpenAI SDK) + curl snippets |
 
 **Вихід AP-3:** розробник не торкається `.env` — усе через консоль.
 
@@ -168,8 +168,8 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-4.1 | Org-scoped rate-limit ключі (SAAS §1.4) | `jarvis:{org}:rl:…` | [ ] |
-| AP-4.2 | `usage_events` запис на кожен виклик (turn/token/embed/job) | append-only + nightly rollup | [ ] |
+| AP-4.1 | Per-key rate-limit (org-scoped — поверх через tenant ctx) | `jarvis:ratelimit:{key}:{min}` | [x] `openai_key_rate_limit_per_min` (0=off); 429 `rate_limit_error`; root без ліміту; best-effort |
+| AP-4.2 | `usage_events` запис на кожен виклик (turn/token/embed/job) | append-only + nightly rollup | [~] per-key request-метрика є (AP-2.4 `UsageStore`); token/embed-розбивка + rollup — попереду |
 | AP-4.3 | `plan_limits.py` enforcement (free/pro/team/studio) | 402 при перевищенні | [ ] |
 | AP-4.4 | Per-org metrics (розщепити глобальні, SAAS §0.2) | `jarvis:{org}:metrics:*` | [ ] |
 | AP-4.5 | Soft/hard ліміти + grace (fail-open ops, fail-closed billing) | Config | [ ] |
@@ -182,11 +182,11 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-5.1 | OpenAPI-спека для `/v1` + `/saas/api/*` | `/openapi.json` повна | [ ] |
-| AP-5.2 | Python SDK (thin, або «use openai with base_url») | README quickstart | [ ] |
-| AP-5.3 | JS/TS SDK (або openai-node інструкція) | README quickstart | [ ] |
+| AP-5.1 | OpenAPI-спека для `/v1` + `/saas/api/*` | `/openapi.json` повна | [x] FastAPI `/openapi.json` містить весь `/v1`+`/saas/api/*` (тест `test_openapi_schema`) |
+| AP-5.2 | Python SDK (thin, або «use openai with base_url») | README quickstart | [x] `docs/API_QUICKSTART.md` — OpenAI SDK drop-in (`base_url`+`api_key`) |
+| AP-5.3 | JS/TS SDK (або openai-node інструкція) | README quickstart | [x] `API_QUICKSTART.md` §2b — openai-node drop-in (`baseURL`+`apiKey`) |
 | AP-5.4 | Docs-сайт / `docs/api/` — endpoints, auth, errors, rate-limits | Згенеровано з OpenAPI | [ ] |
-| AP-5.5 | Postman/insomnia колекція | Експорт | [ ] |
+| AP-5.5 | Postman/insomnia колекція | Експорт | [x] `sdk/jarvis-api.postman_collection.json` (усі `/v1` + key-mgmt; змінні base_url/api_key/root_key) |
 
 **Вихід AP-5:** «5 хв від signup до першого виклику» (KPI).
 
@@ -259,6 +259,21 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-16 | 1.15 | AP-5.3 Node/openai-node quickstart (§2b) |
+| 2026-06-16 | 1.14 | AP-5.5 Postman collection (`sdk/`) |
+| 2026-06-16 | 1.13 | AP-3.4 API-Logs (request log + console tab) — AP-3 console повний |
+| 2026-06-16 | 1.12 | AP-3.5 Quickstart-панель у Developer-табі (base_url+Python+curl) |
+| 2026-06-16 | 1.11 | AP-3.3 console Playground tab + `/platform/api/developer/playground` |
+| 2026-06-16 | 1.10 | AP-2.3 `/v1/models` реальний каталог (Ollama merge) — AP-2 повний 6/6 |
+| 2026-06-16 | 1.9 | AP-3.1 console tab «API Keys» (create/list/revoke/show-once) у platform.html |
+| 2026-06-16 | 1.8 | AP-3.1/3.2 developer-console data-шар (`/platform/api/developer/*`) |
+| 2026-06-16 | 1.7 | AP-4.1 per-key rate-limit (429 `rate_limit_error`, opt-in) |
+| 2026-06-16 | 1.6 | AP-5.1/5.2 OpenAPI повна + `API_QUICKSTART.md` (OpenAI SDK drop-in) |
+| 2026-06-16 | 1.5 | AP-2.2 агентний `/v1/responses` (mode=agent, tool-use) |
+| 2026-06-16 | 1.4 | AP-2.4 per-key usage metering (`GET /v1/usage`) |
+| 2026-06-16 | 1.3 | AP-2.5 async `/v1/jobs` (POST+GET) на bg_jobs |
+| 2026-06-16 | 1.2 | AP-2.1 `/v1/embeddings` (nomic-embed-text) + AP-2.6 OpenAI error envelope на `/v1` |
+| 2026-06-16 | 1.1 | AP-1 керовані API-ключі (self-hosted): `ApiKeyStore` + `/saas/api/keys` CRUD + `/v1` scope-auth |
 | 2026-06-15 | 1.0 | Початковий roadmap Стовпа A (AP-0…AP-6); продуктовий шар над SAAS_DEEP_DIVE |
 
 ---
