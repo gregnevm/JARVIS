@@ -1,7 +1,9 @@
 package ai.jarvis.mvp;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -39,7 +41,7 @@ public class ChatActivity extends Activity {
         // Deeplink jarvis://pair?server=&token= (QR зі штабу).
         Uri data = getIntent() != null ? getIntent().getData() : null;
         if (data != null && "jarvis".equals(data.getScheme()) && "pair".equals(data.getHost())) {
-            doPair(data.getQueryParameter("server"), data.getQueryParameter("token"));
+            confirmPair(data.getQueryParameter("server"), data.getQueryParameter("token"));
             return;
         }
         if (TextUtils.isEmpty(Prefs.url(this))) {
@@ -66,10 +68,9 @@ public class ChatActivity extends Activity {
         Button tg = bigButton("Увійти через Telegram");
         tg.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                String url = normalize(server.getText().toString());
-                if (url.isEmpty()) { toast("Вкажи адресу сервера"); return; }
-                Prefs.get(ChatActivity.this).edit().putString(Prefs.KEY_URL, url).apply();
-                loginViaTelegram();
+                checkThenRun(normalize(server.getText().toString()), new Runnable() {
+                    public void run() { loginViaTelegram(); }
+                });
             }
         });
         root.addView(tg);
@@ -77,33 +78,119 @@ public class ChatActivity extends Activity {
         Button console = bigButton("Відкрити веб-консоль");
         console.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                String url = normalize(server.getText().toString());
-                if (url.isEmpty()) { toast("Вкажи адресу сервера"); return; }
-                Prefs.get(ChatActivity.this).edit().putString(Prefs.KEY_URL, url).apply();
-                openConsole();
+                checkThenRun(normalize(server.getText().toString()), new Runnable() {
+                    public void run() { openConsole(); }
+                });
             }
         });
         root.addView(console);
         setContentView(wrapScroll(root));
     }
 
+    /**
+     * Перевіряє доступність сервера (фон) і лише тоді зберігає URL + виконує дію.
+     * Прибирає «зберіг адресу → білий екран» без зворотного звʼязку (UX-фікс).
+     */
+    private void checkThenRun(final String url, final Runnable onOk) {
+        if (url.isEmpty()) { toast("Вкажи адресу сервера"); return; }
+        final TextView status = new TextView(this);
+        status.setText("Перевірка зʼєднання з\n" + IngestClient.originOf(url) + " …");
+        status.setTextSize(16);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(dp(24), dp(24), dp(24), dp(24));
+        setContentView(centered(status));
+        new Thread(new Runnable() {
+            public void run() {
+                final boolean ok = IngestClient.reachable(url);
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        if (ok) {
+                            Prefs.get(ChatActivity.this).edit().putString(Prefs.KEY_URL, url).apply();
+                            onOk.run();
+                        } else {
+                            showLogin();
+                            new AlertDialog.Builder(ChatActivity.this)
+                                    .setTitle("Сервер недоступний")
+                                    .setMessage(IngestClient.originOf(url)
+                                            + "\n\nНе відповідає. Перевір адресу, що JARVIS запущено "
+                                            + "і що ти в тій самій мережі (LAN) або тунель активний.")
+                                    .setPositiveButton("Зрозуміло", null)
+                                    .show();
+                        }
+                    }
+                });
+            }
+        }, "jarvis-ping").start();
+    }
+
     private void loginViaTelegram() {
-        toast("Відкриваю Telegram…");
+        final java.util.concurrent.atomic.AtomicBoolean cancel =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        showTgWaiting(cancel);
         new Thread(new Runnable() {
             public void run() {
                 final String token = TgAuth.start(ChatActivity.this);
                 if (token == null) {
                     runOnUiThread(new Runnable() { public void run() {
-                        toast("Не вдалося почати логін (сервер?)"); } });
+                        if (cancel.get()) return;
+                        toast("Не вдалося почати логін — сервер недоступний?");
+                        showLogin();
+                    } });
                     return;
                 }
-                final boolean ok = TgAuth.poll(ChatActivity.this, token);
+                final boolean ok = TgAuth.poll(ChatActivity.this, token, cancel);
                 runOnUiThread(new Runnable() { public void run() {
+                    if (cancel.get()) return;
                     if (ok) { toast("✅ Вхід виконано"); showChat(); }
-                    else { toast("Логін не підтверджено — спробуй ще"); }
+                    else { toast("Логін не підтверджено за 90 с — спробуй ще"); showLogin(); }
                 } });
             }
         }, "tg-login").start();
+    }
+
+    /** Екран очікування підтвердження в Telegram + кнопка «Скасувати». */
+    private void showTgWaiting(final java.util.concurrent.atomic.AtomicBoolean cancel) {
+        LinearLayout root = vbox(dp(24));
+        root.setGravity(Gravity.CENTER);
+        TextView t = new TextView(this);
+        t.setText("Відкрив Telegram.\n\nНатисни «Start» (Запустити) у боті —\nі повертайся сюди.\n\n⏳ Очікую підтвердження…");
+        t.setTextSize(17);
+        t.setGravity(Gravity.CENTER);
+        root.addView(t);
+        Button cancelBtn = bigButton("Скасувати");
+        cancelBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { cancel.set(true); showLogin(); }
+        });
+        root.addView(cancelBtn);
+        setContentView(wrapScroll(root));
+    }
+
+    /** Підтвердження пейрингу: показуємо сервер і питаємо згоду (захист від фішинг-deeplink). */
+    private void confirmPair(final String server, final String token) {
+        if (TextUtils.isEmpty(server) || TextUtils.isEmpty(token)) {
+            toast("Некоректне посилання пейрингу");
+            if (TextUtils.isEmpty(Prefs.url(this))) showLogin(); else showChat();
+            return;
+        }
+        TextView ph = new TextView(this);
+        ph.setText("JARVIS");
+        ph.setTextSize(32);
+        ph.setGravity(Gravity.CENTER);
+        setContentView(centered(ph));
+        new AlertDialog.Builder(this)
+                .setTitle("Підключити цей пристрій?")
+                .setMessage("Сервер:\n" + IngestClient.originOf(server)
+                        + "\n\nПродовжуй ЛИШЕ якщо це твій власний JARVIS — посилання надає повний доступ.")
+                .setCancelable(false)
+                .setPositiveButton("Підключити", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) { doPair(server, token); }
+                })
+                .setNegativeButton("Скасувати", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        if (TextUtils.isEmpty(Prefs.url(ChatActivity.this))) showLogin(); else showChat();
+                    }
+                })
+                .show();
     }
 
     private void doPair(final String server, final String token) {
@@ -112,7 +199,8 @@ public class ChatActivity extends Activity {
             public void run() {
                 final boolean ok = Pairing.redeem(ChatActivity.this, server, token);
                 runOnUiThread(new Runnable() { public void run() {
-                    if (ok) showChat(); else { toast("Парування не вдалося"); showLogin(); }
+                    if (ok) { toast("✅ Підключено"); showChat(); }
+                    else { toast("Парування не вдалося — токен міг вичерпатись (10 хв)"); showLogin(); }
                 } });
             }
         }, "pair").start();
@@ -266,6 +354,15 @@ public class ChatActivity extends Activity {
         return l;
     }
     private ScrollView wrapScroll(View v) { ScrollView s = new ScrollView(this); s.addView(v); return s; }
+    /** Центрований контейнер для статус-екранів (перевірка зʼєднання / пейринг). */
+    private View centered(View v) {
+        LinearLayout l = new LinearLayout(this);
+        l.setOrientation(LinearLayout.VERTICAL);
+        l.setGravity(Gravity.CENTER);
+        l.setPadding(dp(24), dp(24), dp(24), dp(24));
+        l.addView(v);
+        return l;
+    }
     private Button bigButton(String label) {
         Button b = new Button(this);
         b.setText(label);

@@ -33,6 +33,11 @@ jobs:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      # Авто-доставка APK у Telegram: заведи у Settings → Secrets два секрети —
+      # TELEGRAM_BOT_TOKEN (твій бот) і TELEGRAM_TO_CHAT_ID (твій chat id). Тоді
+      # кожен білд надсилає APK тобі в Telegram. Без них крок просто пропускається.
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_TO_CHAT_ID: ${{ secrets.TELEGRAM_TO_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,6 +79,23 @@ jobs:
             data/artifacts/jarvis-mvp.apk.meta.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Send APK to Telegram
+        if: ${{ env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_TO_CHAT_ID != '' }}
+        run: |
+          VER="$(tr -d ' \t\r\n' < mobile/VERSION)"
+          SHA="$(jq -r .sha256 data/artifacts/jarvis-mvp.apk.meta.json | cut -c1-12)"
+          SHORT="${GITHUB_SHA:0:7}"
+          curl -fsS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            -F chat_id="${TELEGRAM_TO_CHAT_ID}" \
+            -F document="@data/artifacts/jarvis-mvp.apk;filename=jarvis-mvp-${VER}.apk" \
+            -F caption="📱 JARVIS MVP APK v${VER} · sha256 ${SHA} · ${SHORT}" >/dev/null
+          echo "✅ APK надіслано в Telegram (chat ${TELEGRAM_TO_CHAT_ID})"
+
+      - name: Telegram delivery hint
+        if: ${{ env.TELEGRAM_BOT_TOKEN == '' || env.TELEGRAM_TO_CHAT_ID == '' }}
+        run: echo "ℹ️ Авто-доставку в Telegram пропущено — задай секрети TELEGRAM_BOT_TOKEN + TELEGRAM_TO_CHAT_ID." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish GitHub Release (on tag mobile-v*)
         if: ${{ startsWith(github.ref, 'refs/tags/mobile-v') }}
