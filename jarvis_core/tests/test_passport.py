@@ -91,6 +91,23 @@ def test_redact_api_secret():
     assert "sk-ABCDEF" not in out
 
 
+def test_redact_jarvis_multisegment_key():
+    """Власний формат ключа JARVIS (sk-jarvis-…) з внутрішнім дефісом — теж редактиться."""
+    key = "sk-jarvis-ABCDEF0123456789ABCDEF0123456789"
+    out = default_redactor().redact(f"clone https://x:{key}@example.com/r")
+    assert "[REDACTED:secret]" in out
+    assert key not in out
+
+
+def test_redact_bearer_and_credential_kv():
+    r = default_redactor()
+    bearer = r.redact("Authorization: Bearer eyJhbGciOi.payloadpart.signaturehere")
+    assert "Bearer [REDACTED:secret]" in bearer
+    kv = r.redact("password=hunter2longvalue")
+    assert kv == "password=[REDACTED:secret]"
+    assert "hunter2longvalue" not in kv
+
+
 def test_redact_otp_keeps_keyword_masks_digits():
     out = default_redactor().redact("ваш код 482913 для входу")
     assert "[REDACTED:otp]" in out

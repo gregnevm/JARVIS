@@ -36,7 +36,7 @@ pgvector RAG, Ollama+Vulkan, tools, STT/TTS, docker) — це 80% ролі HQ з
 | **Edge: SessionLogger** (JSONL) | — (httpx-логи не те) | **NEW** (малий, append-only) |
 | **Edge: SyncAgent** (sidecar) | — | **NEW** |
 | **Агент-луп** (routing, tool-calling, inline-fix) | `tools/app/agent.py` | **REUSE — це коронна коштовність**, рантайм-агностична |
-| **Toolkit** (calc/search/fetch/notes) | `tools/app/toolkit.py` | **REUSE** (Twin повний, Edge — subset) |
+| **Toolkit** (calc/search/fetch/notes) | `tools/app/toolkit/` (пакет) | **REUSE** (Twin повний, Edge — subset) |
 | **STT / TTS** | whisper + tts (piper) | **REUSE** на обох |
 | **n8n** (orchestrator-proxy) | n8n (тонкий проксі) | **DISCARD** — PortableAI не має оркестратора; агент-луп уже в Python |
 | **Telegram I/O** | gateway | **KEEP як канал** — стає одним із UI до Twin (поряд із KoboldCPP web UI на Edge) |

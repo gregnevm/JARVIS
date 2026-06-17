@@ -83,11 +83,18 @@ app.include_router(team_router)
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    from .migrate import embed_dim_mismatch, get_schema_meta
+    from .migrate import (
+        column_dim_mismatch,
+        column_embed_dim,
+        embed_dim_mismatch,
+        get_schema_meta,
+    )
 
     ok = await app.state.db.health()
     meta = await get_schema_meta(app.state.db)
-    warn = embed_dim_mismatch(meta)
+    warn = embed_dim_mismatch(meta) or column_dim_mismatch(
+        await column_embed_dim(app.state.db)
+    )
     out: dict[str, Any] = {
         "status": "ok" if ok else "degraded",
         "db": ok,

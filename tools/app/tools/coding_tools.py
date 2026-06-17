@@ -38,11 +38,45 @@ def _disabled_message() -> str | None:
     return None
 
 
-async def _cli(exe: str, args: list[str], cwd: str | None) -> dict[str, Any]:
-    """Сирий виклик host-agent ``/cli`` (повертає stdout/stderr/code чи {'error'})."""
-    from ..computer import _request
+async def _cli(
+    exe: str,
+    args: list[str],
+    cwd: str | None,
+    *,
+    user_id: int = 0,
+    tool: str = "coding_cli",
+) -> dict[str, Any]:
+    """Сирий виклик host-agent ``/cli`` (повертає stdout/stderr/code чи {'error'}).
 
-    return await _request("POST", "/cli", json={"exe": exe, "args": args, "cwd": cwd})
+    Read-only coding-tools ходять повз ``run_cli`` (їм потрібні `rg`/test-exe поза
+    CLI_WHITELIST на owner-trust-кордоні), АЛЕ кожен виклик пишеться у `computer.jsonl`
+    (tier T1) — щоб не було «темних» host-команд без audit-сліду (AGENTS §5).
+    """
+    from ..computer import _request
+    from ..computer_audit import log_action
+
+    data = await _request("POST", "/cli", json={"exe": exe, "args": args, "cwd": cwd})
+    result = (
+        str(data["error"])
+        if "error" in data
+        else _format_cli_audit(data)
+    )
+    log_action(
+        user_id,
+        tool,
+        "T1",
+        {"exe": exe, "args": " ".join(args), "cwd": cwd or ""},
+        result,
+        confirmed=True,  # read-only repo-інтелект; HITL не потрібен
+    )
+    return data
+
+
+def _format_cli_audit(data: dict[str, Any]) -> str:
+    """Короткий preview для audit-логу (без повного stdout)."""
+    code = data.get("code", "?")
+    out = str(data.get("stdout", ""))
+    return f"code={code} stdout={out[:200]}"
 
 
 # Захист від витоку секретів: `rg -g '<name>'` РЕ-ВКЛЮЧАЄ навіть .gitignore-файл
@@ -120,7 +154,7 @@ async def repo_tree(path: str, *, max_depth: int = 3, user_id: int = 0) -> str:
         return "path обов'язковий для repo_tree."
     depth = max(1, min(int(max_depth or 3), 8))
 
-    data = await _cli("rg", ["--files", *_deny_globs()], root)
+    data = await _cli("rg", ["--files", *_deny_globs()], root, user_id=user_id, tool="repo_tree")
     if "error" in data:
         return str(data["error"])
     code = int(data.get("code", -1))
@@ -170,7 +204,7 @@ async def repo_grep(
     args += _deny_globs()  # після user-glob → виграє (немає витоку .env/ключів)
     args += ["--", pat]
 
-    data = await _cli("rg", args, root)
+    data = await _cli("rg", args, root, user_id=user_id, tool="repo_grep")
     if "error" in data:
         return str(data["error"])
     code = int(data.get("code", -1))
@@ -234,7 +268,7 @@ async def repo_refs(
     args += _deny_globs()
     args += ["--", seg]
 
-    data = await _cli("rg", args, root)
+    data = await _cli("rg", args, root, user_id=user_id, tool="repo_refs")
     if "error" in data:
         return str(data["error"])
     code = int(data.get("code", -1))

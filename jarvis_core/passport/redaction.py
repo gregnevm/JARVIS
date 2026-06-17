@@ -31,11 +31,29 @@ _DEFAULT_RULES: list[Rule] = [
     Rule("card", re.compile(r"\b\d{4}(?:[ -]?\d{4}){2,4}\b"), "[REDACTED:card]"),
     # IBAN: 2 літери + 2 цифри + 10–30 alnum.
     Rule("iban", re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b"), "[REDACTED:iban]"),
-    # API-ключі/токени: sk-/pk-/ghp_/xoxb-… + ≥16 alnum.
+    # API-ключі/токени: sk-/pk-/ghp_/gho_/ghs_/xoxb-… Допускаємо внутрішні дефіси/
+    # підкреслення (напр. власний формат JARVIS `sk-jarvis-…`), тож не зупиняємось на
+    # першому сегменті. Хвіст лишаємо alnum, щоб не з'їсти трейлінг-пунктуацію.
     Rule(
         "secret",
-        re.compile(r"\b(?:sk|pk|ghp|xox[bp])[-_][A-Za-z0-9]{16,}\b"),
+        re.compile(r"\b(?:sk|pk|ghp|gho|ghs|xox[bp])[-_][A-Za-z0-9][A-Za-z0-9_-]{14,}[A-Za-z0-9]\b"),
         "[REDACTED:secret]",
+    ),
+    # Bearer-токен в Authorization-хедері: 'Bearer eyJ…' → ключове слово лишаємо.
+    Rule(
+        "bearer",
+        re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9._\-]{16,}"),
+        r"\1[REDACTED:secret]",
+    ),
+    # key=value / key: value креденшали (token/api_key/secret/password/…) — маскуємо
+    # лише значення, ключ лишаємо для читабельності логів.
+    Rule(
+        "cred_kv",
+        re.compile(
+            r"(?i)\b(token|api[_-]?key|secret|password|passwd|access[_-]?token)"
+            r"(\s*[=:]\s*['\"]?)[^\s'\"]{6,}"
+        ),
+        r"\1\2[REDACTED:secret]",
     ),
     # OTP/пароль: ключове слово, далі 4–8 цифр (маскуємо лише цифри).
     Rule(

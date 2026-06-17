@@ -64,7 +64,7 @@ computer-confirm з телефона. Єдина auth і єдиний API під
 
 | Зараз | Ціль |
 |-------|------|
-| Telegram ✅ · `/platform` HTML ✅ · mobile ❌ | Telegram ✅ · Web SPA/PWA · Android APK · спільна auth/API |
+| Telegram ✅ · `/platform` HTML ✅ · mobile 🟡 (APK v1.0.0, pending on-device QA) | Telegram ✅ · Web SPA/PWA · Android APK · спільна auth/API |
 
 **Деталі:** [`docs/CLIENTS_ROADMAP.md`](docs/CLIENTS_ROADMAP.md)
 
@@ -97,15 +97,19 @@ computer-confirm з телефона. Єдина auth і єдиний API під
 | P7 | Single Source of Truth | ModelRegistry — авторитет про версії; цей файл — про принципи |
 | P8 | Separation of Concerns | Training ≠ Inference ≠ Sync ≠ UI; gateway ≠ tools ≠ memory |
 | P9 | **Context Passport (summarize all)** | жоден артефакт не входить «голим»: кожен несе summary + embedding для контекстної індексації |
-| P10 | **Tag Everything** | кожен паспорт має namespaced-теги — для ретриву **і** як адресовний хендл (виклик блоку за тегом) |
+| P10 | **Tag Everything** | кожен паспорт має namespaced-теги для ретриву (реалізовано: GIN-containment). Адресовний хендл (виклик блоку за тегом) — **заплановано**, резолвера ще нема (FEATURE_AUDIT P2-3) |
 
 **Контекстна культура (наскрізна, критична — деталі [`DESIGN.md`](docs/DESIGN.md) §1.2.1):**
 
 > **C1 — Паспорт + теги всюди.** «Summarize all, tag everything» — це не фіча сервісу, а
 > наскрізний контракт. Усе значуще (повідомлення, подія, daily, tool, skill, subagent, файл,
 > символ, run, doc, endpoint) отримує **паспорт контексту** (`kind` + `summary` + namespaced
-> `tags` + embedding 768D). Теги мають **дві ролі**: індексація (`person:mom AND topic:rent`) і
-> **адресація** (виклик `module:scam-shield`). Новий записуваний артефакт без `summary`/тегів — баг.
+> `tags` + embedding 768D) у сторі `context_events` (шлях `/context/ingest`). Теги мають **дві
+> ролі**: індексація (`person:mom AND topic:rent`) і **адресація** (виклик `module:scam-shield`,
+> заплановано — див. P10). Новий **паспортний** артефакт без `summary`/тегів — баг.
+> *Уточнення scope:* сирий message-RAG (`/store` → `messages`/`embeddings`) — це **субстрат
+> ретриву під** паспортним шаром, а не паспорт; підсумовувати кожне повідомлення LLM-ом —
+> порушення P6 (YAGNI). Паспортний контракт стосується `context_events`, не raw-RAG.
 
 **Документаційний (критично для здоров'я репо):**
 
@@ -131,13 +135,14 @@ computer-confirm з телефона. Єдина auth і єдиний API під
         ├─► hostagent (8400, на хості) PS/CLI/FS/browser/UIA/screen  (Computer Use)
         └─► twin (8765)    ModelRegistry · LoRA sync · Edge ingest
    whisper(9000) STT · tts(8300) TTS · postgres(5432) · redis(6379)
-   edge/  — USB-портативний рантайм (KoboldCPP + SQLite-vec), офлайн → LAN → VPN
+   edge/  — USB-портативний рантайм (KoboldCPP + SQLite + in-Python cosine/keyword
+            retrieval; НЕ sqlite-vec), офлайн → LAN → VPN
 ```
 
 **Де живе кожен стовп у коді:**
-- **A (API):** `gateway/app/openai_api.py`, майбутній `gateway/app/saas/*`, `memory/migrations/`
+- **A (API):** `gateway/app/openai_api.py`, `gateway/app/saas/*` (JWT/auth-ґрунт), `memory/migrations/`
 - **B (Coding agent):** `tools/app/agent.py`, `tools/app/cursor_tasks.py`, `tools/app/tools/continue_tool.py`, `jarvis_core/`, `hostagent/`
-- **C (Clients):** `gateway/app/static/platform.html`, `gateway/app/webapp.py`, `gateway/app/bot/`, майбутній `mobile/`
+- **C (Clients):** `gateway/app/static/platform.html`, `gateway/app/webapp.py`, `gateway/app/bot/`, `mobile/` (Android APK v1.0.0)
 
 Кожен сервіс — окремий Python-пакет `app` (тести й mypy ганяються **по-сервісно**, інакше колізія
 пакета `app`). Спільний код — у `jarvis_core/` (не створювати четвертий shared-пакет).

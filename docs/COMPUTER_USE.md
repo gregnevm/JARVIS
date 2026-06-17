@@ -6,7 +6,7 @@
 > **Мета:** дати агентові JARVIS здатність **реально керувати комп'ютером** —
 > AIO, повністю self-hosted, з вшитим принципом «завжди найшвидшим/найпрямішим шляхом».
 > **Прив'язка до коду:** надбудова над наявним тул-лупом (`tools/app/agent.py`
-> `AgentRunner._agent`) і toolkit-ом (`tools/app/toolkit.py`).
+> `AgentRunner._agent`) і toolkit-ом (`tools/app/toolkit/` — пакет).
 
 ---
 
@@ -88,7 +88,7 @@ Telegram ─► gateway ─► tools /agent (агент-луп, AGENT_MODE=compu
 Усе лягає поверх наявного тул-лупа — `AgentRunner._agent` міняти майже не треба,
 він уже крутить інструменти (`tools/app/agent.py`):
 
-1. **`tools/app/toolkit.py`** — нові функції-інструменти (`run_powershell`,
+1. **`tools/app/toolkit/`** (пакет: `dispatch.py`/`image.py`/`notes.py`/`schemas.py`/`web.py`) — нові функції-інструменти (`run_powershell`,
    `run_cli`, `fs_list/read/write`, `browser_*`, `uia_invoke`, `window_focus`,
    `screen_*`), кожна тегована своїм tier у `description`. Зареєструвати у
    `TOOL_SCHEMAS` (gated прапором) + гілки в `dispatch()`. Це рівно той патерн,

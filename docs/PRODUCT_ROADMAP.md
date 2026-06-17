@@ -124,8 +124,8 @@ multi-user/whitelist (зародок auth), bg jobs / subagents / teams (пар�
 | CA-2 | Repo-context: дерево файлів, symbol-граф, scoped RAG по проєкту | P1 Projects | ✅ done (+ `repo_refs` крос-файл) |
 | CA-3 | Test/build loop: запусти→прочитай fail→виправ→повтори | CA-1 | ✅ майже (3.5 live-eval — попереду) |
 | CA-4 | Plan→approve→execute для коду; multi-file рефактор | P3 Planning + CA-2 | ✅ done (батч + rename_symbol) |
-| CA-5 | Self-review + субагенти (Coder/Reviewer/Tester pipeline) | P8/P9 Teams | 🔄 5.2/5.4 ✅; 5.1/5.3 частково |
-| CA-6 | CLI (`jarvis code …`) + IDE-режим (LSP/extension) | CA-3 | 🔄 CLI ✅ (6.1/6.2); IDE/Platform tab — попереду |
+| CA-5 | Self-review + субагенти (Coder/Reviewer/Tester pipeline) | P8/P9 Teams | ✅ done (5.1 review-gate, 5.3 worker-dispatch, 5.4 spawn_subagent; track v1.17) |
+| CA-6 | CLI (`jarvis code …`) + IDE-режим (LSP/extension) | CA-3 | ✅ done (CLI `tools/app/cli.py`; VS Code extension `clients/vscode-jarvis/`; Platform Coding tab `gateway/app/platform/coding.py`; track v1.17) |
 
 **Вихід треку B:** «полагодь тести в репо» з Telegram/CLI → агент сам редагує файли диффами,
 ганяє pytest у лупі, рев'ювить, звітує. Tier-ladder і audit — як у Computer Use.

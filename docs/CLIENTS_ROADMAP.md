@@ -59,7 +59,7 @@
 | Web-консоль `/platform` | ✅ 19 табів, білінгва, P0–P12 | `gateway/app/platform/*`, `static/platform.html` |
 | Admin-панель (legacy) | ✅ `/admin` | `gateway/app/admin_panel.py`, `static/admin.html` |
 | OpenAI `/v1` | ✅ opt-in | `gateway/app/openai_api.py` |
-| Mobile APK | ❌ немає | — |
+| Mobile APK | 🟡 v1.0.0 існує (підписаний реліз), очікує on-device QA | `mobile/` (20 Java-джерел), `mobile/app/build.gradle`, `mobile/build-apk.ps1` |
 | Спільна auth (JWT) | ❌ лише initData/Basic/global-key | `gateway/app/platform/auth.py` |
 
 ### 2.2 Оцінка зрілості (чесно)
@@ -68,7 +68,7 @@
 |-------|--------|----------|
 | Telegram | **8/10** | зрілий: bot+MiniApp, voice, computer-confirm, deep links |
 | Web `/platform` | **6/10** | багатий функціонал, але server-rendered HTML (~1460 рядків), не SPA/PWA, без offline/push |
-| Mobile | **0/10** | відсутній |
+| Mobile | **7/10** | APK v1.0.0 існує (підписаний реліз; нативний чат→`/api/v1/chat`, voice→`/api/v1/voice`, ntfy push, QR/Telegram pairing); лишається on-device QA + SSE-стрім |
 | Спільна auth | **3/10** | три різні шляхи (initData/Basic/global-key); немає JWT для mobile/SPA |
 | Крос-клієнт sync | **5/10** | пам'ять/проєкти спільні в БД, але немає явної session-continuity UX |
 
@@ -149,13 +149,13 @@ CL-0 (TG+MiniApp+/platform ✅) ─► CL-1 (спільний client-API + JWT)
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
 | CL-3.1 | ADR: стек (PWA-wrap / Flutter / React Native / Kotlin) — критерій: швидкість + voice/push | `docs/adr/` | [ ] |
-| CL-3.2 | Каркас `mobile/`: логін (JWT), список чатів, налаштування сервера (URL) | APK збирається | [ ] |
-| CL-3.3 | Чат + streaming (SSE/WebSocket) | Друкована відповідь | 🟡 backend `POST /api/v1/chat` ✅ (`client_api/chat.py`, reuse `tools.process` — S3); SSE-стрім + Android-UI попереду |
-| CL-3.4 | Voice: запис → STT (whisper) → агент → TTS-відтворення | E2E voice | [ ] |
+| CL-3.2 | Каркас `mobile/`: логін (JWT), список чатів, налаштування сервера (URL) | APK збирається | [x] (`mobile/app/.../MainActivity.java`, `SettingsActivity.java`, `Prefs.java`) |
+| CL-3.3 | Чат + streaming (SSE/WebSocket) | Друкована відповідь | 🟡 нативний UI ✅ (`ChatActivity.java`→`ChatClient.java`→`POST /api/v1/chat`); лишається SSE-стрім |
+| CL-3.4 | Voice: запис → STT (whisper) → агент → TTS-відтворення | E2E voice | [x] (`Voice.java`→`/api/v1/voice`) |
 | CL-3.5 | Computer-confirm UX (тап ✅/❌, перегляд дії) — закриває CC5 | Inline approve | [ ] |
-| CL-3.6 | Push (FCM) для job/reminder/confirm-pending | Доставка у фоні | [ ] |
+| CL-3.6 | Push для job/reminder/confirm-pending | Доставка у фоні | [x] (через **ntfy**, не FCM: `NtfyService.java`) |
 | CL-3.7 | Workbench-lite (mode picker, tool trace) | Mobile-friendly | [ ] |
-| CL-3.8 | Реліз: signed APK + (опц.) F-Droid/Play | `mobile/README` build | [ ] |
+| CL-3.8 | Реліз: signed APK + (опц.) F-Droid/Play | `mobile/README` build | [x] підписаний реліз v1.0.0 (`build-apk.ps1`, `build.gradle` signingConfigs v1+v2+v3); F-Droid/Play — опційно попереду |
 | CL-3.9 | **Ambient-context ingest API** (`/api/v1/ingest/events` + `/context/{search,recent,purge}`) → memory `context_events` із паспортами P9/P10; flag `ENABLE_CONTEXT_API`; колектор `scripts/jarvis_context.py` | бекенд + тести (memory + gateway), mypy strict | **[x]** |
 
 > **Збір контексту вже працює без APK (CL-3.9):** будь-який клієнт (скрипт на хості, платформа,

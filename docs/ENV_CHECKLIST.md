@@ -34,7 +34,7 @@ Hostagent читає `HOSTAGENT_FS_ROOTS` як `fs_roots` у `hostagent/.env` а
 | Змінна | Приклад | Навіщо |
 |--------|---------|--------|
 | `ENABLE_BROWSER` | `true` | `browser_*` у computer mode (потрібен rebuild `tools` з Chromium) |
-| `COMPUTER_PROFILE` | `standard` | `safe` (T0/T1) · `standard` (+browser, UIA, see_screen) · `full` (+screen_click) |
+| `COMPUTER_PROFILE` | `safe` | `safe` (T0/T1) · `standard` (+browser, UIA, see_screen) · `full` (+screen_click) |
 | `COMPUTER_SESSION_TRUST_MINUTES` | `10` | Після ✅ — без confirm для T0/T1; `0` = вимк. Кнопка «Full trust» = усі tier |
 | `COMPUTER_MAX_ITERS` | `12` | Ітерації тул-лупа в `AGENT_MODE=computer` |
 
@@ -55,7 +55,7 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 
 | Змінна | За замовч. | Навіщо |
 |--------|------------|--------|
-| `REMINDER_POLL_SECONDS` | `5` | Інтервал полера gateway для due reminders |
+| `REMINDER_POLL_SECONDS` | `20` | Інтервал полера gateway для due reminders |
 
 ## Client-API / JWT (Стовп C, CL-1)
 

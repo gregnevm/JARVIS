@@ -124,7 +124,7 @@ async def run_tests(
     if _basename(e) not in _TEST_RUNNERS:
         return f"run_tests: '{_basename(e)}' не дозволений раннер тестів."
     arglist = _coerce_args(args)
-    data = await _cli(e, arglist, (path or "").strip() or None)
+    data = await _cli(e, arglist, (path or "").strip() or None, user_id=user_id, tool="run_tests")
     if "error" in data:
         return str(data["error"])
     stdout, stderr = str(data.get("stdout", "")), str(data.get("stderr", ""))
@@ -162,7 +162,7 @@ async def run_lint(
     if _basename(e) not in _LINT_RUNNERS:
         return f"run_lint: '{_basename(e)}' не дозволений лінтер."
     arglist = _coerce_args(args)
-    data = await _cli(e, arglist, (path or "").strip() or None)
+    data = await _cli(e, arglist, (path or "").strip() or None, user_id=user_id, tool="run_lint")
     if "error" in data:
         return str(data["error"])
     stdout, stderr = str(data.get("stdout", "")), str(data.get("stderr", ""))

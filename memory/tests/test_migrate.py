@@ -4,7 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.config import Settings
-from app.migrate import embed_dim_mismatch
+from app.migrate import column_dim_mismatch, embed_dim_mismatch
+from app import migrate as migrate_mod
 
 
 def test_sync_dsn_uses_psycopg2_driver():
@@ -26,6 +27,15 @@ def test_embed_dim_mismatch_detected():
 
 def test_embed_dim_missing_ok():
     assert embed_dim_mismatch({}) is None
+
+
+def test_column_dim_mismatch_detects_real_column(monkeypatch):
+    """P1-6: реальна розмірність pgvector-колонки vs env — ловить дрейф моделі."""
+    monkeypatch.setattr(migrate_mod.settings, "embed_dim", 768)
+    assert column_dim_mismatch(768) is None          # збіг
+    assert column_dim_mismatch(None) is None          # колонка без фіксованої dim → не сваримось
+    warn = column_dim_mismatch(1024)                  # колонка vector(1024) vs env 768
+    assert warn is not None and "1024" in warn and "768" in warn
 
 
 def test_alembic_revisions_chain():

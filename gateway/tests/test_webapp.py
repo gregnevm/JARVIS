@@ -72,3 +72,14 @@ def test_twin_versions_forbidden(client, monkeypatch):
     monkeypatch.setattr(settings, "admin_user_ids", "999")
     r = client.get("/app/twin/versions")
     assert r.status_code == 403
+
+
+def test_dev_open_anon_cannot_mutate(client):
+    """P0-2: dev-open uid 0 (анонім) не виконує мутуючі privileged-дії.
+
+    GET-перегляд дозволений (test_app_data_dev_open), але mode/trust/macro —
+    403 'identified user required'. Так uid-0 sentinel не оминає guard через falsy-0.
+    """
+    assert client.post("/app/mode", json={"mode": "agent"}).status_code == 403
+    assert client.post("/app/trust").status_code == 403
+    assert client.post("/app/macro/anything").status_code == 403

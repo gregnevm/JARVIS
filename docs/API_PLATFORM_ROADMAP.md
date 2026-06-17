@@ -120,7 +120,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 |---|--------|-----|--------|
 | AP-1.0 | **SAAS PR#0** — IDOR fix (`get_by_id` ownership) | Cross-tenant get → 404 | [ ] |
 | AP-1.1 | **SAAS PR#1** — `jarvis_core/context.py` RequestContext + tenant headers | `X-JARVIS-Org-Id/User-Id` | [ ] |
-| AP-1.2 | `api_keys` таблиця (prefix, hash, scopes, revoked_at) | Міграція `003_saas_tenant` | [ ] |
+| AP-1.2 | `api_keys` таблиця (prefix, hash, scopes, revoked_at) | Міграція `004_saas_tenant` (003 зайнято `003_context_passports`) | [ ] |
 | AP-1.3 | `gateway/app/saas/api_keys.py` — CRUD + lookup by prefix | bcrypt hash, show-once | [ ] |
 | AP-1.4 | `/v1` auth → per-org key замість глобального; fallback на global для self-hosted | Backward compat | [ ] |
 | AP-1.5 | Scopes enforcement (`chat`, `embeddings`, `jobs`) | 403 поза scope | [ ] |
