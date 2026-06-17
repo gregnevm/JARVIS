@@ -40,8 +40,13 @@ public final class TgAuth {
 
     /** Крок 3: poll до підтвердження (≈90с). true — отримали й зберегли JWT. */
     public static boolean poll(Context c, String token) {
+        return poll(c, token, new java.util.concurrent.atomic.AtomicBoolean(false));
+    }
+
+    /** Те саме з можливістю скасування ззовні (кнопка «Скасувати» в UI). */
+    public static boolean poll(Context c, String token, java.util.concurrent.atomic.AtomicBoolean cancelled) {
         if (TextUtils.isEmpty(token)) return false;
-        for (int i = 0; i < 45; i++) {
+        for (int i = 0; i < 45 && !cancelled.get(); i++) {
             try {
                 JSONObject body = new JSONObject();
                 body.put("token", token);
@@ -60,8 +65,11 @@ public final class TgAuth {
                     }
                 }
                 Thread.sleep(2000);
-            } catch (Exception e) {
+            } catch (InterruptedException ie) {
                 return false;
+            } catch (Exception e) {
+                // мережевий збій на окремій ітерації — не валимо весь логін, чекаємо далі
+                try { Thread.sleep(2000); } catch (InterruptedException ignored) { return false; }
             }
         }
         return false;

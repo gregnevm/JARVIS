@@ -20,12 +20,42 @@ public final class IngestClient {
     private IngestClient() {}
 
     private static String base(Context c) {
-        String url = Prefs.url(c);
-        // Сервер міг бути збережений як .../app|/platform — для API беремо origin.
-        if (url.contains("/app")) url = url.substring(0, url.indexOf("/app"));
-        else if (url.contains("/platform")) url = url.substring(0, url.indexOf("/platform"));
-        if (url.endsWith("/")) url = url.substring(0, url.length() - 1);
-        return url;
+        return originOf(Prefs.url(c));
+    }
+
+    /** Origin сервера: відкидає суфікси /app|/platform і кінцевий слеш. */
+    public static String originOf(String url) {
+        if (url == null) return "";
+        String u = url.trim();
+        int i = u.indexOf("/app");
+        if (i > 0) u = u.substring(0, i);
+        int j = u.indexOf("/platform");
+        if (j > 0) u = u.substring(0, j);
+        if (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+        return u;
+    }
+
+    /**
+     * Швидка перевірка, що сервер живий: GET &lt;origin&gt;/health з короткими
+     * таймаутами. true — сервер відповів (будь-який 2xx-4xx; навіть 401 = живий).
+     * Викликати у фоні. Прибирає «зберіг URL → білий екран» без зворотного звʼязку.
+     */
+    public static boolean reachable(String server) {
+        String b = originOf(server);
+        if (TextUtils.isEmpty(b)) return false;
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) new URL(b + "/health").openConnection();
+            conn.setConnectTimeout(6000);
+            conn.setReadTimeout(6000);
+            conn.setRequestMethod("GET");
+            int code = conn.getResponseCode();
+            return code >= 200 && code < 500;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
     }
 
     private static String authHeader(Context c) {
@@ -125,11 +155,12 @@ public final class IngestClient {
     }
 
     private static String readAll(InputStream in) throws Exception {
-        BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = r.readLine()) != null) sb.append(line);
-        r.close();
-        return sb.toString();
+        // try-with-resources: потік закривається навіть якщо readLine кине виняток.
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = r.readLine()) != null) sb.append(line);
+            return sb.toString();
+        }
     }
 }
