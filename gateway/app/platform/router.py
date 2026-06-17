@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
 from . import logs, memory, models, overview, projects, settings_api, users, workbench
+from . import coding as platform_coding
 from . import jobs as platform_jobs
 from . import plans as platform_plans
 from . import mcp as platform_mcp
@@ -74,5 +75,6 @@ for _mod in (
     platform_teams,
     platform_orchestrator,
     platform_improve,
+    platform_coding,
 ):
     _mod.register(router)

@@ -106,3 +106,14 @@ async def test_create_research_job(monkeypatch: pytest.MonkeyPatch):
     rec = await bg_jobs.create_research_job(3, "quantum computing", 2)
     assert rec["type"] == "deep_research"
     assert rec["payload"]["query"] == "quantum computing"
+
+
+async def test_create_coding_job(monkeypatch: pytest.MonkeyPatch):
+    _inject(monkeypatch)
+    rec = await bg_jobs.create_coding_job(
+        8, "pytest", args=["-k", "auth"], path="/repo", task="fix auth", max_rounds=3
+    )
+    assert rec["type"] == "coding_task"
+    assert rec["payload"]["exe"] == "pytest"
+    assert rec["payload"]["args"] == ["-k", "auth"]
+    assert rec["payload"]["max_rounds"] == 3

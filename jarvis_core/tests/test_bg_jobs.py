@@ -12,6 +12,7 @@ def test_job_types_complete():
 def test_platform_create_method_mapping():
     assert platform_create_method("deep_research") == "create_research_job"
     assert platform_create_method("cursor_task") == "create_cursor_job"
+    assert platform_create_method("coding_task") == "create_coding_job"
     assert platform_create_method("agent_turn") == "create_bg_job"
     assert platform_create_method("subagent") == "create_bg_job"
 

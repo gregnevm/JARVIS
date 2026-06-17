@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import re
@@ -39,6 +40,18 @@ _FIX_TOOLS = frozenset(
     }
 )
 _FIX_INNER_STEPS = 4  # модельних кроків (read/grep/edit) у межах одного раунду
+
+
+def _strip_code_fences(text: str) -> str:
+    """Прибирає обгортку ```lang ... ``` навколо повернутого моделлю вмісту файлу (CA-6.3)."""
+    s = text.strip()
+    if not s.startswith("```"):
+        return text
+    lines = s.split("\n")
+    lines = lines[1:]  # перший рядок: ``` або ```python
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines)
 
 
 def _fix_system() -> str:
@@ -713,16 +726,22 @@ class AgentRunner:
                 "steps": [{"file": "", "action": text[:200], "rationale": text, "risk": "medium"}],
                 "risks": [],
             }
+        # CA-4.2: у вікні session-trust (як computer) план авто-апрувиться — без
+        # ручного ✅; поза вікном — звичайний pending + confirm-маркер.
+        from .computer_trust import trust_level
+
+        auto = (await trust_level(user_id)) is not None
         rec = await plans.create_plan(
             user_id,
             summary=str(parsed.get("summary") or text[:500]),
             steps=parsed.get("steps") or [],
             risks=parsed.get("risks") if isinstance(parsed.get("risks"), list) else [],
             source_text=text,
-            status="pending",
+            status="approved" if auto else "pending",
         )
-        rec["marker"] = PLAN_MARKER.format(id=rec["id"])
+        rec["marker"] = "" if auto else PLAN_MARKER.format(id=rec["id"])
         rec["kind"] = "code"
+        rec["auto_approved"] = auto
         return rec
 
     async def code_review(
@@ -782,6 +801,51 @@ class AgentRunner:
             "findings": findings,
         }
 
+    async def code_edit_propose(
+        self, user_id: int, *, path: str, instruction: str, content: str = ""
+    ) -> dict[str, Any]:
+        """IDE-міст (CA-6.3): запропонувати правку файлу як unified diff, БЕЗ apply.
+
+        Редактор надсилає поточний вміст + інструкцію; модель повертає оновлений вміст,
+        ми рахуємо diff локально (difflib) і віддаємо `{path, diff, proposed, changed}`.
+        Inline-diff показує/застосовує сам IDE — нічого не пишемо на диск (S4, dry-run).
+        """
+        if not (instruction or "").strip():
+            return {"path": path, "diff": "", "proposed": content, "changed": False,
+                    "error": "instruction required"}
+        prompt = (
+            "Онови вміст файлу згідно з інструкцією. Поверни ЛИШЕ повний новий вміст файлу — "
+            "без пояснень, без markdown-огорожі (```), без коментарів поза кодом.\n"
+            f"Файл: {path}\nІнструкція: {instruction}\n\n--- ПОТОЧНИЙ ВМІСТ ---\n{content}"
+        )
+        msg = await self._llm.chat(
+            settings.ollama_model_agent,
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Ти редагуєш файли коду JARVIS точковими правками. Зберігай стиль і "
+                        "відступи. Виводь лише повний оновлений вміст файлу."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+        )
+        proposed = _strip_code_fences((msg.get("content") or ""))
+        old_lines = content.splitlines(keepends=True)
+        new_lines = proposed.splitlines(keepends=True)
+        diff = "".join(
+            difflib.unified_diff(
+                old_lines, new_lines, fromfile=f"a/{path}", tofile=f"b/{path}"
+            )
+        )
+        return {
+            "path": path,
+            "diff": diff,
+            "proposed": proposed,
+            "changed": proposed != content,
+        }
+
     async def execute_plan(self, user_id: int, plan_id: str) -> dict[str, Any]:
         """Покрокове виконання схваленого плану (sync MVP, max 8 steps)."""
         from . import plans
@@ -825,20 +889,15 @@ class AgentRunner:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         user_id: int,
-        edits_log: list[str] | None = None,
     ) -> None:
         """Один раунд «локалізуй+прав»: до _FIX_INNER_STEPS модельних кроків з тулами.
 
         Перезапуск тестів — НЕ тут (його робить fix_tests як авторитетний гейт);
-        тут модель читає код і вносить правку через code_edit. Результати правок
-        (code_edit/code_edit_batch) збираються в `edits_log` для self-review (CA-5.1).
+        тут модель читає код і вносить правку через code_edit.
         """
         async def execute(name: str, args: Any) -> ToolStepResult:
             result = await dispatch(name, args, user_id, allow_computer=True)
             logger.info("fix.tool[%s] -> %.80s", name, result.replace("\n", " "))
-            # CA-5.1: збираємо diff-и правок для self-review після green.
-            if edits_log is not None and name in ("code_edit", "code_edit_batch"):
-                edits_log.append(result)
             return ToolStepResult(text=result)
 
         async for ev in run_tool_loop(
@@ -855,6 +914,62 @@ class AgentRunner:
             if "final" in ev or "need_final" in ev:
                 return
 
+    async def _session_diff(self, path: str) -> str:
+        """Робочий git-diff робочого дерева (для post-fix self-review).
+
+        Порожньо, якщо git/host-agent недоступні — self-review тоді тихо пропускається.
+        """
+        from .tools import coding_tools
+
+        try:
+            res = await coding_tools._cli("git", ["diff", "--no-color"], path or None)
+        except Exception:  # noqa: BLE001
+            return ""
+        if not isinstance(res, dict) or res.get("error"):
+            return ""
+        return str(res.get("stdout") or "")[:8000]
+
+    async def _self_review_gate(
+        self,
+        user_id: int,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        path: str,
+        run_fn: Callable[[], Awaitable[str]],
+    ) -> dict[str, Any]:
+        """CA-5.1 review-перед-звітом: рев'ю робочого diff; за changes_requested із
+        high/medium зауваженнями — один раунд правок «під зауваження» + re-test.
+
+        Повертає review-дікт (+ fix_attempted/tests_after_fix), або skip, якщо diff порожній.
+        """
+        diff = await self._session_diff(path)
+        if not diff.strip():
+            return {"verdict": "skip", "summary": "Немає робочого diff для self-review.", "findings": []}
+        review = await self.code_review(user_id, diff=diff, context="post-fix self-review")
+        actionable = [
+            f for f in review.get("findings", []) if f.get("severity") in ("high", "medium")
+        ]
+        if review.get("verdict") != "changes_requested" or not actionable:
+            return review
+        notes = "\n".join(
+            f"- [{f['severity']}] {f.get('file') or '?'}:{f.get('line') or 0} {f['comment']}"
+            for f in actionable
+        )
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Код-рев'ю знайшло проблеми у твоїх правках — виправ їх перед звітом, "
+                    f"не ламаючи тести:\n{notes}"
+                ),
+            }
+        )
+        await self._fix_round_edit(messages, tools, user_id)
+        after = await run_fn()
+        review["fix_attempted"] = True
+        review["tests_after_fix"] = "pass" if "✅ PASS" in after else "fail"
+        return review
+
     async def fix_tests(
         self,
         user_id: int,
@@ -864,6 +979,7 @@ class AgentRunner:
         path: str = "",
         task: str = "",
         max_rounds: int | None = None,
+        review: bool = False,
     ) -> dict[str, Any]:
         """Виділена fix-orchestration (CA-3.2): тест → локалізація → code_edit → re-test.
 
@@ -871,12 +987,16 @@ class AgentRunner:
         (той самий набір впалих тестів двічі поспіль). code_edit лишається за confirm/
         session-trust — петля нічого не обходить (S4).
 
+        `review=True` (+ `CODING_REVIEW_AFTER_FIX`) → після green прогнати self-review на
+        робочому diff і авто-fix зауважень перед звітом (CA-5.1). Результат у `report["review"]`.
+
         Повертає {status, rounds, report}: status ∈ already_green|fixed|no_progress|stuck.
         """
         from .tools import check_tools, fix_loop
 
         arglist = list(args or [])
         rounds = max(1, max_rounds if max_rounds is not None else settings.coding_fix_max_rounds)
+        do_review = bool(review and settings.coding_review_after_fix)
 
         async def _run() -> str:
             return await check_tools.run_tests(exe, args=arglist, path=path, user_id=user_id)
@@ -897,15 +1017,15 @@ class AgentRunner:
 
         prev_sig = fix_loop.summary_signature(baseline)
         verdict = baseline
-        edits_log: list[str] = []
         for rnd in range(1, rounds + 1):
-            await self._fix_round_edit(messages, tools, user_id, edits_log)
+            await self._fix_round_edit(messages, tools, user_id)
             verdict = await _run()
             if "✅ PASS" in verdict:
                 out: dict[str, Any] = {"status": "fixed", "rounds": rnd, "report": verdict}
-                review = await self._self_review_after_fix(user_id, edits_log, task)
-                if review is not None:
-                    out["review"] = review
+                if do_review:
+                    out["review"] = await self._self_review_gate(
+                        user_id, messages, tools, path, _run
+                    )
                 return out
             sig = fix_loop.summary_signature(verdict)
             if sig == prev_sig:
@@ -918,15 +1038,3 @@ class AgentRunner:
                 }
             )
         return {"status": "stuck", "rounds": rounds, "report": verdict}
-
-    async def _self_review_after_fix(
-        self, user_id: int, edits_log: list[str], task: str
-    ) -> dict[str, Any] | None:
-        """CA-5.1 «review перед звітом»: після green — self-review diff-ів правок.
-
-        Повертає {summary, verdict, findings} або None, якщо правок не було.
-        """
-        if not edits_log:
-            return None
-        diff = "\n\n".join(edits_log)[:8000]
-        return await self.code_review(user_id, diff=diff, context=task)

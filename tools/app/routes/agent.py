@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from ..schemas import (
     AgentRequest,
+    CodeEditRequest,
     CodeFixRequest,
     CodeReviewRequest,
     PlanCreateRequest,
@@ -91,6 +92,11 @@ def register(router: APIRouter) -> None:
         """Виділена fix-orchestration (CA-3.2): тест→правка→тест до green/max/no-progress."""
         if not (req.exe or "").strip():
             raise HTTPException(status_code=400, detail="exe required")
+        from ..headless import authorize_headless_apply
+
+        denial = await authorize_headless_apply(req.user_id, req.no_confirm)
+        if denial:
+            return {"status": "policy_denied", "rounds": 0, "report": denial}
         try:
             return await request.app.state.agent.fix_tests(
                 req.user_id,
@@ -99,9 +105,23 @@ def register(router: APIRouter) -> None:
                 path=req.path,
                 task=req.task,
                 max_rounds=req.max_rounds,
+                review=req.review,
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception("agent code fix failed")
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @router.post("/agent/code/edit")
+    async def agent_code_edit_ep(req: CodeEditRequest, request: Request) -> dict[str, Any]:
+        """IDE-міст (CA-6.3): запропонувати unified diff для файлу, без apply (dry-run)."""
+        if not (req.instruction or "").strip():
+            raise HTTPException(status_code=400, detail="instruction required")
+        try:
+            return await request.app.state.agent.code_edit_propose(
+                req.user_id, path=req.path, instruction=req.instruction, content=req.content
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("agent code edit failed")
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @router.get("/agent/plan/{plan_id}")

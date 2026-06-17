@@ -57,6 +57,12 @@ def _ensure_loaded() -> dict[str, list[HookFn]]:
             p = root / fname
             if p.is_file():
                 out[kind].extend(_load_module_hooks(p))
+    # CA-5.5: turnkey built-in pre-commit lint gate (post_tool) за прапором —
+    # без копіювання файлів у data/hooks/. Іде ПІСЛЯ user-хуків.
+    if settings.coding_precommit_gate:
+        from .precommit_gate import run as precommit_run
+
+        out["post_tool"].append(precommit_run)
     _LOADED = out
     return out
 

@@ -1,0 +1,48 @@
+{
+  "name": "jarvis-code",
+  "displayName": "JARVIS Coding Agent",
+  "description": "IDE-міст до JARVIS coding-агента (Стовп B, CA-6.3): inline-diff правки поверх /agent/code/edit.",
+  "version": "0.1.0",
+  "publisher": "jarvis",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Other", "Machine Learning"],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "jarvis.proposeEdit",
+        "title": "JARVIS: Propose Edit (inline diff)"
+      },
+      {
+        "command": "jarvis.reviewDiff",
+        "title": "JARVIS: Review Working Diff"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "jarvis.proposeEdit", "group": "1_modification" }
+      ]
+    },
+    "configuration": {
+      "title": "JARVIS",
+      "properties": {
+        "jarvis.toolsUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8001",
+          "description": "Базовий URL tools-сервісу JARVIS (/agent/code/*)."
+        },
+        "jarvis.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer-ключ (Стовп A, CA-6.2). Порожньо — без авторизації (self-hosted)."
+        },
+        "jarvis.userId": {
+          "type": "number",
+          "default": 0,
+          "description": "JARVIS user_id для скоупу/аудиту."
+        }
+      }
+    }
+  }
+}
