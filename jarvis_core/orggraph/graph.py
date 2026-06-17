@@ -12,6 +12,27 @@ from collections.abc import Iterable
 from .models import Relationship, Squad, SquadMember
 
 
+def interaction_edges(author: str, subjects: list[str]) -> list[tuple[str, str]]:
+    """Спостережені пари `collaborates_with` із однієї взаємодії (§3.3 observed-graph).
+
+    author ↔ кожен згаданий суб'єкт (крім себе/порожніх/дублів), невпорядкована
+    пара нормалізується (sorted) — щоб A↔B і B↔A підсилювали одне ребро.
+    """
+    out: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for subj in subjects:
+        s = str(subj).strip()
+        if not s or s == author:
+            continue
+        lo, hi = sorted((author, s))
+        pair = (lo, hi)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        out.append(pair)
+    return out
+
+
 class OrgGraph:
     """Незмінний знімок графа одного org для швидких реляційних запитів."""
 

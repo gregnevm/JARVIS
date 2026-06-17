@@ -33,6 +33,19 @@ class RelationshipBody(BaseModel):
     kind: str
 
 
+class ProcessBody(BaseModel):
+    owner_user_id: str
+    title: str
+    steps: list[dict[str, Any]] = []
+    squad_id: str | None = None
+    template: str | None = None
+
+
+class AdvanceBody(BaseModel):
+    step_id: str
+    status: str
+
+
 def _org(request: Request, auth: PlatformAuth) -> str:
     return resolve_context(auth).org_id or DEFAULT_ORG_ID
 
@@ -75,3 +88,31 @@ def register(router: APIRouter) -> None:
         request: Request, user_id: str, auth: PlatformAuth = Depends(require_platform_auth)
     ) -> dict[str, Any]:
         return await request.app.state.tools.team_graph(user_id, _org(request, auth))
+
+    # процеси (BPO §10)
+    @router.get("/platform/api/processes")
+    async def processes(request: Request, auth: PlatformAuth = Depends(require_platform_auth)) -> dict[str, Any]:
+        return await request.app.state.tools.team_processes(_org(request, auth))
+
+    @router.post("/platform/api/processes")
+    async def create_process(
+        body: ProcessBody, request: Request, auth: PlatformAuth = Depends(require_platform_auth)
+    ) -> dict[str, Any]:
+        return await request.app.state.tools.team_create_process(
+            {"org_id": _org(request, auth), **body.model_dump()}
+        )
+
+    @router.get("/platform/api/processes/{process_id}")
+    async def get_process(
+        process_id: str, request: Request, auth: PlatformAuth = Depends(require_platform_auth)
+    ) -> dict[str, Any]:
+        return await request.app.state.tools.team_get_process(process_id, _org(request, auth))
+
+    @router.post("/platform/api/processes/{process_id}/advance")
+    async def advance_process(
+        process_id: str, body: AdvanceBody, request: Request,
+        auth: PlatformAuth = Depends(require_platform_auth),
+    ) -> dict[str, Any]:
+        return await request.app.state.tools.team_advance_process(
+            process_id, {"org_id": _org(request, auth), **body.model_dump()}
+        )

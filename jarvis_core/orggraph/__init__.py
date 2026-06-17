@@ -16,7 +16,7 @@ from .models import (
     Squad,
     SquadMember,
 )
-from .graph import OrgGraph
+from .graph import OrgGraph, interaction_edges
 from .visibility import VisibleResource, can_read
 from .delegate import DelegateActor, delegate_actor
 
@@ -31,6 +31,7 @@ __all__ = [
     "Squad",
     "SquadMember",
     "OrgGraph",
+    "interaction_edges",
     "VisibleResource",
     "can_read",
 ]

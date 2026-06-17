@@ -8,5 +8,12 @@
 from __future__ import annotations
 
 from .gate import ProposedAction, gate_actions, requires_confirmation
+from .watchers import overdue_steps, process_watch_proposals
 
-__all__ = ["ProposedAction", "gate_actions", "requires_confirmation"]
+__all__ = [
+    "ProposedAction",
+    "gate_actions",
+    "requires_confirmation",
+    "overdue_steps",
+    "process_watch_proposals",
+]
