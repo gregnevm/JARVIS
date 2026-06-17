@@ -320,6 +320,92 @@ def make_tools_dispatch(tools: Any, *, worker_budget: int = 4) -> StageDispatch:
     return dispatch
 
 
+# --- локальний диспатч (без зовн. сервісів — для наглядового прогону) -----------
+
+async def _run_cmd(cmd: list[str], cwd: str, timeout: float = 600.0) -> tuple[int, str]:
+    """Запускає підпроцес, повертає (returncode, об'єднаний stdout+stderr)."""
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=cwd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    try:
+        raw, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return 124, "timeout"
+    return proc.returncode or 0, raw.decode("utf-8", errors="replace")
+
+
+def _repo_snapshot(repo_path: str) -> tuple[int, int, str]:
+    """Грубий знімок архітектури: (py-файлів, тек-модулів, top-level дерево)."""
+    root = Path(repo_path)
+    skip = {".git", ".venv", "__pycache__", "node_modules", ".jarvis_backup"}
+    py = 0
+    dirs = 0
+    for p in root.rglob("*"):
+        if any(part in skip for part in p.parts):
+            continue
+        if p.is_dir():
+            dirs += 1
+        elif p.suffix == ".py":
+            py += 1
+    top = sorted(
+        d.name for d in root.iterdir() if d.is_dir() and d.name not in skip
+    )
+    return py, dirs, ", ".join(top)
+
+
+def _pytest_summary(out: str, code: int) -> str:
+    """Витягує `N passed/failed/error…` із виводу pytest; інакше — за exit-кодом."""
+    import re
+
+    m = re.search(r"=+ ([^=]*\b(?:passed|failed|error|skipped)[^=]*?) =+\s*$", out.strip())
+    if m:
+        return m.group(1).strip()
+    counts = re.findall(r"\b(\d+) (passed|failed|error|errors|skipped)\b", out)
+    if counts:
+        return ", ".join(f"{n} {label}" for n, label in counts)
+    return "усі зелені" if code == 0 else f"впав (exit {code})"
+
+
+def make_local_dispatch(
+    repo_path: str, *, test_targets: list[str] | None = None
+) -> StageDispatch:
+    """Диспатч без зовнішніх сервісів: `test` — справжній pytest, `analyze` — знімок
+    репо, `review` — `git diff --stat`. `code`/`refactor` — зафіксований план (без
+    codegen, бо тут немає LLM/agent). Для наглядового першого прогону й офлайн-демо.
+    """
+    targets = test_targets or ["jarvis_core/tests/test_okr.py"]
+
+    async def dispatch(ctx: StageContext) -> StageOutcome:
+        obj = ctx.objective
+        if ctx.stage in ("code", "refactor"):
+            src = obj.roadmap or "ROADMAP.md"
+            return StageOutcome(
+                ok=True,
+                summary=f"план зафіксовано (local mode, без codegen): {ctx.stage} «{obj.title}» ← {src}",
+            )
+        if ctx.stage == "review":
+            code, out = await _run_cmd(["git", "diff", "--stat", "HEAD~1"], repo_path, timeout=60)
+            last = out.strip().splitlines()[-1] if out.strip() else "без змін"
+            return StageOutcome(ok=code == 0, summary=f"git diff: {last}")
+        if ctx.stage == "analyze":
+            py, dirs, top = _repo_snapshot(repo_path)
+            return StageOutcome(
+                ok=True,
+                summary=f"архітектура: {py} py-файлів, {dirs} тек",
+                artifact=f"top-level: {top}",
+            )
+        if ctx.stage == "test":
+            code, out = await _run_cmd(["python", "-m", "pytest", "-ra", *targets], repo_path)
+            return StageOutcome(ok=code == 0, summary=f"pytest: {_pytest_summary(out, code)}")
+        return StageOutcome(ok=True, summary="noop")
+
+    return dispatch
+
+
 # --- IO-цикл (default off) -----------------------------------------------------
 
 async def auto_coroutine_loop(

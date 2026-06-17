@@ -8,8 +8,10 @@ from app.auto_coroutine import (
     STAGE_IDS,
     StageContext,
     StageOutcome,
+    _pytest_summary,
     append_run_log,
     load_okr,
+    make_local_dispatch,
     make_tools_dispatch,
     outcome_deltas,
     plan_cycle,
@@ -162,6 +164,42 @@ async def test_make_tools_dispatch_routes_each_stage():
     assert "scan" in tools.seen
     assert "coding:pytest" in tools.seen
     assert any(s.startswith("orchestrate:") for s in tools.seen)
+
+
+# --- _pytest_summary ---
+
+def test_pytest_summary_parses_status_line():
+    out = "....\n==================== 15 passed in 0.04s ====================\n"
+    assert _pytest_summary(out, 0) == "15 passed in 0.04s"
+
+
+def test_pytest_summary_parses_mixed_counts_without_status_bar():
+    out = "FF..\n1 failed 3 passed somewhere\n"
+    assert _pytest_summary(out, 1) == "1 failed, 3 passed"
+
+
+def test_pytest_summary_falls_back_to_exit_code():
+    assert _pytest_summary("...........  [100%]\n", 0) == "усі зелені"
+    assert _pytest_summary("collection error", 2) == "впав (exit 2)"
+
+
+# --- make_local_dispatch (non-subprocess stages) ---
+
+async def test_local_dispatch_code_and_refactor_are_planned_ok():
+    dispatch = make_local_dispatch(".")
+    obj = _okr(0.0).objectives[0]
+    for stage in ("code", "refactor"):
+        out = await dispatch(StageContext(objective=obj, stage=stage, user_id=1, repo_path="."))
+        assert out.ok and "план" in out.summary
+
+
+async def test_local_dispatch_analyze_snapshots_repo(tmp_path):
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "m.py").write_text("x = 1\n")
+    dispatch = make_local_dispatch(str(tmp_path))
+    obj = _okr(0.0).objectives[0]
+    out = await dispatch(StageContext(objective=obj, stage="analyze", user_id=1, repo_path=str(tmp_path)))
+    assert out.ok and "py-файл" in out.summary and "pkg" in out.artifact
 
 
 async def test_dispatch_marks_error_outcome():
