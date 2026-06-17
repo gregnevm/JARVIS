@@ -92,6 +92,7 @@ class EmbeddingsRequest(BaseModel):
     model: str = "nomic-embed-text"
     input: str | list[str]
     user: str | None = None
+    encoding_format: str | None = None  # лише 'float' підтримується; поле ігнорується (drop-in compat #16)
 
 
 class JobRequest(BaseModel):

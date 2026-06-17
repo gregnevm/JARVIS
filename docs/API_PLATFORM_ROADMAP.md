@@ -72,7 +72,7 @@ tenant-фундаменті з SAAS_DEEP_DIVE.
 
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
-| `/v1` сумісність | **5/10** | chat+models є; немає embeddings/responses/usage |
+| `/v1` сумісність | **7/10** | chat+models+embeddings+jobs+error-envelope (AP-0, AP-2.1/2.5/2.6); немає responses/usage |
 | Identity / keys | **2/10** | один глобальний ключ; немає org/scopes/revoke |
 | Developer console | **2/10** | немає keys/usage/playground UI |
 | Метеринг / ліміти | **3/10** | rate-limit глобальний; немає per-key usage |
@@ -135,7 +135,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [x] memory `/embed`; str\|list[str]; 400 empty / 502 backend; `nomic-embed-text` у `/models` |
+| AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [x] memory `/embed`; str\|list[str]; 400 empty / 502 backend; `nomic-embed-text` у `/models`; приймає `encoding_format` (ігнор) |
 | AP-2.2 | `POST /v1/responses` (агентний, tool-use) — мапа на `AgentRunner` | tools[] + tool_calls | [x] мапа на агент-луп (mode=agent); input рядок\|item-список; Responses-формат (`output[]`+`output_text`) |
 | AP-2.3 | `GET /v1/models` із реальним каталогом (CHAT/AGENT/VISION/EMBED/LoRA) | tags із Ollama | [x] merge Ollama-каталогу (`svc.dashboard`+`_ollama_tags`), dedupe, best-effort fallback на статичний список |
 | AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [x] `UsageStore` (Redis hash/день); best-effort запис у `_authenticate`; `GET /v1/usage?days=N` по ключу-викликачу |
@@ -211,11 +211,11 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 ```
 POST /v1/chat/completions     ✅ (AP-0)        — chat, stream
-POST /v1/embeddings           ⏳ (AP-2.1)      — nomic-embed-text
+POST /v1/embeddings           ✅ (AP-2.1)      — nomic-embed-text
 POST /v1/responses            ⏳ (AP-2.2)      — агентний, tool-use
 GET  /v1/models               ✅→⏳ (AP-2.3)   — реальний каталог
 GET  /v1/usage                ⏳ (AP-2.4)      — per-key метеринг
-POST /v1/jobs · GET /v1/jobs/{id}  ⏳ (AP-2.5) — async (research/team/coding)
+POST /v1/jobs · GET /v1/jobs/{id}  ✅ (AP-2.5) — async (research/team/coding)
 ```
 
 Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: глобальний ключ як fallback.
@@ -275,6 +275,9 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 | 2026-06-16 | 1.2 | AP-2.1 `/v1/embeddings` (nomic-embed-text) + AP-2.6 OpenAI error envelope на `/v1` |
 | 2026-06-16 | 1.1 | AP-1 керовані API-ключі (self-hosted): `ApiKeyStore` + `/saas/api/keys` CRUD + `/v1` scope-auth |
 | 2026-06-15 | 1.0 | Початковий roadmap Стовпа A (AP-0…AP-6); продуктовий шар над SAAS_DEEP_DIVE |
+| 2026-06-16 | 1.1 | AP-2.1 `/v1/embeddings` (gateway → memory nomic-embed-text, OpenAI-формат) |
+| 2026-06-16 | 1.2 | AP-2.6 OpenAI-сумісні тіла помилок (`_OpenAIErrorRoute`, скоуп `/v1`) |
+| 2026-06-16 | 1.3 | AP-2.5 `/v1/jobs` (+`/{id}`) async поверх bg_jobs |
 
 ---
 
