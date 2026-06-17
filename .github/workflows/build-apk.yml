@@ -10,11 +10,8 @@ on:
       - 'mobile/**'
       - '.github/workflows/build-apk.yml'
   push:
-    branches: [main]
-    tags: ['mobile-v*']
-    paths:
-      - 'mobile/**'
-      - '.github/workflows/build-apk.yml'
+    branches: [main]        # тримає data/artifacts APK свіжим
+    tags: ['mobile-v*']     # без paths-фільтра: він може відсіювати push тегів → Release не спрацює
 
 # Один активний білд на гілку — нові пуші скасовують попередній.
 concurrency:
