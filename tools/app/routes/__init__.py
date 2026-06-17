@@ -22,6 +22,7 @@ from . import (
     scheduler,
     skills,
     subagents,
+    team,
     teams,
     tools_basic,
 )
@@ -47,6 +48,7 @@ _ROUTE_MODULES = (
     lora,
     cursor,
     context,
+    team,
 )
 
 

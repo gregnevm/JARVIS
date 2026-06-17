@@ -12,6 +12,7 @@ JOB_TYPES: frozenset[str] = frozenset(
         "orchestrator",
         "cursor_task",
         "coding_task",
+        "delegate_tick",
     }
 )
 
@@ -93,6 +94,17 @@ def normalize_payload(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
             "path": str(payload.get("path") or ""),
             "task": str(payload.get("task") or ""),
             "max_rounds": int(payload.get("max_rounds") or 0),
+        }
+
+    if jt == "delegate_tick":
+        # Проактивний тік делегата (Стовп D §7) — principal + org + курсор.
+        principal = str(payload.get("principal_id") or payload.get("user_id") or "").strip()
+        if not principal:
+            raise ValueError("principal_id required")
+        return {
+            "principal_id": principal,
+            "org_id": str(payload.get("org_id") or ""),
+            "cursor": str(payload.get("cursor") or ""),
         }
 
     # cursor_task

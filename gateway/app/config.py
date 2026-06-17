@@ -151,6 +151,12 @@ class Settings(BaseSettings):
     context_daily_hour: int = 6
     context_scheduler_interval: float = 1800.0  # сек між тіками (summarize + перевірка daily)
 
+    # Стовп D (TEAM_ECOSYSTEM): обробка Telegram-груп (presence/ambient). Дефолт off —
+    # self-hosted solo-user не зачіпає (S2); вмикати свідомо для командного режиму.
+    team_mode: bool = False
+    # @username бота (без @) — для детекції адресації у групах (mention/reply).
+    bot_username: str = ""
+
     @property
     def allowed_ids(self) -> set[int]:
         """ALLOWED_USER_IDS ('1,2,3') → set[int]. Порожньо = нікого не пускаємо."""

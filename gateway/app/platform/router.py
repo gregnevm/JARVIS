@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from . import apk, logs, memory, models, overview, projects, settings_api, users, workbench
 from . import coding as platform_coding
+from . import team as platform_team
 from . import jobs as platform_jobs
 from . import plans as platform_plans
 from . import mcp as platform_mcp
@@ -76,6 +77,7 @@ for _mod in (
     platform_orchestrator,
     platform_improve,
     platform_coding,
+    platform_team,
     apk,
 ):
     _mod.register(router)
