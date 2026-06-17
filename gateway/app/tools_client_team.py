@@ -54,6 +54,19 @@ class TeamMixin(ToolsClientBase):
     async def team_graph(self, user_id: str, org_id: str) -> dict[str, Any]:
         return await self._team_get("/team/graph", {"user_id": user_id, "org_id": org_id})
 
+    # процеси (BPO)
+    async def team_processes(self, org_id: str) -> dict[str, Any]:
+        return await self._team_get("/team/processes", {"org_id": org_id})
+
+    async def team_create_process(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._team_send("POST", "/team/processes", body)
+
+    async def team_get_process(self, process_id: str, org_id: str) -> dict[str, Any]:
+        return await self._team_get(f"/team/processes/{process_id}", {"org_id": org_id})
+
+    async def team_advance_process(self, process_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._team_send("POST", f"/team/processes/{process_id}/advance", body)
+
     async def group_ingest_level(self, chat_id: int) -> str:
         """Рівень згоди групи: off|addressed|ambient. Будь-яка помилка → off."""
         resp = await self._request(

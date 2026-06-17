@@ -46,6 +46,21 @@ class DelegateUpsert(BaseModel):
     proactive: bool = False
 
 
+class ProcessCreate(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    owner_user_id: str
+    title: str
+    steps: list[dict[str, Any]] = []
+    squad_id: str | None = None
+    template: str | None = None
+
+
+class ProcessAdvance(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    step_id: str
+    status: str
+
+
 class GroupMemberSeen(BaseModel):
     chat_id: int
     telegram_id: int
@@ -101,6 +116,28 @@ def register(router: APIRouter) -> None:
     async def put_delegate(req: DelegateUpsert, request: Request) -> dict[str, Any]:
         return await request.app.state.memory.team_put("/team/delegates", req.model_dump())
 
+    # --- процеси (BPO, TC-6) — passthrough --------------------------------------
+
+    @router.get("/team/processes")
+    async def processes(request: Request, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+        return await request.app.state.memory.team_get("/team/processes", {"org_id": org_id})
+
+    @router.post("/team/processes")
+    async def create_process(req: ProcessCreate, request: Request) -> dict[str, Any]:
+        return await request.app.state.memory.team_post("/team/processes", req.model_dump())
+
+    @router.get("/team/processes/{process_id}")
+    async def get_process(process_id: str, request: Request, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+        return await request.app.state.memory.team_get(
+            f"/team/processes/{process_id}", {"org_id": org_id}
+        )
+
+    @router.post("/team/processes/{process_id}/advance")
+    async def advance_process(process_id: str, req: ProcessAdvance, request: Request) -> dict[str, Any]:
+        return await request.app.state.memory.team_post(
+            f"/team/processes/{process_id}/advance", req.model_dump()
+        )
+
     # --- групи (presence) --------------------------------------------------------
 
     @router.get("/team/group/{chat_id}/ingest")
@@ -139,4 +176,11 @@ def register(router: APIRouter) -> None:
         store = p.to_store()
         store["user_id"] = req.user_id
         store["org_id"] = req.org_id
-        return await request.app.state.memory.context_ingest(store)
+        result = await request.app.state.memory.context_ingest(store)
+        # TC-3: спостережений граф — підсилити collaborates_with автор↔згадані.
+        if req.subjects:
+            await request.app.state.memory.team_post(
+                "/team/observe",
+                {"org_id": req.org_id, "author": str(req.user_id), "subjects": list(req.subjects)},
+            )
+        return result

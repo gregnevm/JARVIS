@@ -34,6 +34,20 @@ class FakeTeamDB:
             return_value={"chat_id": -100, "org_id": "o", "squad_id": None, "title": "Team", "ingest": "ambient"}
         )
         self.upsert_group_member = AsyncMock(return_value=True)
+        self._proc = {
+            "id": "p1", "org_id": "o", "owner_user_id": "A", "squad_id": None,
+            "title": "Onboarding", "template": None, "status": "draft",
+            "steps": [
+                {"id": "s1", "title": "docs", "assignee_user_id": "A", "kind": "human_task",
+                 "status": "pending", "due": None, "depends_on": []},
+                {"id": "s2", "title": "approve", "assignee_user_id": "M", "kind": "approval",
+                 "status": "pending", "due": None, "depends_on": ["s1"]},
+            ],
+        }
+        self.create_process = AsyncMock(return_value=self._proc)
+        self.list_processes = AsyncMock(return_value=[self._proc])
+        self.get_process = AsyncMock(return_value=self._proc)
+        self.update_process = AsyncMock(return_value=True)
         # graph data: A,B in backend; A reports_to M
         self.list_squads = AsyncMock(return_value=[
             {"id": "backend", "org_id": "o", "name": "Backend", "parent_id": None, "kind": "team"},
@@ -46,6 +60,7 @@ class FakeTeamDB:
             {"org_id": "o", "src_user_id": "A", "dst_user_id": "M", "kind": "reports_to",
              "weight": 1.0, "source": "declared"},
         ])
+        self.bump_relationship = AsyncMock(return_value=2.0)
 
 
 @pytest.fixture()
@@ -132,6 +147,56 @@ async def test_group_member_upsert(client):
     async with client as c:
         r = await c.post("/team/groups/members", json={"chat_id": -100, "telegram_id": 5, "user_id": "A"})
     assert r.status_code == 200 and r.json()["ok"] is True
+
+
+async def test_process_create_reports_ready(client):
+    async with client as c:
+        r = await c.post("/team/processes", json={"org_id": "o", "owner_user_id": "A", "title": "Onboarding"})
+    assert r.status_code == 200
+    # лише s1 готовий (s2 залежить від s1)
+    assert r.json()["ready"] == ["s1"]
+
+
+async def test_process_advance_via_engine(client):
+    async with client as c:
+        r = await c.post("/team/processes/p1/advance", json={"org_id": "o", "step_id": "s1", "status": "done"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "running"
+    assert body["ready"] == ["s2"]      # s1 done → s2 розблоковано
+    app.state.db.update_process.assert_awaited_once()
+
+
+async def test_process_advance_invalid_status(client):
+    async with client as c:
+        r = await c.post("/team/processes/p1/advance", json={"org_id": "o", "step_id": "s1", "status": "bogus"})
+    assert r.status_code == 400
+
+
+async def test_process_get_404(client):
+    app.state.db.get_process = AsyncMock(return_value=None)
+    async with client as c:
+        r = await c.get("/team/processes/zzz?org_id=o")
+    assert r.status_code == 404
+
+
+async def test_observe_bumps_collaborates(client):
+    async with client as c:
+        r = await c.post("/team/observe", json={"org_id": "o", "author": "A", "subjects": ["B", "A", "C"]})
+    assert r.status_code == 200
+    bumped = r.json()["bumped"]
+    # A↔B, A↔C (self A пропущено); 2 ребра
+    assert {(b["src"], b["dst"]) for b in bumped} == {("A", "B"), ("A", "C")}
+    assert app.state.db.bump_relationship.await_count == 2
+
+
+def test_migration_chain_includes_005():
+    from pathlib import Path
+    f = Path(__file__).resolve().parents[1] / "migrations" / "versions" / "005_processes.py"
+    assert f.exists()
+    text = f.read_text(encoding="utf-8")
+    assert 'down_revision = "004_team_ecosystem"' in text
+    assert "CREATE TABLE IF NOT EXISTS processes" in text
 
 
 def test_migration_chain_includes_004():

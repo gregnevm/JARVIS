@@ -103,6 +103,10 @@ EXPECTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/team/graph"),
     ("GET", "/team/delegate/{principal_id}"),
     ("PUT", "/team/delegate"),
+    ("GET", "/team/processes"),
+    ("POST", "/team/processes"),
+    ("GET", "/team/processes/{process_id}"),
+    ("POST", "/team/processes/{process_id}/advance"),
 }
 
 

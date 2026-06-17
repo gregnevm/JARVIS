@@ -36,3 +36,27 @@ def test_graph_lookup(platform_client):
     r = platform_client.get("/platform/api/team/graph?user_id=A", auth=AUTH)
     assert r.status_code == 200
     assert r.json()["manager_chain"] == ["M"]
+
+
+def test_process_create_and_list(platform_client):
+    platform_client.app.state.tools.team_create_process = AsyncMock(
+        return_value={"id": "p1", "status": "draft", "ready": ["s1"]}
+    )
+    platform_client.app.state.tools.team_processes = AsyncMock(return_value={"processes": [{"id": "p1"}]})
+    r = platform_client.post(
+        "/platform/api/processes", json={"owner_user_id": "A", "title": "Onboarding"}, auth=AUTH
+    )
+    assert r.status_code == 200 and r.json()["id"] == "p1"
+    assert "org_id" in platform_client.app.state.tools.team_create_process.await_args.args[0]
+    r2 = platform_client.get("/platform/api/processes", auth=AUTH)
+    assert r2.json()["processes"][0]["id"] == "p1"
+
+
+def test_process_advance(platform_client):
+    platform_client.app.state.tools.team_advance_process = AsyncMock(
+        return_value={"id": "p1", "status": "running", "ready": ["s2"]}
+    )
+    r = platform_client.post(
+        "/platform/api/processes/p1/advance", json={"step_id": "s1", "status": "done"}, auth=AUTH
+    )
+    assert r.status_code == 200 and r.json()["ready"] == ["s2"]

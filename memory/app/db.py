@@ -756,3 +756,78 @@ class DB:
                 chat_id, telegram_id, user_id,
             )
         return bool(res)
+
+    # --- Стовп D: процеси (BPO, TC-6) ----------------------------------------
+
+    @staticmethod
+    def _process_json(r: "asyncpg.Record") -> dict[str, Any]:
+        import json as _json
+        steps = r["steps"]
+        if isinstance(steps, str):
+            steps = _json.loads(steps)
+        return {
+            "id": str(r["id"]), "org_id": r["org_id"], "owner_user_id": r["owner_user_id"],
+            "squad_id": str(r["squad_id"]) if r["squad_id"] else None,
+            "title": r["title"], "template": r["template"], "status": r["status"],
+            "steps": steps or [],
+        }
+
+    async def create_process(
+        self, *, org_id: str, owner_user_id: str, title: str,
+        steps: list[dict[str, Any]] | None = None,
+        squad_id: str | None = None, template: str | None = None, status: str = "draft",
+    ) -> dict[str, Any]:
+        import json as _json
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "INSERT INTO processes (org_id, owner_user_id, title, steps, squad_id, template, status) "
+                "VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7) "
+                "RETURNING id, org_id, owner_user_id, squad_id, title, template, status, steps",
+                org_id, owner_user_id, title, _json.dumps(steps or []), squad_id, template, status,
+            )
+        return self._process_json(r)
+
+    async def get_process(self, process_id: str, org_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "SELECT id, org_id, owner_user_id, squad_id, title, template, status, steps "
+                "FROM processes WHERE id=$1 AND org_id=$2",
+                process_id, org_id,
+            )
+        return self._process_json(r) if r is not None else None
+
+    async def list_processes(self, org_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT id, org_id, owner_user_id, squad_id, title, template, status, steps "
+                "FROM processes WHERE org_id=$1 ORDER BY updated_at DESC LIMIT $2",
+                org_id, limit,
+            )
+        return [self._process_json(r) for r in rows]
+
+    async def update_process(
+        self, *, process_id: str, org_id: str, steps: list[dict[str, Any]], status: str
+    ) -> bool:
+        import json as _json
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "UPDATE processes SET steps=$3::jsonb, status=$4, updated_at=now() "
+                "WHERE id=$1 AND org_id=$2",
+                process_id, org_id, _json.dumps(steps), status,
+            )
+        return res.endswith("1")
+
+    async def bump_relationship(
+        self, *, org_id: str, src: str, dst: str, kind: str = "collaborates_with", delta: float = 1.0
+    ) -> float:
+        """Підсилює observed-ребро (§3.3): вставляє з weight=delta або += delta. Повертає нову вагу."""
+        async with self.pool.acquire() as con:
+            val = await con.fetchval(
+                "INSERT INTO relationships (org_id, src_user_id, dst_user_id, kind, weight, source) "
+                "VALUES ($1,$2,$3,$4,$5,'observed') "
+                "ON CONFLICT (org_id, src_user_id, dst_user_id, kind) "
+                "DO UPDATE SET weight = relationships.weight + $5, source='observed', updated_at=now() "
+                "RETURNING weight",
+                org_id, src, dst, kind, delta,
+            )
+        return float(val or 0.0)

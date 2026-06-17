@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from jarvis_core.context import DEFAULT_ORG_ID
 from jarvis_core.orggraph import OrgGraph, Relationship, Squad, SquadMember
 from jarvis_core.orggraph.models import REL_KINDS, SQUAD_KINDS
+from jarvis_core.process import Process, advance, is_complete, ready_steps
 
 logger = logging.getLogger("jarvis.memory.team")
 
@@ -66,6 +67,28 @@ class GroupMemberUpsert(BaseModel):
     chat_id: int
     telegram_id: int
     user_id: str | None = None
+
+
+class ObserveInteraction(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    author: str
+    subjects: list[str] = []
+    delta: float = 1.0
+
+
+class ProcessCreate(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    owner_user_id: str
+    title: str
+    steps: list[dict[str, Any]] = []
+    squad_id: str | None = None
+    template: str | None = None
+
+
+class ProcessAdvance(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    step_id: str
+    status: str
 
 
 # Рівні згоди на обробку групи (дзеркалить gateway bot.group.INGEST_LEVELS).
@@ -140,6 +163,20 @@ async def list_relationships(request: Request, org_id: str = DEFAULT_ORG_ID) -> 
     return {"relationships": await _db(request).list_relationships(org_id), "org_id": org_id}
 
 
+@router.post("/observe")
+async def observe(req: ObserveInteraction, request: Request) -> dict[str, Any]:
+    """Підсилює observed-ребра `collaborates_with` між автором і суб'єктами (§3.3)."""
+    from jarvis_core.orggraph import interaction_edges
+
+    bumped: list[dict[str, Any]] = []
+    for src, dst in interaction_edges(req.author, req.subjects):
+        w = await _db(request).bump_relationship(
+            org_id=req.org_id, src=src, dst=dst, kind="collaborates_with", delta=req.delta
+        )
+        bumped.append({"src": src, "dst": dst, "weight": w})
+    return {"bumped": bumped}
+
+
 @router.get("/graph")
 async def graph(request: Request, user_id: str, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
     """Сусіди + ланцюг менеджерів + squads вузла — для UI-візуалізації (§10)."""
@@ -200,3 +237,53 @@ async def group_member(req: GroupMemberUpsert, request: Request) -> dict[str, An
         chat_id=req.chat_id, telegram_id=req.telegram_id, user_id=req.user_id
     )
     return {"ok": bool(ok)}
+
+
+# --- процеси (BPO, TC-6) -----------------------------------------------------
+
+@router.post("/processes")
+async def create_process(req: ProcessCreate, request: Request) -> dict[str, Any]:
+    if not req.title.strip():
+        raise HTTPException(status_code=400, detail="title required")
+    # стартовий статус виводимо доменом: якщо є непорожні кроки — лишаємо draft до advance.
+    rec = await _db(request).create_process(
+        org_id=req.org_id, owner_user_id=req.owner_user_id, title=req.title.strip(),
+        steps=req.steps, squad_id=req.squad_id, template=req.template,
+    )
+    proc = Process.from_dict(rec)
+    rec["ready"] = [s.id for s in ready_steps(proc)]
+    return rec
+
+
+@router.get("/processes")
+async def list_processes(request: Request, org_id: str = DEFAULT_ORG_ID, limit: int = 50) -> dict[str, Any]:
+    return {"processes": await _db(request).list_processes(org_id, limit), "org_id": org_id}
+
+
+@router.get("/processes/{process_id}")
+async def get_process(process_id: str, request: Request, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+    rec = await _db(request).get_process(process_id, org_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="process not found")
+    proc = Process.from_dict(rec)
+    rec["ready"] = [s.id for s in ready_steps(proc)]
+    return rec
+
+
+@router.post("/processes/{process_id}/advance")
+async def advance_process(process_id: str, req: ProcessAdvance, request: Request) -> dict[str, Any]:
+    """Перехід кроку через доменну машину станів (engine.advance) + персист."""
+    rec = await _db(request).get_process(process_id, req.org_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="process not found")
+    proc = Process.from_dict(rec)
+    if not advance(proc, req.step_id, req.status):
+        raise HTTPException(status_code=400, detail="invalid step_id or status (no change)")
+    await _db(request).update_process(
+        process_id=process_id, org_id=req.org_id,
+        steps=[s.to_dict() for s in proc.steps], status=proc.status,
+    )
+    out = proc.to_dict()
+    out["ready"] = [s.id for s in ready_steps(proc)]
+    out["complete"] = is_complete(proc)
+    return out

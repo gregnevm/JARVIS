@@ -67,3 +67,16 @@ def test_group_collect_skips_empty(client: TestClient) -> None:
     r = client.post("/team/group/collect", json={"chat_id": -100, "user_id": 7, "summary": "  "})
     assert r.json().get("skipped") == "empty"
     client.app.state.memory.context_ingest.assert_not_awaited()
+
+
+def test_group_collect_observes_when_subjects(client: TestClient) -> None:
+    client.app.state.memory.context_ingest = AsyncMock(return_value={"inserted": True})
+    client.app.state.memory.team_post = AsyncMock(return_value={"bumped": []})
+    r = client.post(
+        "/team/group/collect",
+        json={"chat_id": -100, "user_id": 7, "summary": "ping @bob", "subjects": ["9"]},
+    )
+    assert r.status_code == 200
+    # observed-граф підсилено (TC-3)
+    client.app.state.memory.team_post.assert_awaited_once()
+    assert client.app.state.memory.team_post.await_args.args[0] == "/team/observe"
