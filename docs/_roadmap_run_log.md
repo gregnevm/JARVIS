@@ -104,3 +104,16 @@ CODING_AGENT_ROADMAP: CA-1.1–1.6, CA-2.1–2.5 закрито; репо-кон
 SaaS PR#2–#7 НЕ беремо без явного дозволу (архітектура + Stripe/JWT секрети).
 
 ## Кроки
+
+## Auto-code coroutine (OKR autopilot) — новий вертикальний зріз
+
+Додано **замкнену OKR-керовану петлю** (`docs/AUTO_CODE_COROUTINE_ROADMAP.md`),
+default OFF (ADR-008). 6 фаз: code→review→refactor→analyze→test→evolve.
+
+- `jarvis_core/okr.py` — модель OKR/KR + `select_objective`/`mutate_okr` (адмін-контекст
+  однією фразою піднімає пріоритет). +15 тестів, mypy strict green.
+- `gateway/app/auto_coroutine.py` — чистий планувальник + `run_cycle` (інжектований
+  dispatch) + `auto_coroutine_loop` (lifespan, off) + дашборд/сховище. +14 тестів.
+- Platform tab `autopilot.py` (status/tick/OKR/dashboard) wired у router; 4 settings-прапори.
+- Skill `data/skills/auto-coder`, seed `data/okr/okr.json`, `data/autopilot/dashboard.md`.
+- e2e: platform-ендпоїнти 200 через TestClient; mypy `gateway/app` (101) + `jarvis_core` (31) green.
