@@ -12,11 +12,12 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Cookie, Depends, Header, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from jarvis_core.context import RequestContext, synthetic_context
 
 from ..config import settings
+from ..saas import auth as jwt_auth
 from ..telegram_webapp_auth import authorize_admin
 
 _security = HTTPBasic(auto_error=False)
@@ -90,10 +91,20 @@ def _check_credentials(username: str, password: str) -> bool:
 def require_platform_auth(
     credentials: HTTPBasicCredentials | None = Depends(_security),
     x_telegram_init_data: str | None = Header(default=None, alias="X-Telegram-Init-Data"),
+    jarvis_jwt: str | None = Cookie(default=None),
 ) -> PlatformAuth:
     if x_telegram_init_data:
         uid = authorize_admin(x_telegram_init_data)
         return PlatformAuth(via="telegram", user_id=uid)
+    # JWT-cookie з Telegram one-tap (`/connect`) — браузерна сесія без пароля.
+    if jarvis_jwt and jwt_auth.jwt_enabled():
+        try:
+            claims = jwt_auth.decode(jarvis_jwt)
+            raw_uid = claims.get("legacy_uid")
+            cookie_uid = int(raw_uid) if raw_uid is not None else int(claims["sub"])
+            return PlatformAuth(via="cookie", user_id=cookie_uid)
+        except (jwt_auth.JWTError, KeyError, ValueError, TypeError):
+            pass  # битий/прострочений cookie → пробуємо Basic, інакше 401/503
     if platform_enabled():
         if credentials is None:
             raise HTTPException(

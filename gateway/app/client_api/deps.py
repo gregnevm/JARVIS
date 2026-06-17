@@ -12,7 +12,7 @@ Self-hosted: усі шляхи мапляться на synthetic org (owner/stud
 """
 from __future__ import annotations
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Cookie, Depends, Header, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from jarvis_core.context import RequestContext, synthetic_context
@@ -28,14 +28,20 @@ def resolve_client_context(
     authorization: str | None = Header(default=None),
     x_telegram_init_data: str | None = Header(default=None, alias="X-Telegram-Init-Data"),
     credentials: HTTPBasicCredentials | None = Depends(_security),
+    jarvis_jwt: str | None = Cookie(default=None),
 ) -> RequestContext:
-    # 1. Bearer JWT
-    if authorization and authorization[:7].lower() == "bearer " and jwt_auth.jwt_enabled():
-        token = authorization[7:].strip()
-        try:
-            return jwt_auth.context_from_claims(jwt_auth.decode(token))
-        except jwt_auth.JWTError:
-            pass  # не валідний JWT → пробуємо інші канали, інакше фінальний 401
+    # 1. Bearer JWT, або JWT-cookie (Telegram one-tap → `/connect` → cookie).
+    bearer = (
+        authorization[7:].strip()
+        if authorization and authorization[:7].lower() == "bearer "
+        else None
+    )
+    for token in (bearer, jarvis_jwt):
+        if token and jwt_auth.jwt_enabled():
+            try:
+                return jwt_auth.context_from_claims(jwt_auth.decode(token))
+            except jwt_auth.JWTError:
+                pass  # не валідний JWT → пробуємо інші канали, інакше фінальний 401
 
     # 2. Telegram initData (Mini App)
     if x_telegram_init_data:
