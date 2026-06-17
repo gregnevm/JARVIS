@@ -189,6 +189,7 @@
         <button type="button" class="navitem" data-tab="research" role="tab" aria-selected="false"><span class="ic">🔬</span> Research</button>
         <button type="button" class="navitem" data-tab="subagents" role="tab" aria-selected="false"><span class="ic">🤖</span> Subagents</button>
         <button type="button" class="navitem" data-tab="teams" role="tab" aria-selected="false"><span class="ic">👥</span> Teams</button>
+        <button type="button" class="navitem" data-tab="coding" role="tab" aria-selected="false"><span class="ic">💻</span> Coding</button>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Інтеграції / Integrations</div>
@@ -240,6 +241,7 @@
     <section class="panel" id="panel-skills" role="tabpanel"></section>
     <section class="panel" id="panel-subagents" role="tabpanel"></section>
     <section class="panel" id="panel-teams" role="tabpanel"></section>
+    <section class="panel" id="panel-coding" role="tabpanel"></section>
     <section class="panel" id="panel-hooks" role="tabpanel"></section>
     <section class="panel" id="panel-logs" role="tabpanel"></section>
     <section class="panel" id="panel-settings" role="tabpanel"></section>
@@ -276,7 +278,7 @@ const TITLES = {
   overview: lbl("Огляд", "Overview"), workbench: "Workbench", memory: lbl("Памʼять", "Memory"),
   projects: lbl("Проєкти", "Projects"), jobs: lbl("Завдання", "Jobs"), planning: lbl("Планування", "Planning"),
   research: lbl("Дослідження", "Research"), mcp: "MCP", connectors: "Connectors", skills: "Skills",
-  subagents: "Subagents", teams: lbl("Команди", "Teams"), hooks: "Hooks",
+  subagents: "Subagents", teams: lbl("Команди", "Teams"), coding: "Coding", hooks: "Hooks",
   logs: lbl("Логи", "Logs"), settings: lbl("Налаштування", "Settings"), users: lbl("Доступ", "Access"),
   models: lbl("Моделі", "Models"), improve: lbl("Покращення", "Improve"),
   developer: lbl("API ключі", "API Keys"), playground: "Playground", apilogs: "API Logs",
@@ -1377,6 +1379,92 @@ async function loadTeams() {
   } catch (e) { showErr(e.message); }
 }
 
+// ---------------- Coding (CA-6.5) ----------------
+function renderCoding() {
+  const el = document.getElementById("panel-coding");
+  if (!el.dataset.init) {
+    el.dataset.init = "1";
+    el.innerHTML =
+      '<p class="lbl">' + lbl("Рідний coding-агент (Стовп B): план, self-review diff, repo-tree, fix-петля як bg job.", "Native coding agent (Pillar B): plan, self-review diff, repo-tree, fix loop as bg job.") + '</p>' +
+      // Plan
+      '<div class="section">' + lbl("План змін", "Change plan") + '</div>' +
+      '<div class="toolbar"><textarea id="codePlanTask" placeholder="' + lbl("Задача (file-targeted план)…", "Task (file-targeted plan)…") + '" style="flex:1;min-width:200px;min-height:50px"></textarea>' +
+      '<button type="button" class="primary" id="codePlanGo">' + lbl("Планувати", "Plan") + '</button></div><div id="codePlanOut"></div>' +
+      // Review / diff-viewer
+      '<div class="section">' + lbl("Self-review diff", "Self-review diff") + '</div>' +
+      '<div class="toolbar"><textarea id="codeDiff" placeholder="unified diff…" class="mono" style="flex:1;min-width:200px;min-height:80px"></textarea>' +
+      '<button type="button" class="primary" id="codeReviewGo">' + lbl("Рев’ю", "Review") + '</button></div><div id="codeReviewOut"></div>' +
+      // Repo tree
+      '<div class="section">' + lbl("Repo-дерево", "Repo tree") + '</div>' +
+      '<div class="toolbar"><input type="text" id="codeTreePath" placeholder="' + lbl("шлях до репо (порожньо = дефолт)", "repo path (blank = default)") + '" style="flex:1;min-width:200px" />' +
+      '<button type="button" id="codeTreeGo">' + lbl("Показати", "Show") + '</button></div><div id="codeTreeOut"></div>' +
+      // Fix / test-panel
+      '<div class="section">' + lbl("Fix-петля (тест→правка→тест)", "Fix loop (test→edit→test)") + '</div>' +
+      '<div class="toolbar"><input type="text" id="codeFixExe" value="pytest" style="width:90px" title="runner" />' +
+      '<input type="text" id="codeFixArgs" placeholder="' + lbl("аргументи (через пробіл)", "args (space-separated)") + '" style="flex:1;min-width:120px" />' +
+      '<input type="text" id="codeFixPath" placeholder="cwd / repo path" style="flex:1;min-width:120px" />' +
+      '<button type="button" class="primary" id="codeFixGo">' + lbl("Запустити job", "Run job") + '</button></div>' +
+      '<p class="lbl">' + lbl("Створює coding_task bg job. Застосування правок — за політикою CODING_HEADLESS_APPLY. Результат — у Jobs.", "Creates coding_task bg job. Apply gated by CODING_HEADLESS_APPLY. Result in Jobs.") + '</p>';
+    el.querySelector("#codePlanGo").addEventListener("click", codePlanGo);
+    el.querySelector("#codeReviewGo").addEventListener("click", codeReviewGo);
+    el.querySelector("#codeTreeGo").addEventListener("click", codeTreeGo);
+    el.querySelector("#codeFixGo").addEventListener("click", codeFixGo);
+  }
+}
+async function codePlanGo() {
+  const text = document.getElementById("codePlanTask").value.trim();
+  if (!text) return toast(lbl("вкажи задачу", "enter task"));
+  const out = document.getElementById("codePlanOut");
+  out.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  try {
+    const d = await api("/platform/api/coding/plan", { method: "POST", body: { text } });
+    let tbl = "<table><tr><th>File</th><th>Action</th><th>Risk</th></tr>";
+    for (const s of d.steps || []) {
+      tbl += `<tr><td class="mono">${esc(s.file||s.title||"")}</td><td>${esc(s.action||s.detail||"")}</td><td>${esc(s.risk||"")}</td></tr>`;
+    }
+    out.innerHTML = '<div class="card wide"><div class="k">' + esc(d.summary||"") + (d.auto_approved ? ' <span class="badge on">auto</span>' : "") + '</div>' + tableWrap(tbl + "</table>") + "</div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+async function codeReviewGo() {
+  const diff = document.getElementById("codeDiff").value;
+  if (!diff.trim()) return toast(lbl("встав diff", "paste diff"));
+  const out = document.getElementById("codeReviewOut");
+  out.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  try {
+    const d = await api("/platform/api/coding/review", { method: "POST", body: { diff } });
+    const v = d.verdict === "approve" ? "on" : (d.verdict === "skip" ? "off" : "warn");
+    let h = '<div class="card wide"><div class="k"><span class="badge ' + v + '">' + esc(d.verdict||"?") + '</span> ' + esc(d.summary||"") + '</div>';
+    if ((d.findings||[]).length) {
+      let tbl = "<table><tr><th>Sev</th><th>File:Line</th><th>Comment</th></tr>";
+      for (const f of d.findings) {
+        tbl += `<tr><td>${esc(f.severity||"")}</td><td class="mono">${esc(f.file||"")}:${f.line||0}</td><td>${esc(f.comment||"")}</td></tr>`;
+      }
+      h += tableWrap(tbl + "</table>");
+    }
+    out.innerHTML = h + "</div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+async function codeTreeGo() {
+  const path = document.getElementById("codeTreePath").value.trim();
+  const out = document.getElementById("codeTreeOut");
+  out.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  try {
+    const d = await api("/platform/api/coding/tree", { method: "POST", body: { path } });
+    out.innerHTML = '<div class="card wide"><pre class="mono" style="white-space:pre-wrap;max-height:360px;overflow:auto">' + esc(d.tree||"—") + "</pre></div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+async function codeFixGo() {
+  const exe = document.getElementById("codeFixExe").value.trim() || "pytest";
+  const args = document.getElementById("codeFixArgs").value.trim().split(/\s+/).filter(Boolean);
+  const path = document.getElementById("codeFixPath").value.trim();
+  try {
+    const j = await api("/platform/api/coding/fix", { method: "POST", body: { exe, args, path } });
+    highlightJobId = j.id;
+    toast(lbl("coding job", "coding job") + " " + j.id, "ok", () => switchTab("jobs"), lbl("→ Jobs", "→ Jobs"));
+    setTimeout(() => switchTab("jobs"), 800);
+  } catch (e) { showErr(e.message); }
+}
+
 // ---------------- Hooks (P10) ----------------
 function renderHooks() {
   const el = document.getElementById("panel-hooks");
@@ -1599,7 +1687,7 @@ async function renderApiLogs() {
 const RENDER = { overview: renderOverview, workbench: renderWorkbench, memory: renderMemory,
   projects: renderProjects, jobs: renderJobs, planning: renderPlanning, research: renderResearch,
   mcp: renderMcp, connectors: renderConnectors, skills: renderSkills, subagents: renderSubagents,
-  teams: renderTeams, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers,
+  teams: renderTeams, coding: renderCoding, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers,
   models: renderModels, improve: renderImprove, developer: renderDeveloper,
   playground: renderPlayground, apilogs: renderApiLogs };
 

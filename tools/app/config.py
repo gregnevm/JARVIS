@@ -159,6 +159,21 @@ class Settings(BaseSettings):
     coding_grep_max_results: int = 60
     # CA-3.2 fix-orchestration: стеля раундів виділеної петлі «тест→правка→тест».
     coding_fix_max_rounds: int = 4
+    # CA-5.5 pre-commit gate: після кожної правки коду (code_edit/…) автоматично
+    # прогнати lint і дописати підсумок до результату (проблеми спливають до commit).
+    # Turnkey built-in P10 post_tool-хук; вмикається лише цим прапором. Дефолт false.
+    coding_precommit_gate: bool = False
+    coding_precommit_lint_exe: str = "ruff"       # раннер лінтера для гейта
+    coding_precommit_lint_args: str = "check"     # аргументи (через пробіл)
+    coding_precommit_path: str = ""               # cwd лінтера (repo root); порожньо = дефолт
+    # CA-6.4 policy gate (AM-4): дозволити headless auto-apply (`jarvis code fix --no-confirm`)
+    # — fix-петля застосовує правки БЕЗ інтерактивного confirm. Лише для CI за політикою. Дефолт false.
+    coding_headless_apply: bool = False
+    coding_headless_trust_ttl: int = 600          # TTL session-trust (сек) на headless-прогін
+    # CA-5.1 review-after-fix: коли fix-петля доводить тести до green, прогнати self-review
+    # на робочому git-diff і, якщо є changes_requested + high/medium зауваження, зробити один
+    # додатковий раунд правок «під зауваження» ПЕРЕД фінальним звітом. Дефолт false.
+    coding_review_after_fix: bool = False
 
 
 settings = Settings()

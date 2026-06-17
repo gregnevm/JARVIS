@@ -18,6 +18,7 @@ JOB_TYPES: frozenset[str] = frozenset(
 _PLATFORM_CREATE_METHODS: dict[str, str] = {
     "deep_research": "create_research_job",
     "cursor_task": "create_cursor_job",
+    "coding_task": "create_coding_job",
 }
 
 

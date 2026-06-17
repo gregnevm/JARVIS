@@ -9,6 +9,7 @@
   jarvis-code plan  "<task>"                 → /agent/code/plan (file-targeted)
   jarvis-code review --diff-file path.diff   → /agent/code/review
   jarvis-code fix   --exe pytest [-- args]   → /agent/code/fix (fix-orchestration)
+  jarvis-code edit  --file f.py --instruction "…"  → /agent/code/edit (inline diff; IDE-міст)
 """
 from __future__ import annotations
 
@@ -65,7 +66,30 @@ def build_parser() -> argparse.ArgumentParser:
     p_fix.add_argument("--path", default="")
     p_fix.add_argument("--task", default="")
     p_fix.add_argument("--max-rounds", type=int, default=None)
+    p_fix.add_argument(
+        "--no-confirm",
+        "--apply",
+        dest="no_confirm",
+        action="store_true",
+        help="headless: застосовувати правки без інтерактивного confirm (за CODING_HEADLESS_APPLY)",
+    )
+    p_fix.add_argument(
+        "--review",
+        dest="review",
+        action="store_true",
+        help="self-review + авто-fix зауважень перед звітом (за CODING_REVIEW_AFTER_FIX)",
+    )
     p_fix.add_argument("rest", nargs="*", help="аргументи раннера (після --)")
+
+    p_edit = sub.add_parser("edit", help="запропонувати inline-diff для файлу (IDE-міст)")
+    p_edit.add_argument("--file", required=True, help="шлях до файлу (вміст читається локально)")
+    p_edit.add_argument("--instruction", required=True, help="що змінити")
+    p_edit.add_argument(
+        "--apply",
+        dest="apply",
+        action="store_true",
+        help="записати запропонований вміст назад у файл (інакше — лише показати diff)",
+    )
     return parser
 
 
@@ -88,8 +112,21 @@ async def dispatch(ns: argparse.Namespace) -> dict[str, Any]:
                 "path": ns.path,
                 "task": ns.task,
                 "max_rounds": ns.max_rounds,
+                "no_confirm": bool(getattr(ns, "no_confirm", False)),
+                "review": bool(getattr(ns, "review", False)),
             },
         )
+    if ns.cmd == "edit":
+        src = Path(ns.file)
+        content = src.read_text(encoding="utf-8") if src.exists() else ""
+        data = await _post(
+            "/agent/code/edit",
+            {"user_id": uid, "path": ns.file, "instruction": ns.instruction, "content": content},
+        )
+        if getattr(ns, "apply", False) and data.get("changed"):
+            src.write_text(str(data.get("proposed") or ""), encoding="utf-8")
+            data["_applied"] = True
+        return data
     raise SystemExit(2)
 
 
@@ -111,7 +148,20 @@ def format_result(cmd: str, data: dict[str, Any]) -> str:
                 out.append(f"  [{f.get('severity')}] {f.get('file')}:{f.get('line')} {f.get('comment')}")
         return "\n".join(out)
     if cmd == "fix":
-        return f"status: {data.get('status', '?')} (rounds={data.get('rounds', 0)})\n{data.get('report', '')}"
+        head = f"status: {data.get('status', '?')} (rounds={data.get('rounds', 0)})\n{data.get('report', '')}"
+        rv = data.get("review")
+        if isinstance(rv, dict) and rv.get("verdict") not in (None, "skip"):
+            extra = f"\n— review: {rv.get('verdict')} — {rv.get('summary', '')}"
+            if rv.get("fix_attempted"):
+                extra += f" (авто-fix → tests {rv.get('tests_after_fix', '?')})"
+            head += extra
+        return head
+    if cmd == "edit":
+        if not data.get("changed"):
+            return f"(без змін) {data.get('path', '')}"
+        diff = str(data.get("diff") or "")
+        tail = "\n— застосовано до файлу" if data.get("_applied") else "\n— diff не застосовано (--apply щоб записати)"
+        return diff + tail
     return json.dumps(data, ensure_ascii=False)
 
 

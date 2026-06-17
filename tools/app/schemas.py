@@ -68,6 +68,19 @@ class CodeReviewRequest(BaseModel):
     context: str = ""
 
 
+class RepoTreeRequest(BaseModel):
+    user_id: int
+    path: str = ""
+    max_depth: int = 3
+
+
+class CodeEditRequest(BaseModel):
+    user_id: int
+    path: str
+    instruction: str
+    content: str = ""
+
+
 class CodeFixRequest(BaseModel):
     user_id: int
     exe: str
@@ -75,6 +88,8 @@ class CodeFixRequest(BaseModel):
     path: str = ""
     task: str = ""
     max_rounds: int | None = None
+    no_confirm: bool = False  # CA-6.4: headless auto-apply (за policy gate)
+    review: bool = False  # CA-5.1: self-review + авто-fix зауважень перед звітом
 
 
 class FilePathRequest(BaseModel):
@@ -109,6 +124,11 @@ class BgJobCreate(BaseModel):
     mode: str = "auto"
     job_type: str = "agent_turn"
     max_hops: int = 3
+    # coding_task (CA-5.3): раннер + аргументи + cwd + стеля раундів fix-петлі.
+    exe: str = ""
+    args: list[str] | None = None
+    path: str = ""
+    max_rounds: int = 0
 
 
 class ResearchRunRequest(BaseModel):

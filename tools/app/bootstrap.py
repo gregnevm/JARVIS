@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -120,8 +121,13 @@ def build_jarvis(memory: MemoryClient, twin_url: str = "") -> tuple[JARVIS, Agen
 
     pipeline = build_agent_pipeline(decide_mode, run_agent)
 
+    def run_agent_stream(user_id: int, text: str, mode: str | None) -> AsyncIterator[dict[str, Any]]:
+        return runner.run_stream(user_id, text, mode=mode, mode_hint=mode)
+
     async def status() -> dict[str, Any]:
         return await _fetch_status(memory, twin_url)
 
-    facade = JARVIS(pipeline, get_agent_mode, status_provider=status)
+    facade = JARVIS(
+        pipeline, get_agent_mode, status_provider=status, stream_provider=run_agent_stream
+    )
     return facade, runner, chat_backend

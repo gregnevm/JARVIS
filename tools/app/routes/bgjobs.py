@@ -28,6 +28,15 @@ def register(router: APIRouter) -> None:
             if jt == "cursor_task":
                 task = (req.text or "").strip()
                 return await bg_jobs.create_typed_job(req.user_id, "cursor_task", {"task": task})
+            if jt == "coding_task":
+                return await bg_jobs.create_coding_job(
+                    req.user_id,
+                    req.exe,
+                    args=req.args,
+                    path=req.path,
+                    task=(req.text or "").strip(),
+                    max_rounds=req.max_rounds,
+                )
             return await bg_jobs.create_job(req.user_id, req.text, req.mode)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
