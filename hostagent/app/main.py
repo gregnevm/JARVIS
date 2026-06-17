@@ -876,12 +876,14 @@ async def window_focus(
     if not title.strip():
         raise HTTPException(status_code=400, detail="empty title")
     escaped = json.dumps(title.strip())
+    # Уважно: не f-string-екрануємо — реальні \n у here-string @'...'@ і одинарні
+    # фігурні дужки PS-блоків. Лише $t інтерполюється Python-ом (рядок 1 — f-string).
     ps = (
         f"$t = {escaped}; "
-        "(Add-Type @'\\nusing System;\\nusing System.Runtime.InteropServices;\\n"
-        "public class Win32 { [DllImport(\\\"user32.dll\\\")] public static extern bool SetForegroundWindow(IntPtr hWnd); }\\n'@ -PassThru); "
-        "$p = Get-Process | Where-Object {{ $_.MainWindowTitle -like \\\"*${{t}}*\\\" }} | Select-Object -First 1; "
-        "if (-not $p) {{ exit 2 }}; [Win32]::SetForegroundWindow($p.MainWindowHandle); $p.MainWindowTitle"
+        "(Add-Type @'\nusing System;\nusing System.Runtime.InteropServices;\n"
+        "public class Win32 { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd); }\n'@ -PassThru); "
+        "$p = Get-Process | Where-Object { $_.MainWindowTitle -like \"*$($t)*\" } | Select-Object -First 1; "
+        "if (-not $p) { exit 2 }; [Win32]::SetForegroundWindow($p.MainWindowHandle); $p.MainWindowTitle"
     )
     result = _run_powershell(ps, False, 15.0)
     if int(result.get("code", -1)) == 2:

@@ -87,14 +87,14 @@
 
 ## 5. Робочий план (працюємо по списку, batch-ами, звіт після кожного)
 
-### Batch 1 — Security-дефолти + швидкі баги (P0/P1, без ambiguity)
-- [ ] P0-7 computer.jsonl secret redaction
-- [ ] P0-6 coding_tools `_cli` → audited path (whitelist + log)
-- [ ] P0-1 webapp_dev_open → False (+ .env.example, безпечний дефолт)
-- [ ] P0-2 uid=0 guards на app_trust/app_run_macro
-- [ ] P1-2 /window/focus malformed PS
-- [ ] P1-3 precommit_gate dead entry
-- [ ] P1-1 dead commands /plan /improve /login
+### Batch 1 — Security-дефолти + швидкі баги (P0/P1, без ambiguity) ✅
+- [x] P0-7 computer.jsonl secret redaction (+ розширено редактор: sk-jarvis-*, Bearer, key=value)
+- [x] P0-6 coding_tools `_cli` → audited path (log_action T1 у computer.jsonl)
+- [x] P0-1 webapp_dev_open → False (+ .env.example, безпечний дефолт)
+- [x] P0-2 uid=0 guards на app_set_mode/app_trust/app_run_macro (`_require_identified`)
+- [x] P1-2 /window/focus malformed PS (переписано за патерном /uia/invoke)
+- [x] P1-3 precommit_gate dead entry прибрано
+- [x] P1-1 dead commands /plan /improve /login → у COMMANDS
 
 ### Batch 2 — Multi-tenant ground-work (AGENTS §5)
 - [ ] P1-4 ratelimit org-prefix

@@ -65,8 +65,10 @@ class Settings(BaseSettings):
     # Локальний URL gateway для підказок /app у браузері (без тунелю).
     gateway_browser_url: str = "http://127.0.0.1:8000"
     # Дозволити відкривати /app та /app/* без Telegram initData (для локального
-    # перегляду в браузері). У проді (named tunnel) лиши False — пускає лише з Telegram.
-    webapp_dev_open: bool = True
+    # перегляду в браузері). Дефолт False — безпечно (AGENTS §5): пускає лише з
+    # Telegram. У dev-open запит без initData = uid 0 («анонімний viewer»): GET
+    # працює, але мутуючі дії (mode/trust/macro) відхиляються (_require_identified).
+    webapp_dev_open: bool = False
 
     @property
     def mini_app_https_url(self) -> str:

@@ -48,6 +48,9 @@ COMMANDS = frozenset(
         "/project",
         "/cursor",
         "/apk",
+        "/login",
+        "/improve",
+        "/plan",
     }
 )
 
