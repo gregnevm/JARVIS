@@ -108,9 +108,9 @@
 - [x] P1-7 twin /ingest/logs delta_start_idx (дедуп re-push)
 - [x] P2-4 memory redactor on ingest (summary+payload backstop)
 
-### Batch 4 — /v1 hardening
-- [ ] P0-5 /v1 rate-limit
-- [ ] P0-4 /v1 user-id binding
+### Batch 4 — /v1 hardening ✅
+- [x] P0-5 /v1 rate-limit (429 на той самий лічильник, що Telegram)
+- [x] P0-4 /v1 user-id binding (caller uid лише з allowed_ids — anti-impersonation)
 
 ### Batch 5 — Doc-sync (D1)
 - [ ] P1-11 mobile track sync

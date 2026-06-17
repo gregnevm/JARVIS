@@ -48,3 +48,36 @@ def test_bad_key(client):
         headers={"Authorization": "Bearer wrong"},
     )
     assert r.status_code == 401
+
+
+def test_impersonation_uid_ignored(client):
+    """P0-4: caller не може зімперсонити uid поза allowed_ids — падає на дефолт 42."""
+    captured = {}
+
+    async def _capture(payload):
+        captured.update(payload)
+        return "ok"
+
+    client.app.state.tools.process = _capture
+    r = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hi"}], "user": "999"},
+        headers={"Authorization": "Bearer sk-test", "X-JARVIS-User-Id": "999"},
+    )
+    assert r.status_code == 200
+    assert captured["user_id"] == 42  # 999 проігноровано (не в allowed_ids)
+
+
+def test_rate_limit_429(client, monkeypatch):
+    """P0-5: /v1 застосовує rate-limit (DoS/cost-захист)."""
+    class _Block:
+        async def allow(self, *a, **k):
+            return False
+
+    client.app.state.limiter = _Block()
+    r = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 429
