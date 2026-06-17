@@ -79,6 +79,7 @@ def main_menu_keyboard(
                 {"text": "🔄 Sync / LoRA", "callback_data": "dash:sync"},
                 {"text": "❓ Довідка", "callback_data": "dash:help"},
             ],
+            [{"text": "🔐 Підключити пристрій", "callback_data": "conn:menu"}],
         ]
     )
     return {"inline_keyboard": rows}

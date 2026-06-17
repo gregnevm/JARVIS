@@ -64,6 +64,8 @@ def format_help() -> str:
     return (
         "🎛 <b>JARVIS — команди</b>\n\n"
         "<b>/start</b> · головне меню + швидкі кнопки\n"
+        "<b>/connect</b> · 🔐 підключити пристрій одним тапом — "
+        "веб-консоль / застосунок / розширення\n"
         "<b>/dashboard</b> · панель + inline-кнопки\n"
         "<b>/app</b> · Mini App (HTTPS URL у PUBLIC_APP_URL)\n"
         "<b>/start app</b> · deep link до Mini App\n"

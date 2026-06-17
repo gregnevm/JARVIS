@@ -30,6 +30,7 @@ from .platform import router as platform_router
 from .openai_api import router as openai_router
 from .client_api import router as client_api_router
 from .webapp import router as webapp_router
+from .connect import router as connect_router
 from .tools_client import ToolsClient
 from .ratelimit import RateLimiter
 from .telegram import TelegramClient
@@ -181,6 +182,7 @@ async def _poll_loop(app: FastAPI) -> None:
 
 app = FastAPI(title="JARVIS Gateway", lifespan=lifespan)
 app.include_router(webapp_router)
+app.include_router(connect_router)
 app.include_router(admin_panel_router)
 app.include_router(platform_router)
 app.include_router(openai_router)
