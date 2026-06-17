@@ -180,7 +180,7 @@ T4  Screenshot → vision → click/type                          — остан
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
 | AM-1.4.1 | Документувати **`HOSTAGENT_FS_ROOTS`** для «повного» профілю | `C:\`, `O:\JARVIS`, user profile | [ ] |
-| AM-1.4.2 | `fs_glob` / `fs_search` (обмежений glob) | Read-only, ліміт entries | [ ] |
+| AM-1.4.2 | `fs_glob` / `fs_search` (обмежений glob) | Read-only, ліміт entries | [~] host-agent `GET /fs/glob` (рекурсивний, skip .git/node_modules/__pycache__/.venv, entry-cap, FS_ROOTS-scoped); toolkit-обгортка + `fs_search` — попереду |
 
 **Вихід AM-1:** ≥70% desktop-задач через T0–T3; T4 лише для canvas/legacy UI.
 

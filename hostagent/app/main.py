@@ -328,6 +328,45 @@ async def fs_list(
     return {"path": str(p), "entries": entries}
 
 
+_GLOB_SKIP_DIRS = frozenset({".git", ".jarvis_backup", "node_modules", "__pycache__", ".venv"})
+
+
+@app.get("/fs/glob")
+async def fs_glob(
+    root: Annotated[str, Query()],
+    _: Annotated[None, Depends(_check_token)],
+    pattern: Annotated[str, Query()] = "*",
+    max_results: Annotated[int, Query()] = 200,
+) -> dict[str, Any]:
+    """Read-only рекурсивний glob під root (AM-1.4.2). Пропускає важкі/VCS-каталоги,
+    ліміт entries. Повертає відносні шляхи (dir — із кінцевим '/')."""
+    base = _resolve_path(root)
+    if not base.is_dir():
+        raise HTTPException(status_code=404, detail="not a directory")
+    cap = max(1, min(int(max_results), 1000))
+    pat = (pattern or "*").strip() or "*"
+    matches: list[str] = []
+    truncated = False
+    try:
+        for child in base.rglob(pat):
+            rel = child.relative_to(base)
+            if any(part in _GLOB_SKIP_DIRS for part in rel.parts):
+                continue
+            suffix = "/" if child.is_dir() else ""
+            matches.append(str(rel).replace("\\", "/") + suffix)
+            if len(matches) >= cap:
+                truncated = True
+                break
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "root": str(base),
+        "pattern": pat,
+        "matches": sorted(matches),
+        "truncated": truncated,
+    }
+
+
 @app.get("/fs/read")
 async def fs_read(
     path: Annotated[str, Query()],
