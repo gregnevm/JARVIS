@@ -28,10 +28,35 @@ mobile/
   app/src/main/res/xml/network_security_config.xml
   app/src/main/res/drawable/ic_launcher.png             # генерується tools/make_icon.py
   build-apk.ps1                                         # self-contained білд (Windows)
-  VERSION                                               # 0.1.0
+  build-apk.sh                                          # self-contained білд (Linux/macOS)
+  gradlew / gradle/wrapper/                             # Gradle wrapper (8.7) — спільний для CI/локалі
+  VERSION                                               # 1.0.0
 ```
 
-## Збірка APK (Windows, self-contained)
+## Збірка APK
+
+Версіонована через Gradle **wrapper** (`./gradlew`, Gradle 8.7) — CI й локальна збірка
+використовують ту саму версію. Три способи:
+
+### CI (рекомендовано) — GitHub Actions
+
+Workflow `.github/workflows/build-apk.yml` збирає APK у хмарі (не треба локального SDK):
+ручний запуск (**Actions → Build APK → Run**), пуш у `main` зі змінами в `mobile/**`,
+або тег `mobile-v*` (додатково створює **GitHub Release** з APK). Артефакт —
+`jarvis-mvp-apk`. Для стабільного підпису (оновлення без перевстановлення) поклади
+base64-keystore у secret `ANDROID_KEYSTORE_BASE64` (+ `ANDROID_KEYSTORE_PASS`,
+`ANDROID_KEY_ALIAS`); без секрету підпис ефемерний.
+
+### Linux / macOS
+
+```bash
+bash mobile/build-apk.sh          # повна збірка   (SKIP_BUILD=1 — лише тулчейн)
+```
+
+JDK і Android SDK беруться з оточення, якщо є; інакше SDK качається локально у
+`mobile/.toolchain/`. Потрібен лише **JDK 17+** у системі.
+
+### Windows (self-contained)
 
 На машині **не** потрібні заздалегідь JDK/Android SDK/Gradle — скрипт качає їх
 локально у `mobile/.toolchain/` (у `.gitignore`):
@@ -42,11 +67,11 @@ pwsh -File mobile\build-apk.ps1
 powershell -ExecutionPolicy Bypass -File mobile\build-apk.ps1
 ```
 
-Що робить скрипт:
-1. Качає **Temurin JDK 17**, **Android cmdline-tools** (+ `platform-34`, `build-tools;34.0.0`), **Gradle 8.7**.
-2. Приймає ліцензії SDK, пише `local.properties` (`sdk.dir`).
-3. `gradle assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`.
-4. Копіює у **`data/artifacts/jarvis-mvp.apk`** + паспорт `*.meta.json` (version/git/sha256).
+Що роблять скрипти (`.sh` / `.ps1`):
+1. Готують **Android cmdline-tools** (+ `platform-34`, `build-tools;34.0.0`); `.ps1` ще й тягне Temurin JDK 17.
+2. Приймають ліцензії SDK, пишуть `local.properties` (`sdk.dir`), генерують release-keystore.
+3. `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk` + apksigner re-sign (v1+v2+v3).
+4. Копіюють у **`data/artifacts/jarvis-mvp.apk`** + паспорт `*.meta.json` (version/git/sha256).
 
 > `data/` змонтовано в gateway як `/data` → бот одразу бачить новий apk для `/apk`.
 
