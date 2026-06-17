@@ -129,6 +129,19 @@ class Settings(BaseSettings):
     apk_artifact_path: str = ""
     # Версія для підпису/caption APK (синхронізована з mobile/app/version).
     apk_version: str = "0.1.0"
+    # Авто-доставка APK у Telegram через бот (БЕЗ GitHub-секретів): gateway періодично
+    # перевіряє публічний apk-latest реліз і, якщо там новіша версія за локальну,
+    # качає її в data/artifacts і DM-ить адмінам (notify_admins_apk_ready). Опт-ін —
+    # використовує TELEGRAM_BOT_TOKEN з .env, що вже є в gateway.
+    apk_auto_deliver: bool = False
+    apk_auto_deliver_interval: int = 3600  # сек між перевірками (1 год)
+    # Публічні URL артефактів rolling-релізу (CI публікує тег apk-latest).
+    apk_release_apk_url: str = (
+        "https://github.com/gregnevm/JARVIS/releases/download/apk-latest/jarvis-mvp.apk"
+    )
+    apk_release_meta_url: str = (
+        "https://github.com/gregnevm/JARVIS/releases/download/apk-latest/jarvis-mvp.apk.meta.json"
+    )
 
     # P11 OpenAI-compatible API (opt-in)
     enable_openai_api: bool = False

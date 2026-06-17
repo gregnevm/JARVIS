@@ -120,6 +120,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         ctx_sched_task = asyncio.create_task(context_scheduler_loop(app.state.redis))
 
+    # APK auto-deliver: gateway сам тягне свіжий apk-latest реліз і DM-ить адмінам
+    # (без GitHub-секретів — через бот-токен із .env). Опт-ін APK_AUTO_DELIVER.
+    apk_task: asyncio.Task[None] | None = None
+    if settings.apk_auto_deliver:
+        from .apk_autodeliver import apk_autodeliver_loop
+
+        apk_task = asyncio.create_task(
+            apk_autodeliver_loop(
+                app.state.tg, app.state.redis, settings.apk_auto_deliver_interval
+            )
+        )
+
     # BotFather UI: команди, опис, Mini App menu button.
     await register_bot_ui(app.state.tg)
 
@@ -136,7 +148,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
 
-    for task in (poll_task, reminder_task, health_task, job_task, bg_job_task, ctx_sched_task):
+    for task in (
+        poll_task, reminder_task, health_task, job_task, bg_job_task, ctx_sched_task, apk_task
+    ):
         if task is not None:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
