@@ -28,7 +28,7 @@
 | **JOB_TYPES** централізовано | `jarvis_core/bg_jobs.py` | 6 типів jobs; Platform `jobs.py` вже імпортує `platform_create_method` |
 | **guard-dedup** — `require_text`, `require_found`, `require_mode` | `gateway/app/_helpers.py`, `tools/app/routes/_helpers.py` | Патерн готовий; винести в `jarvis_core` |
 | **tools_client_http** | `gateway/app/tools_client_http.py` | Точка для `X-JARVIS-Org-Id` headers |
-| **X-Request-ID** end-to-end | `gateway/app/request_id.py`, `tools/main.py` middleware | Патерн propagation вже є |
+| **X-Request-ID** end-to-end | `gateway/app/request_id.py`, `tools/app/main.py` middleware | Патерн propagation вже є |
 | **13 platform test files** | `gateway/tests/test_platform_*.py` | Шаблон для `test_tenant_*.py` |
 | **Phase 7.2 Improve UI** | `platform.html` + `platform/improve.py` | Studio-tier feature вже в консолі |
 | **platform.html v2** — nav groups, i18n, mobile | ~1433 рядків, `lbl("uk","en")` | SaaS onboarding додавати в групу «System» |
@@ -198,7 +198,8 @@ sequenceDiagram
 
 ### 3.1 Нові таблиці
 
-Файл: `memory/migrations/versions/003_saas_tenant.py`
+Файл: `memory/migrations/versions/004_saas_tenant.py`
+> **Нумерація:** слот `003` уже зайнятий (`003_context_passports.py`), тож SAAS-міграція — `004`.
 
 ```sql
 -- === Tenant core ===
@@ -377,7 +378,7 @@ CREATE POLICY messages_org ON messages
 
 | Файл | Дія |
 |------|-----|
-| `memory/migrations/versions/003_saas_tenant.py` | NEW migration |
+| `memory/migrations/versions/004_saas_tenant.py` | NEW migration (003 зайнято `003_context_passports`) |
 | `memory/app/db.py` | org_id на всіх методах |
 | `memory/app/main.py` | org_id в усіх Pydantic models + endpoints |
 | `db/init.sql` | org_id для fresh installs |
@@ -839,7 +840,7 @@ async def route_agent_turn(ctx: RequestContext, payload: dict) -> AsyncIterator:
 ```
 Week 0:     PR#0 IDOR fix (get_by_id ownership) — блокер перед будь-яким SaaS   ✅ done (2026-06-15)
 Week 1-2:   PR#1 jarvis_core/context + http_helpers consolidate                 ✅ foundation done (proxy-wide+headers → PR#4)
-Week 3-4:   PR#2 memory schema 003_saas_tenant                                  ◀ next
+Week 3-4:   PR#2 memory schema 004_saas_tenant                                  ◀ next
 Week 5-6:   PR#3 RedisIndexedStore org-scoped + PR#4 tools middleware + tools_client_http
 Week 7-8:   PR#5 platform auth/billing (gateway/app/saas/*)
 Week 9-10:  PR#6 platform.html (billing, members, orchestrator tab) + tenant tests
@@ -847,7 +848,7 @@ Week 11-12: PR#7 inference worker pool (S1)
 Week 13-14: Beta launch
 ```
 
-**Скорочення vs v1.0:** завдяки `proxy.py` і `tools/main.py` middleware — мінус ~2 тижні
+**Скорочення vs v1.0:** завдяки `proxy.py` і `tools/app/main.py` middleware — мінус ~2 тижні
 на ручний рефакторинг 18+20 файлів.
 
 **Кожен PR:**
@@ -897,7 +898,7 @@ INFERENCE_WORKERS=3
 
 | Ризик | Rollback |
 |-------|----------|
-| Migration fails | Alembic downgrade `003_saas_tenant` |
+| Migration fails | Alembic downgrade `004_saas_tenant` |
 | Redis key chaos | Dual-read period: old + new keys 2 weeks |
 | JWT breaks Telegram | Feature flag `SAAS_AUTH_JWT=false` |
 | Stripe outage | Fail-open 24h on plan checks |

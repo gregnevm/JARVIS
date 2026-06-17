@@ -42,8 +42,9 @@ def _auth_bearer(request: Request) -> None:
         raise HTTPException(status_code=401, detail="invalid api key")
 
 
-def _resolve_user_id(request: Request, body: ChatCompletionRequest) -> int:
-    hdr = request.headers.get("x-jarvis-user-id") or request.headers.get("X-JARVIS-User-Id")
+def _requested_uid(request: Request, body: ChatCompletionRequest) -> int | None:
+    """uid, який попросив caller (header має пріоритет над body.user). None якщо немає."""
+    hdr = request.headers.get("x-jarvis-user-id")  # Starlette headers — case-insensitive
     if hdr:
         try:
             return int(hdr.strip())
@@ -54,13 +55,28 @@ def _resolve_user_id(request: Request, body: ChatCompletionRequest) -> int:
             return int(body.user)
         except ValueError:
             pass
+    return None
+
+
+def _resolve_user_id(request: Request, body: ChatCompletionRequest) -> int:
+    """uid для прогону агента під одним глобальним `/v1`-ключем.
+
+    P0-4 (anti-impersonation): caller-supplied uid (header/body) приймаємо ЛИШЕ якщо
+    він у `allowed_ids`. Інакше тримач єдиного OPENAI_API_KEY міг би передати
+    `X-JARVIS-User-Id: <будь-хто>` і читати чужу памʼять/контекст. Невідомий uid →
+    ігноруємо й падаємо на OPENAI_DEFAULT_USER_ID."""
+    allowed = settings.allowed_ids
+    requested = _requested_uid(request, body)
+    if requested is not None and requested in allowed:
+        return requested
     default = settings.openai_default_user_id
     if default:
         return int(default)
-    ids = settings.allowed_ids
-    if ids:
-        return next(iter(ids))
-    raise HTTPException(status_code=400, detail="user_id required (X-JARVIS-User-Id header)")
+    if allowed:
+        return next(iter(allowed))
+    raise HTTPException(
+        status_code=400, detail="user_id not resolvable (configure OPENAI_DEFAULT_USER_ID)"
+    )
 
 
 def _extract_text(messages: list[ChatMessage]) -> str:
@@ -107,6 +123,11 @@ async def chat_completions(
     if not text:
         raise HTTPException(status_code=400, detail="messages required")
     uid = _resolve_user_id(request, body)
+    # P0-5: кожен виклик — дорогий agent-turn. Rate-limit на той самий лічильник, що
+    # й Telegram-канал (DoS/cost-захист; AGENTS §A «rate-limit на ключ»).
+    limiter = getattr(request.app.state, "limiter", None)
+    if limiter is not None and not await limiter.allow(uid):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
     tools = request.app.state.tools
     cid = _completion_id()
     model = body.model or "jarvis"

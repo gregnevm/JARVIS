@@ -1,0 +1,124 @@
+name: Build APK
+
+# Збирає MVP Android-клієнт у хмарі (Стовп C, CL-3) — щоб /apk завжди мав свіжий файл,
+# не вимагаючи локального Android SDK. Артефакт завантажується до кожного запуску;
+# на тег `mobile-v*` додатково створюється GitHub Release з APK.
+on:
+  workflow_dispatch:        # ручний запуск (Actions → Build APK → Run)
+  pull_request:             # валідуємо збірку на PR, що чіпає mobile
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-apk.yml'
+  push:
+    branches: [main]        # тримає data/artifacts APK свіжим
+    tags: ['mobile-v*']     # без paths-фільтра: він може відсіювати push тегів → Release не спрацює
+
+# Один активний білд на гілку — нові пуші скасовують попередній.
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write           # потрібно для створення Release на тег
+
+jobs:
+  build:
+    name: assembleRelease → data/artifacts/jarvis-mvp.apk
+    runs-on: ubuntu-latest
+    env:
+      # Опційний стабільний підпис: поклади base64 keystore у secret
+      # ANDROID_KEYSTORE_BASE64 (+ ANDROID_KEYSTORE_PASS/ANDROID_KEY_ALIAS),
+      # щоб оновлення ставилися поверх без перевстановлення. Без секрету —
+      # ефемерний keystore (кожен білд новий ключ → апдейт потребує reinstall).
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      # Авто-доставка APK у Telegram: заведи у Settings → Secrets два секрети —
+      # TELEGRAM_BOT_TOKEN (твій бот) і TELEGRAM_TO_CHAT_ID (твій chat id). Тоді
+      # кожен білд надсилає APK тобі в Telegram. Без них крок просто пропускається.
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_TO_CHAT_ID: ${{ secrets.TELEGRAM_TO_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # short SHA у meta.json паспорті
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decode signing keystore (optional)
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        run: bash mobile/build-apk.sh
+
+      - name: Summary
+        run: |
+          {
+            echo '### JARVIS MVP APK'
+            echo '```json'
+            cat data/artifacts/jarvis-mvp.apk.meta.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-mvp-apk
+          path: |
+            data/artifacts/jarvis-mvp.apk
+            data/artifacts/jarvis-mvp.apk.meta.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Send APK to Telegram
+        if: ${{ env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_TO_CHAT_ID != '' }}
+        run: |
+          VER="$(tr -d ' \t\r\n' < mobile/VERSION)"
+          SHA="$(jq -r .sha256 data/artifacts/jarvis-mvp.apk.meta.json | cut -c1-12)"
+          SHORT="${GITHUB_SHA:0:7}"
+          curl -fsS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            -F chat_id="${TELEGRAM_TO_CHAT_ID}" \
+            -F document="@data/artifacts/jarvis-mvp.apk;filename=jarvis-mvp-${VER}.apk" \
+            -F caption="📱 JARVIS MVP APK v${VER} · sha256 ${SHA} · ${SHORT}" >/dev/null
+          echo "✅ APK надіслано в Telegram (chat ${TELEGRAM_TO_CHAT_ID})"
+
+      - name: Telegram delivery hint
+        if: ${{ env.TELEGRAM_BOT_TOKEN == '' || env.TELEGRAM_TO_CHAT_ID == '' }}
+        run: echo "ℹ️ Авто-доставку в Telegram пропущено — задай секрети TELEGRAM_BOT_TOKEN + TELEGRAM_TO_CHAT_ID." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish GitHub Release (on tag mobile-v*)
+        if: ${{ startsWith(github.ref, 'refs/tags/mobile-v') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            data/artifacts/jarvis-mvp.apk
+            data/artifacts/jarvis-mvp.apk.meta.json
+          generate_release_notes: true
+
+      # Rolling-реліз: кожен білд на main оновлює тег `apk-latest` свіжим APK —
+      # постійне публічне посилання для встановлення з телефону (один тап), без
+      # секретів. CI створює реліз через GITHUB_TOKEN (permissions: contents:write).
+      - name: Publish rolling APK release (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: JARVIS MVP APK — latest build
+          prerelease: true
+          body: |
+            Автозбірка останнього `main`. Встанови з телефону: натисни `jarvis-mvp.apk` →
+            дозволь «з невідомих джерел» → відкрий → вкажи URL свого JARVIS-сервера.
+          files: |
+            data/artifacts/jarvis-mvp.apk
+            data/artifacts/jarvis-mvp.apk.meta.json

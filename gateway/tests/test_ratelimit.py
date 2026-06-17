@@ -47,3 +47,12 @@ async def test_zero_limit_always_allows():
 
 async def test_fail_open_when_redis_errors():
     assert await RateLimiter(BoomRedis(), limit_per_min=1).allow(1) is True
+
+
+async def test_key_is_org_prefixed():
+    """P1-4 (AGENTS §5): ключ rate-limit має org-префікс `jarvis:{org_id}:rl:...`."""
+    redis = FakeRedis()
+    await RateLimiter(redis, limit_per_min=5).allow(42)
+    key = next(iter(redis.store))
+    assert key.startswith("jarvis:")
+    assert ":rl:42:" in key

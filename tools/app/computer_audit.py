@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from jarvis_core.llm.jsonl_log import JsonlLog
+from jarvis_core.passport import default_redactor
 
 from .config import settings
 
@@ -15,9 +16,16 @@ def _log_path() -> Path:
     return Path(settings.data_dir) / "logs" / "computer.jsonl"
 
 
+def _redact(text: str) -> str:
+    """Бекстоп проти витоку секретів у computer.jsonl (токени/паролі/ключі в PS/CLI)."""
+    return default_redactor().redact(text)
+
+
 def _safe_args(args: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, val in args.items():
+        # Спершу редакція (str-значення), потім трункейт — секрети не лягають cleartext.
+        val = _redact(val) if isinstance(val, str) else val
         text = str(val)
         if key == "content" and len(text) > 200:
             out[key] = text[:200] + "…"
@@ -44,7 +52,7 @@ def log_action(
             "tool": tool,
             "tier": tier,
             "args": _safe_args(args),
-            "result_preview": (result or "")[:500],
+            "result_preview": _redact((result or "")[:500]),
             "confirmed": confirmed,
         }
     )

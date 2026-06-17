@@ -65,8 +65,10 @@ class Settings(BaseSettings):
     # Локальний URL gateway для підказок /app у браузері (без тунелю).
     gateway_browser_url: str = "http://127.0.0.1:8000"
     # Дозволити відкривати /app та /app/* без Telegram initData (для локального
-    # перегляду в браузері). У проді (named tunnel) лиши False — пускає лише з Telegram.
-    webapp_dev_open: bool = True
+    # перегляду в браузері). Дефолт False — безпечно (AGENTS §5): пускає лише з
+    # Telegram. У dev-open запит без initData = uid 0 («анонімний viewer»): GET
+    # працює, але мутуючі дії (mode/trust/macro) відхиляються (_require_identified).
+    webapp_dev_open: bool = False
 
     @property
     def mini_app_https_url(self) -> str:
@@ -127,6 +129,19 @@ class Settings(BaseSettings):
     apk_artifact_path: str = ""
     # Версія для підпису/caption APK (синхронізована з mobile/app/version).
     apk_version: str = "0.1.0"
+    # Авто-доставка APK у Telegram через бот (БЕЗ GitHub-секретів): gateway періодично
+    # перевіряє публічний apk-latest реліз і, якщо там новіша версія за локальну,
+    # качає її в data/artifacts і DM-ить адмінам (notify_admins_apk_ready). Опт-ін —
+    # використовує TELEGRAM_BOT_TOKEN з .env, що вже є в gateway.
+    apk_auto_deliver: bool = False
+    apk_auto_deliver_interval: int = 3600  # сек між перевірками (1 год)
+    # Публічні URL артефактів rolling-релізу (CI публікує тег apk-latest).
+    apk_release_apk_url: str = (
+        "https://github.com/gregnevm/JARVIS/releases/download/apk-latest/jarvis-mvp.apk"
+    )
+    apk_release_meta_url: str = (
+        "https://github.com/gregnevm/JARVIS/releases/download/apk-latest/jarvis-mvp.apk.meta.json"
+    )
 
     # P11 OpenAI-compatible API (opt-in)
     enable_openai_api: bool = False
@@ -160,6 +175,12 @@ class Settings(BaseSettings):
     # Корінь репо для test/fix фаз (на хост-агенті). Порожньо → CWD виконавця.
     auto_coroutine_repo_path: str = ""
     auto_coroutine_interval: float = 3600.0  # сек між циклами
+
+    # Стовп D (TEAM_ECOSYSTEM): обробка Telegram-груп (presence/ambient). Дефолт off —
+    # self-hosted solo-user не зачіпає (S2); вмикати свідомо для командного режиму.
+    team_mode: bool = False
+    # @username бота (без @) — для детекції адресації у групах (mention/reply).
+    bot_username: str = ""
 
     @property
     def auto_coroutine_uid(self) -> int:

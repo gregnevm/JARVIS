@@ -72,9 +72,16 @@ async def health() -> dict[str, str]:
 @app.post("/ingest/logs")
 async def ingest_logs(req: IngestRequest, request: Request) -> dict[str, Any]:
     log = _edge_log(request.app, req.edge_id)
-    for entry in req.logs:
+    have = log.count()
+    # Дедуп: delta_start_idx — абсолютний індекс першого запису батчу (edge шле свій
+    # last_pushed_idx). Якщо він < вже наявної кількості, частина батчу вже інжестнута
+    # (re-push після втрати edge-state або спільний edge_id) → пропускаємо перекриття,
+    # щоб дублі не потрапляли у train-corpus.
+    skip = max(0, min(have - req.delta_start_idx, len(req.logs)))
+    fresh = req.logs[skip:]
+    for entry in fresh:
         log.append(entry)
-    return {"accepted": len(req.logs), "last_idx": log.count()}
+    return {"accepted": len(fresh), "skipped": skip, "last_idx": log.count()}
 
 
 @app.get("/latest/lora")

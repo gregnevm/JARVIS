@@ -217,6 +217,13 @@ async def _handle_message(
     if chat_id is None:
         return
 
+    # Стовп D (TC-2): групи/супергрупи йдуть окремим шляхом (за TEAM_MODE).
+    # Приватний flow нижче незмінний (S2: self-hosted solo-user не зачіпає).
+    chat_type = message.get("chat", {}).get("type")
+    if settings.team_mode and chat_type in ("group", "supergroup"):
+        await _handle_group(message, message.get("chat", {}), tg, tools, redis)
+        return
+
     if not is_allowed(user_id):
         store = get_access_store()
         if store is not None and user_id is not None:
@@ -355,6 +362,66 @@ async def _handle_message(
         audio = await tts.synthesize(reply)
         if audio:
             await tg.send_voice(chat_id, audio)
+
+
+# --------------------------------------------------------------------------- #
+# Стовп D (TC-2): груповий шлях — presence + ambient за рівнем згоди.
+# --------------------------------------------------------------------------- #
+class _GroupStore:
+    """Адаптер bot.group → ToolsClient/Telegram (I/O для group-оркестратора)."""
+
+    def __init__(self, tg: TelegramClient, tools: ToolsClient) -> None:
+        self._tg = tg
+        self._tools = tools
+
+    async def get_ingest(self, chat_id: int) -> str:
+        return await self._tools.group_ingest_level(chat_id)
+
+    async def upsert_member(self, chat_id: int, telegram_id: int, name: str) -> None:
+        await self._tools.group_member_seen(chat_id, telegram_id)
+
+    async def collect(self, chat_id: int, message: dict[str, Any]) -> None:
+        text = str(message.get("text") or message.get("caption") or "").strip()
+        if not text:
+            return
+        frm = message.get("from") or {}
+        await self._tools.group_collect(
+            chat_id, int(frm.get("id") or 0), text,
+            from_name=str(frm.get("username") or frm.get("first_name") or ""),
+        )
+
+    async def respond(self, chat_id: int, message: dict[str, Any]) -> None:
+        frm = message.get("from") or {}
+        text = str(message.get("text") or message.get("caption") or "").strip()
+        # тихо зберігаємо й сам адресований меседж у командну пам'ять
+        if text:
+            await self._tools.group_collect(
+                chat_id, int(frm.get("id") or 0), text,
+                from_name=str(frm.get("username") or frm.get("first_name") or ""),
+            )
+        reply = await self._tools.process({"user_id": int(frm.get("id") or 0), "text": text})
+        if reply:
+            await self._tg.send_message(chat_id, reply)
+
+
+async def _handle_group(
+    message: dict[str, Any],
+    chat: dict[str, Any],
+    tg: TelegramClient,
+    tools: ToolsClient,
+    redis: aioredis.Redis,
+) -> None:
+    """Розгалуження для груп/супергруп (за TEAM_MODE). Best-effort, не валить бота."""
+    from .bot.group import handle_group_message
+
+    try:
+        await handle_group_message(
+            message, chat,
+            tg=tg, group_store=_GroupStore(tg, tools),
+            bot_username=settings.bot_username,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("group message handling failed")
 
 
 # --------------------------------------------------------------------------- #

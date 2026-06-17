@@ -36,10 +36,21 @@ _INDEX = Path(__file__).parent / "static" / "app.html"
 
 
 def authorize(init_data: str | None) -> int:
-    """Повертає Telegram user_id або кидає 401/403. Поважає whitelist."""
+    """Повертає Telegram user_id або кидає 401/403. Поважає whitelist.
+
+    Dev-open (WEBAPP_DEV_OPEN=true, локальна розробка): повертає uid 0 —
+    «анонімний viewer». GET-ендпоінти працюють, але мутуючі privileged-дії
+    (mode/trust/macro) мусять відхиляти uid 0 через `_require_identified`.
+    """
     if not init_data and settings.webapp_dev_open:
         return 0
     return authorize_allowed(init_data)
+
+
+def _require_identified(user_id: int) -> None:
+    """403 для uid 0 (анонімний dev-open viewer) — не пускаємо до мутуючих дій."""
+    if not user_id:
+        raise HTTPException(status_code=403, detail="identified user required")
 
 
 def _require_admin(user_id: int) -> None:
@@ -150,10 +161,10 @@ async def app_set_mode(
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, Any]:
     user_id = authorize(x_telegram_init_data or body.init_data)
-    if user_id:
-        denied = agent_mode_denied_message(user_id)
-        if denied:
-            raise HTTPException(status_code=403, detail=denied)
+    _require_identified(user_id)  # uid 0 (dev-open anon) не змінює режим агента
+    denied = agent_mode_denied_message(user_id)
+    if denied:
+        raise HTTPException(status_code=403, detail=denied)
     mode = require_mode(body.mode, AGENT_MODES)
     res: dict[str, Any] = await request.app.state.svc.set_mode(mode)
     return res
@@ -247,6 +258,7 @@ async def app_trust(
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, str]:
     user_id = authorize(x_telegram_init_data)
+    _require_identified(user_id)  # uid 0 (dev-open anon) не надає computer-trust
     await request.app.state.tools.grant_trust(user_id)
     return {"status": "trusted"}
 
@@ -291,6 +303,7 @@ async def app_run_macro(
     x_telegram_init_data: str | None = Header(default=None),
 ) -> dict[str, str]:
     user_id = authorize(x_telegram_init_data)
+    _require_identified(user_id)  # uid 0 (dev-open anon) не запускає макроси
     text = await request.app.state.tools.run_macro(user_id, name)
     return {"text": text}
 

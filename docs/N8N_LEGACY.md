@@ -17,7 +17,7 @@ Telegram → gateway (polling) → tools/agent → Ollama / toolkit
 
 1. Вимкни webhook n8n на той самий Telegram-токен (конфлікт getUpdates).
 2. `TELEGRAM_INGEST_MODE=polling` у `.env`.
-3. Перенеси логіку в `tools/app/toolkit.py` або gateway bot commands.
+3. Перенеси логіку в `tools/app/toolkit/` (пакет) або gateway bot commands.
 4. Docker: сервіс `n8n` можна не піднімати в `docker compose up`.
 
 ## Посилання

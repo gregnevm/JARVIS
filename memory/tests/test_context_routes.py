@@ -87,6 +87,26 @@ async def test_ingest_falls_back_to_content_for_summary(client):
     assert call.kwargs["summary"] == "текст смс"
 
 
+async def test_ingest_redacts_secrets_in_summary_and_payload(client):
+    """P2-4: серверний backstop редакції — секрети не лягають у context_events."""
+    secret = "sk-jarvis-ABCDEF0123456789ABCDEF0123456789"
+    async with client as c:
+        r = await c.post(
+            "/context/ingest",
+            json={
+                "user_id": 1,
+                "summary": f"токен {secret} і картка 4111 1111 1111 1111",
+                "sensitivity": "personal",
+                "payload": {"raw": f"key={secret}"},
+            },
+        )
+    assert r.status_code == 200
+    call = app.state.db.add_context_event.await_args
+    assert secret not in call.kwargs["summary"]
+    assert "[REDACTED:card]" in call.kwargs["summary"]
+    assert secret not in call.kwargs["payload"]["raw"]
+
+
 async def test_ingest_survives_embed_failure(client):
     """P1 offline-first: збір не падає, якщо Ollama недоступний — embedding=None."""
     app.state.embedder.embed = AsyncMock(side_effect=RuntimeError("ollama down"))

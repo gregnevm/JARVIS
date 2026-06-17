@@ -1,7 +1,7 @@
 """Pre-commit lint gate (CA-5.5) — turnkey P10 post_tool-хук.
 
-Після кожної успішної правки коду (`code_edit`/`code_edit_batch`/`rename_symbol`)
-автоматично ганяє lint і дописує підсумок до результату інструмента, який бачить
+Після кожної успішної правки коду (`code_edit`/`code_edit_batch`, у т.ч. mode
+`rename_symbol`) автоматично ганяє lint і дописує підсумок до результату, який бачить
 агент. Так проблеми спливають ОДРАЗУ після правки — до того, як агент закомітить.
 
 Вмикається одним прапором `CODING_PRECOMMIT_GATE=true` (built-in, без копіювання
@@ -18,7 +18,9 @@ from .config import settings
 
 logger = logging.getLogger("jarvis.tools.precommit_gate")
 
-_EDIT_TOOLS = frozenset({"code_edit", "code_edit_batch", "rename_symbol"})
+# `rename_symbol` — це mode `code_edit`/`code_edit_batch`, не окремий tool-name,
+# тож у `ctx["tool"]` він не з'являється (dispatch має лише ці два хендлери).
+_EDIT_TOOLS = frozenset({"code_edit", "code_edit_batch"})
 
 
 def _edit_succeeded(result: str) -> bool:

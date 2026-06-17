@@ -40,12 +40,13 @@ public final class Voice {
     }
 
     private static byte[] readFile(File f) throws Exception {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        FileInputStream in = new FileInputStream(f);
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-        in.close();
-        return out.toByteArray();
+        // try-with-resources: FileInputStream закриється навіть на винятку читання.
+        try (FileInputStream in = new FileInputStream(f);
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return out.toByteArray();
+        }
     }
 }

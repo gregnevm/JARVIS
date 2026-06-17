@@ -30,6 +30,12 @@ class DB:
         warn = alembic_migrate.embed_dim_mismatch(meta)
         if warn:
             logger.warning(warn)
+        # Друга, надійніша перевірка: РЕАЛЬНА розмірність pgvector-колонки vs env.
+        col_warn = alembic_migrate.column_dim_mismatch(
+            await alembic_migrate.column_embed_dim(self)
+        )
+        if col_warn:
+            logger.warning(col_warn)
 
     async def migrate(self) -> None:
         """Alembic upgrade head (idempotent). Викликати окремо без connect()."""
@@ -363,9 +369,16 @@ class DB:
         event_id: str | None = None,
         event_ts: str | None = None,
         payload: dict[str, Any] | None = None,
+        subjects: list[str] | None = None,
+        visibility: str = "private",
+        audience: list[str] | None = None,
+        group_ref: int | None = None,
     ) -> dict[str, Any]:
         """Записує паспорт контексту. Ідемпотентно по (user_id, event_id), якщо
-        event_id заданий: дубль повертає {"inserted": False} і існуючий id."""
+        event_id заданий: дубль повертає {"inserted": False} і існуючий id.
+
+        Командна видимість (Стовп D §4.1) — subjects/visibility/audience/group_ref;
+        дефолти зберігають owner-scoped (private) поведінку (S2 solo-user незмінний)."""
         import json as _json
 
         vec = to_vector_literal(embedding) if embedding is not None else None
@@ -373,8 +386,10 @@ class DB:
             row = await con.fetchrow(
                 "INSERT INTO context_events "
                 "(user_id, org_id, event_id, kind, source, summary, tags, "
-                " sensitivity, ref, payload, embedding, event_ts) "
-                "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::vector,$12) "
+                " sensitivity, ref, payload, embedding, event_ts, "
+                " subjects, visibility, audience, group_ref) "
+                "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::vector,$12,"
+                " $13,$14,$15,$16) "
                 "ON CONFLICT (user_id, event_id) WHERE event_id IS NOT NULL "
                 "DO NOTHING RETURNING id",
                 user_id,
@@ -389,6 +404,10 @@ class DB:
                 _json.dumps(payload or {}),
                 vec,
                 event_ts,
+                list(subjects or []),
+                visibility or "private",
+                list(audience or []),
+                group_ref,
             )
             if row is not None:
                 return {"id": int(row["id"]), "inserted": True}
@@ -555,3 +574,266 @@ class DB:
                 vec,
             )
         return res.endswith("1")
+
+    # --- Стовп D: org-граф (squads / relationships / delegates) --------------
+
+    async def create_squad(
+        self, *, org_id: str, name: str, parent_id: str | None = None, kind: str = "team"
+    ) -> dict[str, Any]:
+        async with self.pool.acquire() as con:
+            row = await con.fetchrow(
+                "INSERT INTO squads (org_id, name, parent_id, kind) "
+                "VALUES ($1,$2,$3,$4) RETURNING id, org_id, name, parent_id, kind",
+                org_id, name, parent_id, kind,
+            )
+        return {
+            "id": str(row["id"]), "org_id": row["org_id"], "name": row["name"],
+            "parent_id": str(row["parent_id"]) if row["parent_id"] else None, "kind": row["kind"],
+        }
+
+    async def list_squads(self, org_id: str) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT id, org_id, name, parent_id, kind FROM squads WHERE org_id=$1 ORDER BY name",
+                org_id,
+            )
+        return [
+            {
+                "id": str(r["id"]), "org_id": r["org_id"], "name": r["name"],
+                "parent_id": str(r["parent_id"]) if r["parent_id"] else None, "kind": r["kind"],
+            }
+            for r in rows
+        ]
+
+    async def add_squad_member(
+        self, *, squad_id: str, user_id: str, title: str | None = None, seniority: str | None = None
+    ) -> bool:
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "INSERT INTO squad_members (squad_id, user_id, title, seniority) "
+                "VALUES ($1,$2,$3,$4) ON CONFLICT (squad_id, user_id) "
+                "DO UPDATE SET title=EXCLUDED.title, seniority=EXCLUDED.seniority",
+                squad_id, user_id, title, seniority,
+            )
+        return bool(res)
+
+    async def list_squad_members(self, org_id: str) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT sm.squad_id, sm.user_id, sm.title, sm.seniority FROM squad_members sm "
+                "JOIN squads s ON s.id = sm.squad_id WHERE s.org_id=$1",
+                org_id,
+            )
+        return [
+            {"squad_id": str(r["squad_id"]), "user_id": r["user_id"],
+             "title": r["title"], "seniority": r["seniority"]}
+            for r in rows
+        ]
+
+    async def upsert_relationship(
+        self, *, org_id: str, src: str, dst: str, kind: str,
+        weight: float = 1.0, source: str = "declared",
+    ) -> bool:
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "INSERT INTO relationships (org_id, src_user_id, dst_user_id, kind, weight, source) "
+                "VALUES ($1,$2,$3,$4,$5,$6) "
+                "ON CONFLICT (org_id, src_user_id, dst_user_id, kind) "
+                "DO UPDATE SET weight=EXCLUDED.weight, source=EXCLUDED.source, updated_at=now()",
+                org_id, src, dst, kind, weight, source,
+            )
+        return bool(res)
+
+    async def list_relationships(self, org_id: str) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT org_id, src_user_id, dst_user_id, kind, weight, source "
+                "FROM relationships WHERE org_id=$1",
+                org_id,
+            )
+        return [
+            {"org_id": r["org_id"], "src_user_id": r["src_user_id"], "dst_user_id": r["dst_user_id"],
+             "kind": r["kind"], "weight": float(r["weight"]), "source": r["source"]}
+            for r in rows
+        ]
+
+    async def get_delegate(self, org_id: str, principal_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "SELECT id, org_id, principal_id, persona, scopes, proactive "
+                "FROM delegates WHERE org_id=$1 AND principal_id=$2",
+                org_id, principal_id,
+            )
+        if r is None:
+            return None
+        import json as _json
+        persona = r["persona"]
+        if isinstance(persona, str):
+            persona = _json.loads(persona)
+        return {
+            "id": str(r["id"]), "org_id": r["org_id"], "principal_id": r["principal_id"],
+            "persona": persona or {}, "scopes": list(r["scopes"] or []), "proactive": bool(r["proactive"]),
+        }
+
+    async def upsert_delegate(
+        self, *, org_id: str, principal_id: str,
+        persona: dict[str, Any] | None = None,
+        scopes: list[str] | None = None,
+        proactive: bool = False,
+    ) -> dict[str, Any]:
+        import json as _json
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "INSERT INTO delegates (org_id, principal_id, persona, scopes, proactive) "
+                "VALUES ($1,$2,$3::jsonb,$4,$5) "
+                "ON CONFLICT (org_id, principal_id) DO UPDATE SET "
+                " persona=EXCLUDED.persona, scopes=EXCLUDED.scopes, proactive=EXCLUDED.proactive "
+                "RETURNING id, org_id, principal_id, persona, scopes, proactive",
+                org_id, principal_id, _json.dumps(persona or {}),
+                list(scopes or ["read:self"]), proactive,
+            )
+        persona_out = r["persona"]
+        if isinstance(persona_out, str):
+            persona_out = _json.loads(persona_out)
+        return {
+            "id": str(r["id"]), "org_id": r["org_id"], "principal_id": r["principal_id"],
+            "persona": persona_out or {}, "scopes": list(r["scopes"] or []), "proactive": bool(r["proactive"]),
+        }
+
+    # --- Стовп D: Telegram-групи (presence / consent) ------------------------
+
+    async def get_group(self, chat_id: int) -> dict[str, Any] | None:
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "SELECT chat_id, org_id, squad_id, title, ingest FROM tg_groups WHERE chat_id=$1",
+                chat_id,
+            )
+        if r is None:
+            return None
+        return {
+            "chat_id": int(r["chat_id"]), "org_id": r["org_id"],
+            "squad_id": str(r["squad_id"]) if r["squad_id"] else None,
+            "title": r["title"], "ingest": r["ingest"],
+        }
+
+    async def list_groups(self, org_id: str) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT chat_id, org_id, squad_id, title, ingest FROM tg_groups WHERE org_id=$1",
+                org_id,
+            )
+        return [
+            {"chat_id": int(r["chat_id"]), "org_id": r["org_id"],
+             "squad_id": str(r["squad_id"]) if r["squad_id"] else None,
+             "title": r["title"], "ingest": r["ingest"]}
+            for r in rows
+        ]
+
+    async def upsert_group(
+        self, *, chat_id: int, org_id: str, title: str | None = None,
+        ingest: str = "off", squad_id: str | None = None, consented_by: str | None = None,
+    ) -> dict[str, Any]:
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "INSERT INTO tg_groups (chat_id, org_id, title, ingest, squad_id, consented_by) "
+                "VALUES ($1,$2,$3,$4,$5,$6) "
+                "ON CONFLICT (chat_id) DO UPDATE SET "
+                " ingest=EXCLUDED.ingest, title=COALESCE(EXCLUDED.title, tg_groups.title), "
+                " squad_id=COALESCE(EXCLUDED.squad_id, tg_groups.squad_id), "
+                " consented_by=COALESCE(EXCLUDED.consented_by, tg_groups.consented_by) "
+                "RETURNING chat_id, org_id, squad_id, title, ingest",
+                chat_id, org_id, title, ingest, squad_id, consented_by,
+            )
+        return {
+            "chat_id": int(r["chat_id"]), "org_id": r["org_id"],
+            "squad_id": str(r["squad_id"]) if r["squad_id"] else None,
+            "title": r["title"], "ingest": r["ingest"],
+        }
+
+    async def upsert_group_member(
+        self, *, chat_id: int, telegram_id: int, user_id: str | None = None
+    ) -> bool:
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "INSERT INTO tg_group_members (chat_id, telegram_id, user_id, last_seen) "
+                "VALUES ($1,$2,$3, now()) "
+                "ON CONFLICT (chat_id, telegram_id) DO UPDATE SET "
+                " user_id=COALESCE(EXCLUDED.user_id, tg_group_members.user_id), last_seen=now()",
+                chat_id, telegram_id, user_id,
+            )
+        return bool(res)
+
+    # --- Стовп D: процеси (BPO, TC-6) ----------------------------------------
+
+    @staticmethod
+    def _process_json(r: "asyncpg.Record") -> dict[str, Any]:
+        import json as _json
+        steps = r["steps"]
+        if isinstance(steps, str):
+            steps = _json.loads(steps)
+        return {
+            "id": str(r["id"]), "org_id": r["org_id"], "owner_user_id": r["owner_user_id"],
+            "squad_id": str(r["squad_id"]) if r["squad_id"] else None,
+            "title": r["title"], "template": r["template"], "status": r["status"],
+            "steps": steps or [],
+        }
+
+    async def create_process(
+        self, *, org_id: str, owner_user_id: str, title: str,
+        steps: list[dict[str, Any]] | None = None,
+        squad_id: str | None = None, template: str | None = None, status: str = "draft",
+    ) -> dict[str, Any]:
+        import json as _json
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "INSERT INTO processes (org_id, owner_user_id, title, steps, squad_id, template, status) "
+                "VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7) "
+                "RETURNING id, org_id, owner_user_id, squad_id, title, template, status, steps",
+                org_id, owner_user_id, title, _json.dumps(steps or []), squad_id, template, status,
+            )
+        return self._process_json(r)
+
+    async def get_process(self, process_id: str, org_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "SELECT id, org_id, owner_user_id, squad_id, title, template, status, steps "
+                "FROM processes WHERE id=$1 AND org_id=$2",
+                process_id, org_id,
+            )
+        return self._process_json(r) if r is not None else None
+
+    async def list_processes(self, org_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT id, org_id, owner_user_id, squad_id, title, template, status, steps "
+                "FROM processes WHERE org_id=$1 ORDER BY updated_at DESC LIMIT $2",
+                org_id, limit,
+            )
+        return [self._process_json(r) for r in rows]
+
+    async def update_process(
+        self, *, process_id: str, org_id: str, steps: list[dict[str, Any]], status: str
+    ) -> bool:
+        import json as _json
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "UPDATE processes SET steps=$3::jsonb, status=$4, updated_at=now() "
+                "WHERE id=$1 AND org_id=$2",
+                process_id, org_id, _json.dumps(steps), status,
+            )
+        return res.endswith("1")
+
+    async def bump_relationship(
+        self, *, org_id: str, src: str, dst: str, kind: str = "collaborates_with", delta: float = 1.0
+    ) -> float:
+        """Підсилює observed-ребро (§3.3): вставляє з weight=delta або += delta. Повертає нову вагу."""
+        async with self.pool.acquire() as con:
+            val = await con.fetchval(
+                "INSERT INTO relationships (org_id, src_user_id, dst_user_id, kind, weight, source) "
+                "VALUES ($1,$2,$3,$4,$5,'observed') "
+                "ON CONFLICT (org_id, src_user_id, dst_user_id, kind) "
+                "DO UPDATE SET weight = relationships.weight + $5, source='observed', updated_at=now() "
+                "RETURNING weight",
+                org_id, src, dst, kind, delta,
+            )
+        return float(val or 0.0)
