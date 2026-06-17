@@ -203,6 +203,34 @@ async def _handle_agent_turn(
             pass
 
 
+async def _handle_delegate_tick(
+    tools: ToolsClient, tg: TelegramClient, job_id: str, uid: int, payload: dict[str, Any]
+) -> None:
+    """Проактивний тік делегата (Стовп D TC-5): daily-brief / watcher.
+
+    S4-безпечно: лише READ-ONLY рушій — делегат міркує над контекстом principal і
+    НОТИФІКУЄ (нічого не виконує без ✅). Мутуючі/зовнішні пропозиції підтверджує
+    principal окремо (proactive.gate на боці агента).
+    """
+    principal = str(payload.get("principal_id") or uid or "")
+    if not principal:
+        await tools.finish_bg_job(job_id, error="invalid delegate payload", status="failed")
+        return
+    prompt = (
+        "Ти проактивний делегат. Переглянь свіжий контекст і команду principal та дай "
+        "стислий daily-brief: що потребує уваги, хто чекає відповіді, які кроки "
+        "забуксували. Лише підсумок і пропозиції — нічого не виконуй."
+    )
+    try:
+        brief = await tools.process({"user_id": int(uid or 0), "text": prompt, "mode": "agent"})
+        await tools.finish_bg_job(job_id, result=(brief or "")[:3500], status="done")
+        if brief:
+            await tg.send_message(uid, f"🔔 Делегат — daily brief:\n{brief[:3500]}")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("bg delegate tick %s failed: %s", job_id, exc)
+        await tools.finish_bg_job(job_id, error=str(exc)[:500], status="failed")
+
+
 _JOB_HANDLERS: dict[str, JobHandler] = {
     "deep_research": _handle_deep_research,
     "subagent": _handle_subagent,
@@ -210,6 +238,7 @@ _JOB_HANDLERS: dict[str, JobHandler] = {
     "orchestrator": _handle_orchestrator,
     "cursor_task": _handle_cursor_task,
     "coding_task": _handle_coding_task,
+    "delegate_tick": _handle_delegate_tick,
     "agent_turn": _handle_agent_turn,
 }
 

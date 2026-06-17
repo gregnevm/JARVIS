@@ -18,8 +18,11 @@ from .models import (
 )
 from .graph import OrgGraph
 from .visibility import VisibleResource, can_read
+from .delegate import DelegateActor, delegate_actor
 
 __all__ = [
+    "DelegateActor",
+    "delegate_actor",
     "REL_KINDS",
     "SQUAD_KINDS",
     "VALID_VISIBILITIES",
