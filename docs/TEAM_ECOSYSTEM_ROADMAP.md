@@ -1,7 +1,10 @@
 # JARVIS → Team Ecosystem: архітектурний трек (Стовп D)
 
-> **Версія:** 0.1 (2026-06-17) — пропозиція до обговорення (ще не прийнято в `AGENTS.md`).
-> **Статус:** DRAFT-архітектура / трек-roadmap. Потребує рішення власника про підняття до «Стовпа D».
+> **Версія:** 0.2 (2026-06-17) — фундамент реалізовано (TC-0…TC-6 ядро), за прапорами.
+> **Статус:** IN PROGRESS. Доменний кістяк (граф/видимість/процеси/проактивність),
+> сховище (міграція 004) і presence-шлях реалізовані; лишається продуктова повнота
+> (UI-візуалізація графа, BPO-двигун із диспетчем, observed-graph). `AGENTS.md` §2 ще
+> не оновлено — підняття до офіційного «Стовпа D» лишається рішенням власника (D-1).
 > **Скоуп:** перетворення JARVIS із персонального асистента 1-користувача на **командну SaaS-екосистему**:
 > менеджери + їхні AI-асистенти (делегати), спільні Telegram-групи, граф зв'язків між людьми,
 > проактивна автоматизація, оркестрація бізнес-процесів по ієрархії команди.
@@ -437,15 +440,15 @@ Telegram-команди (канал): `/team`, `/who <@user>` (хто це в г
 Стартова умова всього треку — **SaaS PR#0 (✅) + PR#1 (✅ foundation) + PR#2 (tenant schema)**: без
 `org_id`/`RequestContext` команда не має фундаменту. Послідовність:
 
-| Фаза | Зміст | Старт-умова | Цінність |
-|------|-------|-------------|----------|
-| **TC-0** | `orggraph` домен + таблиці `squads/squad_members/relationships` + Platform таб «Команда» (declared graph) | SaaS PR#2 | ієрархія введена й видима |
-| **TC-1** | `VisibilityPolicy` + паспорт `subjects/visibility/audience` + graph-aware ретрив | TC-0 | спільна пам'ять за політикою (ядро зсуву §1.1) |
-| **TC-2** | Group presence: `chat.type` routing, ідентифікація членів, `tg_groups` + згода | TC-1 | бот живе в групах, ідентифікує по tg_id |
-| **TC-3** | Ambient-збір → паспорти (raw-path batch) + observed-graph (`weight`) | TC-2 | «розуміння зв'язків» + контекст із груп |
-| **TC-4** | Delegate: персона + scopes + delegate-as-actor; DM-персони | TC-1 | «менеджер ↔ асистент» формалізовано |
-| **TC-5** | Proactive engine (`delegate_tick`, daily brief, watchers, HITL-gate) | TC-4 | «проактивний та автоматизований» |
-| **TC-6** | BPO: `Process` engine, шаблони, approval/SLA-ескалація по ієрархії | TC-4 + reminders | «оркестрація бізнес-процесів» |
+| Фаза | Зміст | Старт-умова | Статус |
+|------|-------|-------------|--------|
+| **TC-0** | `orggraph` домен + таблиці `squads/squad_members/relationships` + Platform таб «Команда» (declared graph) | SaaS PR#2 | [x] домен `jarvis_core/orggraph`, міграція 004, memory `/team/*`, tools-proxy, Platform «Команда» tab |
+| **TC-1** | `VisibilityPolicy` + паспорт `subjects/visibility/audience` + graph-aware ретрив | TC-0 | [x] `orggraph/visibility.can_read` (private/squad/org/custom + health/finance гард) + Passport-поля + `/context/ingest` wiring; SQL-предикат у пошуку — попереду |
+| **TC-2** | Group presence: `chat.type` routing, ідентифікація членів, `tg_groups` + згода | TC-1 | [x] `bot/group.py` (decide/identify/orchestrate за TEAM_MODE), `tg_groups` + consent routes, ambient `group_collect` → паспорт |
+| **TC-3** | Ambient-збір → паспорти (raw-path batch) + observed-graph (`weight`) | TC-2 | [~] ambient-збір у паспорти є (group_msg, visibility=squad); observed-graph (`weight` зі спостереження) — попереду |
+| **TC-4** | Delegate: персона + scopes + delegate-as-actor; DM-персони | TC-1 | [x] `orggraph/delegate.DelegateActor` (видимість principal + scope-гейт), `delegates` store/routes; DM-персони — попереду |
+| **TC-5** | Proactive engine (`delegate_tick`, daily brief, watchers, HITL-gate) | TC-4 | [~] `proactive.gate` (S4) + `delegate_tick` JOB_TYPE + handler (read-only daily-brief/notify); watchers/SLA-тригери — попереду |
+| **TC-6** | BPO: `Process` engine, шаблони, approval/SLA-ескалація по ієрархії | TC-4 + reminders | [~] `jarvis_core/process` машина станів (ready/advance/escalation) + serialization; HTTP-API/диспетч кроків і шаблони — попереду |
 
 **Найкоротший шлях до демо-цінності:** TC-0 → TC-1 → TC-2 → TC-4 (граф + видимість + групи + делегат)
 дає вже «асистент бачить команду й контекст групи». TC-5/TC-6 — проактивність і процеси — зверху.
@@ -493,6 +496,7 @@ Telegram-команди (канал): `/team`, `/who <@user>` (хто це в г
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-17 | 0.2 | Реалізовано ядро TC-0…TC-6 за прапорами: домен `orggraph`/`process`/`proactive`, міграція 004 + memory `/team/*`, group presence (TEAM_MODE), delegate-as-actor, `delegate_tick`, Platform «Команда» tab. Лишається продуктова повнота (observed-graph, BPO-диспетч, граф-візуалізація) |
 | 2026-06-17 | 0.1 | Початкова пропозиція Стовпа D: граф зв'язків, видимість, групи, делегати, проактивність, BPO |
 
 ---
