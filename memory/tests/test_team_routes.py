@@ -26,6 +26,14 @@ class FakeTeamDB:
                           "persona": {"tone": "dry"}, "scopes": ["read:self"], "proactive": False}
         )
         self.get_delegate = AsyncMock(return_value=None)
+        self.list_groups = AsyncMock(return_value=[
+            {"chat_id": -100, "org_id": "o", "squad_id": None, "title": "Team", "ingest": "ambient"},
+        ])
+        self.get_group = AsyncMock(return_value=None)
+        self.upsert_group = AsyncMock(
+            return_value={"chat_id": -100, "org_id": "o", "squad_id": None, "title": "Team", "ingest": "ambient"}
+        )
+        self.upsert_group_member = AsyncMock(return_value=True)
         # graph data: A,B in backend; A reports_to M
         self.list_squads = AsyncMock(return_value=[
             {"id": "backend", "org_id": "o", "name": "Backend", "parent_id": None, "kind": "team"},
@@ -103,6 +111,27 @@ async def test_delegate_upsert_and_404(client):
         assert r.status_code == 200 and r.json()["principal_id"] == "A"
         r2 = await c.get("/team/delegates/ZZZ?org_id=o")
         assert r2.status_code == 404
+
+
+async def test_group_consent_validates_ingest(client):
+    async with client as c:
+        bad = await c.post("/team/groups/consent", json={"org_id": "o", "chat_id": -100, "ingest": "spy"})
+        assert bad.status_code == 400
+        ok = await c.post("/team/groups/consent",
+                          json={"org_id": "o", "chat_id": -100, "ingest": "ambient", "title": "Team"})
+        assert ok.status_code == 200 and ok.json()["ingest"] == "ambient"
+
+
+async def test_get_group_defaults_off_when_unregistered(client):
+    async with client as c:
+        r = await c.get("/team/groups/-999")
+    assert r.status_code == 200 and r.json()["ingest"] == "off"
+
+
+async def test_group_member_upsert(client):
+    async with client as c:
+        r = await c.post("/team/groups/members", json={"chat_id": -100, "telegram_id": 5, "user_id": "A"})
+    assert r.status_code == 200 and r.json()["ok"] is True
 
 
 def test_migration_chain_includes_004():

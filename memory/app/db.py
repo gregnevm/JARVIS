@@ -693,3 +693,66 @@ class DB:
             "id": str(r["id"]), "org_id": r["org_id"], "principal_id": r["principal_id"],
             "persona": persona_out or {}, "scopes": list(r["scopes"] or []), "proactive": bool(r["proactive"]),
         }
+
+    # --- Стовп D: Telegram-групи (presence / consent) ------------------------
+
+    async def get_group(self, chat_id: int) -> dict[str, Any] | None:
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "SELECT chat_id, org_id, squad_id, title, ingest FROM tg_groups WHERE chat_id=$1",
+                chat_id,
+            )
+        if r is None:
+            return None
+        return {
+            "chat_id": int(r["chat_id"]), "org_id": r["org_id"],
+            "squad_id": str(r["squad_id"]) if r["squad_id"] else None,
+            "title": r["title"], "ingest": r["ingest"],
+        }
+
+    async def list_groups(self, org_id: str) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT chat_id, org_id, squad_id, title, ingest FROM tg_groups WHERE org_id=$1",
+                org_id,
+            )
+        return [
+            {"chat_id": int(r["chat_id"]), "org_id": r["org_id"],
+             "squad_id": str(r["squad_id"]) if r["squad_id"] else None,
+             "title": r["title"], "ingest": r["ingest"]}
+            for r in rows
+        ]
+
+    async def upsert_group(
+        self, *, chat_id: int, org_id: str, title: str | None = None,
+        ingest: str = "off", squad_id: str | None = None, consented_by: str | None = None,
+    ) -> dict[str, Any]:
+        async with self.pool.acquire() as con:
+            r = await con.fetchrow(
+                "INSERT INTO tg_groups (chat_id, org_id, title, ingest, squad_id, consented_by) "
+                "VALUES ($1,$2,$3,$4,$5,$6) "
+                "ON CONFLICT (chat_id) DO UPDATE SET "
+                " ingest=EXCLUDED.ingest, title=COALESCE(EXCLUDED.title, tg_groups.title), "
+                " squad_id=COALESCE(EXCLUDED.squad_id, tg_groups.squad_id), "
+                " consented_by=COALESCE(EXCLUDED.consented_by, tg_groups.consented_by) "
+                "RETURNING chat_id, org_id, squad_id, title, ingest",
+                chat_id, org_id, title, ingest, squad_id, consented_by,
+            )
+        return {
+            "chat_id": int(r["chat_id"]), "org_id": r["org_id"],
+            "squad_id": str(r["squad_id"]) if r["squad_id"] else None,
+            "title": r["title"], "ingest": r["ingest"],
+        }
+
+    async def upsert_group_member(
+        self, *, chat_id: int, telegram_id: int, user_id: str | None = None
+    ) -> bool:
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "INSERT INTO tg_group_members (chat_id, telegram_id, user_id, last_seen) "
+                "VALUES ($1,$2,$3, now()) "
+                "ON CONFLICT (chat_id, telegram_id) DO UPDATE SET "
+                " user_id=COALESCE(EXCLUDED.user_id, tg_group_members.user_id), last_seen=now()",
+                chat_id, telegram_id, user_id,
+            )
+        return bool(res)

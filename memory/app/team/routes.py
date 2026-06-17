@@ -53,6 +53,25 @@ class DelegateUpsert(BaseModel):
     proactive: bool = False
 
 
+class GroupConsent(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    chat_id: int
+    ingest: str = "off"
+    title: str | None = None
+    squad_id: str | None = None
+    consented_by: str | None = None
+
+
+class GroupMemberUpsert(BaseModel):
+    chat_id: int
+    telegram_id: int
+    user_id: str | None = None
+
+
+# Рівні згоди на обробку групи (дзеркалить gateway bot.group.INGEST_LEVELS).
+_INGEST_LEVELS = frozenset({"off", "addressed", "ambient"})
+
+
 def _db(request: Request) -> Any:
     return request.app.state.db
 
@@ -150,3 +169,34 @@ async def upsert_delegate(req: DelegateUpsert, request: Request) -> dict[str, An
         org_id=req.org_id, principal_id=req.principal_id,
         persona=req.persona, scopes=req.scopes, proactive=req.proactive,
     )
+
+
+@router.get("/groups")
+async def list_groups(request: Request, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+    return {"groups": await _db(request).list_groups(org_id), "org_id": org_id}
+
+
+@router.get("/groups/{chat_id}")
+async def get_group(chat_id: int, request: Request) -> dict[str, Any]:
+    rec = await _db(request).get_group(chat_id)
+    # Незареєстрована група = дефолт off (privacy-first §8.1) — не 404, щоб gateway
+    # просто мовчав без зайвої гілки помилки.
+    return rec or {"chat_id": chat_id, "ingest": "off", "org_id": None, "squad_id": None, "title": None}
+
+
+@router.post("/groups/consent")
+async def group_consent(req: GroupConsent, request: Request) -> dict[str, Any]:
+    if req.ingest not in _INGEST_LEVELS:
+        raise HTTPException(status_code=400, detail=f"ingest must be one of {sorted(_INGEST_LEVELS)}")
+    return await _db(request).upsert_group(
+        chat_id=req.chat_id, org_id=req.org_id, title=req.title,
+        ingest=req.ingest, squad_id=req.squad_id, consented_by=req.consented_by,
+    )
+
+
+@router.post("/groups/members")
+async def group_member(req: GroupMemberUpsert, request: Request) -> dict[str, Any]:
+    ok = await _db(request).upsert_group_member(
+        chat_id=req.chat_id, telegram_id=req.telegram_id, user_id=req.user_id
+    )
+    return {"ok": bool(ok)}

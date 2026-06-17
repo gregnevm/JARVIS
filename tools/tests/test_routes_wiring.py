@@ -92,6 +92,9 @@ EXPECTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/cursor/tasks"),
     ("POST", "/cursor/tasks/run"),
     ("POST", "/context/jobs/{name}"),
+    ("GET", "/team/group/{chat_id}/ingest"),
+    ("POST", "/team/group/member"),
+    ("POST", "/team/group/collect"),
 }
 
 
