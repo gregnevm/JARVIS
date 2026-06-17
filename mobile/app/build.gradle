@@ -1,0 +1,57 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ai.jarvis.mvp'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "ai.jarvis.mvp"
+        minSdk 24
+        targetSdk 34
+        versionCode 8
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            // build-apk.ps1 генерує keystore і пише mobile/keystore.properties (gitignored).
+            def kp = rootProject.file("keystore.properties")
+            if (kp.exists()) {
+                def props = new Properties()
+                props.load(new FileInputStream(kp))
+                storeFile file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+            }
+            // ROOT-FIX «програму не встановлено»: AGP 8 при minSdk≥24 вимикає v1 (JAR)
+            // підпис — частина інсталяторів/OEM (та Android 7–8) тоді відмовляють.
+            // Вмикаємо v1+v2+v3 явно → APK ставиться на найширшому спектрі пристроїв.
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
+        }
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// MVP свідомо без залежностей: лише android.webkit (framework). Це тримає білд
+// легким і дозволяє офлайн-збірку без Maven (AGENTS.md P6 YAGNI).
+dependencies {
+}

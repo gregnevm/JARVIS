@@ -60,6 +60,66 @@ Privacy не як фіча — як архітектурна властивіс�
 | P6 | **YAGNI** | Реалізуємо те що потрібно зараз, не "на майбутнє" |
 | P7 | **Single Source of Truth** | Model Registry — єдиний авторитет про версії |
 | P8 | **Separation of Concerns** | Training ≠ Inference ≠ Sync ≠ UI |
+| P9 | **Context Passport (summarize all)** | жоден артефакт не входить у систему «голим»: кожен несе самоописовий summary + embedding для контекстної індексації |
+| P10 | **Tag Everything** | кожен паспорт має структуровані namespaced-теги — і для індексації/ретриву, **і як адресовний хендл** (виклик конкретного блоку/модуля/пам'яті за тегом) |
+---
+### 1.2.1 Context Passport & Tagging Culture (P9 + P10)
+
+> **Спинна культура системи.** Дані без summary — це шум; summary без тегів — несортований
+> архів. Тому **все, що має значення, отримує паспорт контексту**, а паспорт **завжди** тегований.
+> Це не фіча окремого сервісу — це наскрізний контракт усієї системи.
+
+**Форма паспорта (canonical shape):**
+```python
+@dataclass
+class ContextPassport:
+    kind: str            # тип артефакту: message|session|project|event|daily|
+                         #   tool|skill|subagent|connector|file|symbol|run|doc|endpoint
+    summary: str         # 1–3 речення, dense, без води (стиль JARVIS)
+    tags: list[str]      # namespaced, контрольовані префікси (див. таксономію)
+    embedding: list[float] | None  # nomic-embed-text 768D (для семантичного ретриву)
+    owner: str           # org_id / user — для ownership-перевірки (anti-IDOR)
+    ts: str              # серверний час (ISO) — авторитет, не клієнтський
+    ref: str             # стабільний хендл артефакту (для адресації)
+```
+
+**Таксономія тегів (namespaced — `ns:value`):**
+
+| Namespace | Призначення | Приклади |
+|-----------|-------------|----------|
+| `kind:` | тип артефакту | `kind:daily`, `kind:tool`, `kind:call` |
+| `topic:` | предмет | `topic:finance`, `topic:rent` |
+| `person:` / `entity:` | хто/що | `person:mom`, `entity:monobank` |
+| `source:` | походження | `source:whatsapp`, `source:sms`, `source:code` |
+| `pillar:` | стовп продукту | `pillar:A`, `pillar:B`, `pillar:C` |
+| `module:` | **адресовний** блок коду/фічі | `module:scam-shield`, `module:agent` |
+| `sensitivity:` | рівень чутливості (→ redaction/vault) | `sensitivity:health`, `sensitivity:public` |
+| `lang:` | мова | `lang:uk`, `lang:en` |
+
+**Дві ролі тегів:**
+1. **Індексація** — фільтр/ретрив поверх RAG: `person:mom AND topic:rent`, `kind:daily AND lang:uk`.
+2. **Адресація** — тег як хендл виклику: «прожени `module:scam-shield`», «дай контекст
+   `person:mom` за тиждень». Це те, що користувач назвав «виклик конкретного блоку».
+
+**Де культура застосовується (наскрізно, статус adoption):**
+
+| Підсистема | Що отримує паспорт | Статус |
+|------------|--------------------|--------|
+| **memory** `context_events` (`/context/*`) | паспорт-store: kind+summary+tags+embedding, GIN-теги, HNSW-вектор | ✅ реалізовано (міграція 003, CL-3.9) |
+| **memory** (`/store` повідомлень) | повідомлення/сесія/проєкт — summary + tags поряд із embedding | ⛳ цільове (зараз лише chunk-embedding) |
+| **device events / daily** (APK, Стовп C) | кожна подія й daily-summary — паспорт; теги `person/source/sensitivity` | 🟡 бекенд готовий (`/api/v1/ingest/events`); APK-продюсер — CL-3 |
+| **tools / skills / subagents / connectors** | реєстрова картка = паспорт (summary+tags) → вибір/роутинг за тегами | 🟡 частково (є descriptions, нема tags) |
+| **coding-agent** (`repo_symbols` CA-2.3) | файл/символ — паспорт; `module:`-теги | 🟡 частково (символи індексуються) |
+| **docs / proposals** | frontmatter = паспорт (`description` = summary, додати `tags`) | 🟡 частково (є frontmatter) |
+| **API endpoints / runs / jobs** | кожен — summary+tags для трасування й addressability | ⛳ цільове |
+
+**Інваріанти:**
+- **P9-інваріант:** новий записуваний артефакт без `summary` — баг (як `store` без embedding).
+- **P10-інваріант:** новий summary без хоча б `kind:` + одного доменного тега — баг.
+- Теги — **контрольований словник із префіксами**; вільні теги дозволені, але префіксовані
+  (`topic:…`) пріоритетні для ретриву/адресації. Розбіжність код↔словник → IMPROVEMENT_PROPOSALS (D1).
+- Embedding-розмірність лишається 768D (`nomic-embed-text`) — guardrail зі статуту.
+
 ---
 ### 1.3 Quality Attributes (трейдофи)
 ```
@@ -1094,7 +1154,7 @@ score <  0.75 → reject, keep previous
 ---
 ### 9.4 Iteration Cycle
 ```
-Day 1:    100 прикладів → перший retrain (40 хв, RTX 3060)
+Day 1:    100 прикладів → перший retrain (≈40 хв на споживчому CUDA-GPU)
           Результат: базова адаптація tone
 Day 3:    30 поганих відповідей → виправити → додати до датасету
           Retrain → помітно стабільніше
@@ -1228,7 +1288,7 @@ Rollback procedure:
 **Context:** адаптація моделі під персональний профіль
 **Decision:** QLoRA (r=16) через Unsloth
 **Alternatives:** Full FT (потребує 80+ GB VRAM), Prefix Tuning (нижча якість)
-**Consequences:** +RTX 3060 справляється, +адаптер 80-200 MB, +модульність; -не змінює глибинні знання
+**Consequences:** +споживчий CUDA-GPU справляється, +адаптер 80-200 MB, +модульність; -не змінює глибинні знання
 ---
 ### ADR-003: SQLite-vec для Edge RAG
 **Context:** семантичний пошук офлайн без залежностей
@@ -1255,7 +1315,7 @@ Rollback procedure:
 **Consequences:** +instant rollback, +zero downtime; +shadow validation знижує ризик деградації
 ---
 ### ADR-007: Training — cloud-burst (RunPod), не локально
-**Context:** Unsloth/QLoRA потребує CUDA; цільова машина — AMD RX 5700 XT (ROCm не підтримується Unsloth)
+**Context:** Unsloth/QLoRA потребує CUDA; локальний інференс — на AMD GPU (Windows), де ROCm для Unsloth недоступний
 **Decision:** training виконується на ephemeral RunPod-інстансі; результат (LoRA .gguf) тягнеться назад і реєструється у ModelRegistry
 **Alternatives:** окрема NVIDIA-машина (капітальні витрати), AMD ROCm + кастомний стек (нестабільно)
 **Consequences:** +inference лишається суверенним і локальним; -датасет тимчасово залишає машину під час training (звузити тезу «privacy абсолютна» до inference); -потрібен RunPod-акаунт і трансфер даних

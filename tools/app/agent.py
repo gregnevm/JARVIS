@@ -331,6 +331,19 @@ class AgentRunner:
         thread = await build_thread_context(self._mem, user_id)
         prof = profile_prompt_block(user_id)
         parts = [p for p in (rag, thread) if p]
+        # Споживання зібраного контексту (P9/P10, CONTEXT_MODULE §7 крок 5): паспорти
+        # ambient-контексту інжектяться у промпт. За прапором — нуль latency, коли off.
+        from .config import settings as _settings
+
+        if _settings.enable_context_retrieval:
+            from jarvis_core.passport import format_context_block
+
+            passports = await self._mem.search_context(
+                user_id, text, top_k=_settings.context_retrieval_top_k
+            )
+            block = format_context_block(passports)
+            if block:
+                parts.append(block)
         return (" | ".join(parts) if parts else ""), prof
 
     async def run(

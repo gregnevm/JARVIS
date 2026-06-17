@@ -53,9 +53,9 @@ pgvector RAG, Ollama+Vulkan, tools, STT/TTS, docker) — це 80% ролі HQ з
 
 ## Залізна реальність (визначає план)
 
-| Задача | На AMD RX 5700 XT | Висновок |
+| Задача | На локальному AMD GPU | Висновок |
 |---|---|---|
-| **Inference** (Edge+Twin) | ✅ Ollama+Vulkan (доведено ~50-60 tok/s), KoboldCPP на CPU | будуємо локально |
+| **Inference** (Edge+Twin) | ✅ Ollama+Vulkan (GPU), KoboldCPP на CPU | будуємо локально |
 | **Embeddings/RAG** | ✅ nomic на Vulkan / SQLite-vec на CPU | локально |
 | **Training (Unsloth QLoRA)** | ❌ потребує CUDA, ROCm не підтримується | **тільки RunPod / NVIDIA-бокс** |
 

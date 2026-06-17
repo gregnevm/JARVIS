@@ -172,7 +172,7 @@ T4  Screenshot → vision → click/type                          — остан
 |---|--------|-----|--------|
 | AM-1.3.1 | Tool **`observe_screen`** → screenshot + vision JSON `{summary, elements[]}` | Структурована відповідь, не лише prose | [ ] |
 | AM-1.3.2 | **`act_on_screen`** — click/type за координатами або element id | Max 3 retry в одній ітерації лупа | [ ] |
-| AM-1.3.3 | VRAM policy: `OLLAMA_VISION_ON_DEMAND` + unload agent | Документовано для RX 5700 XT 8GB | [ ] |
+| AM-1.3.3 | VRAM policy: `OLLAMA_VISION_ON_DEMAND` + unload agent | Документовано для GPU з обмеженою VRAM (≈8 ГБ) | [ ] |
 | AM-1.3.4 | Заборона T4, якщо vision model не задана | Graceful message агенту | [ ] |
 
 ### AM-1.4 FS і шляхи

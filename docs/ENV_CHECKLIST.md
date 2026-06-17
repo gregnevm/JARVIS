@@ -57,6 +57,46 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 |--------|------------|--------|
 | `REMINDER_POLL_SECONDS` | `5` | Інтервал полера gateway для due reminders |
 
+## Client-API / JWT (Стовп C, CL-1)
+
+| Змінна | За замовч. | Навіщо |
+|--------|------------|--------|
+| `JWT_SECRET` | `` (вимкнено) | HS256-секрет для JWT-логіну клієнтів (`/api/v1/auth/login`). Порожньо → JWT off, лишаються initData/Basic. Згенеруй ≥32 байти: `openssl rand -hex 32` |
+| `JWT_ACCESS_TTL` | `3600` | Час життя access-токена (сек) |
+| `JWT_REFRESH_TTL` | `604800` | Час життя refresh-токена (сек, 7 днів) |
+| `SAAS_MODE` | `false` | Мультитенант (cloud). `false` = self-hosted, один synthetic org |
+| `DEFAULT_ORG_ID` | `00000000-…-0001` | Synthetic org для self-hosted (рідко змінюють) |
+
+> Self-hosted: `/api/v1/whoami` приймає JWT **або** Telegram initData **або** Basic (один resolver, CL-1.4).
+> JWT потрібен клієнтам без initData — mobile APK (CL-3) і майбутній SPA (CL-2).
+
+## Mobile APK (Стовп C, CL-3)
+
+| Змінна | За замовч. | Навіщо |
+|--------|------------|--------|
+| `APK_ARTIFACT_PATH` | `` → `{DATA_DIR}/artifacts/jarvis-mvp.apk` | Шлях до зібраного APK, який віддає команда `/apk`. Білд кладе файл у `data/artifacts/` (`./data:/data`), gateway бачить його одразу |
+| `APK_VERSION` | `0.1.0` | Версія для caption/підпису (синхронізована з `mobile/VERSION`) |
+
+> Збірка: `mobile/build-apk.ps1` (self-contained тулчейн) → `data/artifacts/jarvis-mvp.apk` + `*.meta.json`.
+> Доставка адміну: `scripts/send_apk_to_admin.py`; у боті — команда `/apk` (завжди віддає поточний apk).
+
+## Context ingest API (Стовп C, CL-3 — культура P9/P10)
+
+| Змінна | За замовч. | Навіщо |
+|--------|------------|--------|
+| `ENABLE_CONTEXT_API` | `false` | Вмикає `/api/v1/ingest/events` + `/api/v1/context/{search,recent,purge}` (паспорти контексту → memory). Дефолт off (S2) |
+| `CONTEXT_INGEST_MAX_BATCH` | `500` | Стеля подій в одному батчі ingest |
+| `ENABLE_CONTEXT_RETRIEVAL` | `false` | (tools) Інжект паспортів контексту в промпт агента (memory `/context/search`). Off = нуль додаткового latency |
+| `CONTEXT_RETRIEVAL_TOP_K` | `5` | Скільки паспортів інжектити в контекст агента |
+| `CONTEXT_SCHEDULER_ENABLED` | `false` | (gateway) In-app автозапуск context-jobs. Off = нічого; альтернатива — зовн. cron на `/api/v1/context/jobs/*` (ADR-008) |
+| `CONTEXT_SCHEDULER_USER_IDS` | `` → `ADMIN_USER_IDS` | Кого обслуговує scheduler (CSV Telegram id) |
+| `CONTEXT_DAILY_HOUR` | `6` | Година UTC щоденного `context_daily`+`context_retention` |
+| `CONTEXT_SCHEDULER_INTERVAL` | `1800` | Сек між тіками (summarize + перевірка daily) |
+
+> Збір контексту з паспортами (`kind`+`summary`+namespaced `tags`+embedding 768D, AGENTS.md C1).
+> Auth — спільний client-API resolver (JWT/initData/Basic). Колектор без залежностей:
+> `scripts/jarvis_context.py` (нотатка/pipe/hotkey/cron). Дані лише в memory користувача (S1).
+
 ## Безпека (рекомендовано)
 
 | Змінна | Навіщо |

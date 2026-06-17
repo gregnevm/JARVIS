@@ -68,7 +68,9 @@ services:
   # Memory — RAG: embeddings + retrieval (через Ollama + pgvector)
   # ---------------------------------------------------------
   memory:
-    build: ./memory
+    build:
+      context: .
+      dockerfile: memory/Dockerfile
     env_file: .env
     ports:
       - "8100:8100"

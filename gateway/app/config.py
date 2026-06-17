@@ -85,6 +85,17 @@ class Settings(BaseSettings):
     # Веб-консоль /platform (HTTP Basic Auth у браузері). Порожньо → fallback на
     # ADMIN_PANEL_PASSWORD. Telegram-адміни заходять через initData без пароля.
     platform_password: str = ""
+    # --- Client-API / JWT (CL-1, Стовп C) — усе за прапором (S2: self-hosted не ламається) ---
+    # JWT для клієнтів (mobile APK / SPA), що не мають Telegram initData. Порожньо =
+    # JWT-логін вимкнено; лишаються initData/Basic. Self-hosted: один admin логіниться
+    # PLATFORM_PASSWORD → JWT (synthetic org, owner/studio). Multi-user signup → SAAS PR#6.
+    jwt_secret: str = ""
+    jwt_access_ttl: int = 3600  # сек — час життя access-токена (1 год)
+    jwt_refresh_ttl: int = 604800  # сек — refresh-токен (7 днів)
+    # Synthetic org для self-hosted (дзеркало jarvis_core.context.DEFAULT_ORG_ID).
+    default_org_id: str = "00000000-0000-0000-0000-000000000001"
+    # Мультитенант-режим (cloud). false = self-hosted, один synthetic org.
+    saas_mode: bool = False
     # Спільний з tools каталог даних (Docker: ./data:/data). Звідки Platform читає
     # session-логи (logs/sessions/*.jsonl) і профілі (profiles/*.json).
     data_dir: str = "/data"
@@ -108,10 +119,35 @@ class Settings(BaseSettings):
     # Макс. розмір файлу для /file pull (байти, Telegram cap ~50MB).
     remote_file_max_bytes: int = 48 * 1024 * 1024
 
+    # --- Mobile APK (Стовп C, CL-3) ---
+    # Шлях до зібраного MVP APK. Порожньо → {DATA_DIR}/artifacts/jarvis-mvp.apk
+    # (./data:/data змонтовано в gateway). Команда /apk віддає цей файл у Telegram.
+    apk_artifact_path: str = ""
+    # Версія для підпису/caption APK (синхронізована з mobile/app/version).
+    apk_version: str = "0.1.0"
+
     # P11 OpenAI-compatible API (opt-in)
     enable_openai_api: bool = False
     openai_api_key: str = ""
     openai_default_user_id: int = 0
+
+    # Context ingest API (Стовп C / CL-3) — збір контексту з паспортами (P9/P10).
+    # Вхід для APK/скриптів/платформи → memory /context/*. За прапором (S2): дефолт off.
+    enable_context_api: bool = False
+    # Стеля подій в одному батчі /api/v1/ingest/events (анти-зловживання).
+    context_ingest_max_batch: int = 500
+
+    # Claude-міст для coding (dispatch -> remote code via Claude). Cloud, явний opt-in (S1).
+    enable_claude_code_bridge: bool = False
+
+    # In-app scheduler context-jobs (опційна автоматизація). Дефолт off (ADR-008:
+    # запуск із нагляду) — вмикати свідомо, або юзати зовн. cron на /api/v1/context/jobs/*.
+    context_scheduler_enabled: bool = False
+    # Кого обслуговувати (CSV Telegram id). Порожньо → ADMIN_USER_IDS.
+    context_scheduler_user_ids: str = ""
+    # Година (UTC) щоденного прогону daily+retention; між ними — summarize кожні interval.
+    context_daily_hour: int = 6
+    context_scheduler_interval: float = 1800.0  # сек між тіками (summarize + перевірка daily)
 
     @property
     def allowed_ids(self) -> set[int]:
@@ -149,6 +185,23 @@ class Settings(BaseSettings):
         raw = self.admin_user_ids.strip()
         if not raw:
             return self.allowed_ids
+        ids: set[int] = set()
+        for part in raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                ids.add(int(part))
+            except ValueError:
+                continue
+        return ids
+
+    @property
+    def context_scheduler_ids(self) -> set[int]:
+        """CONTEXT_SCHEDULER_USER_IDS. Порожньо → ADMIN_USER_IDS (self-hosted власник)."""
+        raw = self.context_scheduler_user_ids.strip()
+        if not raw:
+            return self.admin_ids
         ids: set[int] = set()
         for part in raw.split(","):
             part = part.strip()

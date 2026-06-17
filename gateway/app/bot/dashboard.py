@@ -75,6 +75,7 @@ def format_help() -> str:
         "<b>/mode</b> <code>chat|agent|hybrid|computer</code> · змінити роутинг\n"
         "<b>/plan</b> <code>&lt;задача&gt;</code> · план з підтвердженням\n"
         "<b>/cursor</b> <code>&lt;задача&gt;</code> · Cursor IDE (admin) · <code>/cursor ask</code>\n"
+        "<b>/apk</b> · MVP Android-клієнт (.apk) у Telegram\n"
         "<b>/sync</b> · Twin ingest + LoRA\n"
         "<b>/keyboard</b> <code>on|off</code> · reply-клавіатура\n"
         "<b>/admin</b> · Admin Mini App у Telegram (HTTPS) + inline-дії з підтвердженням\n"

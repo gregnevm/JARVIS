@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Голос (CL-3.4) — мікрофон для STT через WebView. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Ambient-контекст (CL-3.9 D3/D4): SMS + метадані дзвінків. Лише на власний сервер. -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!-- Переплановування upload-job після перезавантаження (persisted job). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- F1: push-клієнт (ntfy stream) як foreground-сервіс + локальні нотифікації. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="true"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <!-- Головний екран — нативний чат (Claude-подібний UX). -->
+        <activity
+            android:name=".ChatActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- B2: пейринг зі штабу — jarvis://pair?server=&token= (QR/deeplink). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="jarvis" android:host="pair" />
+            </intent-filter>
+        </activity>
+
+        <!-- Веб-консоль (Mini App / Platform) — внутрішній екран із чату. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Контекст / налаштування" />
+
+        <activity
+            android:name=".AppsActivity"
+            android:exported="false"
+            android:label="APK-застосунки" />
+
+        <!-- D2: лісенер сповіщень (grant у системних налаштуваннях). -->
+        <service
+            android:name=".NotificationCollector"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- D7: фоновий upload контексту (JobScheduler). -->
+        <service
+            android:name=".UploadJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!-- F1: push через ntfy (UnifiedPush) — foreground data-sync. -->
+        <service
+            android:name=".NtfyService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>

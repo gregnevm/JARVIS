@@ -158,5 +158,16 @@ class Settings(BaseSettings):
     coding_tree_max_entries: int = 300
     coding_grep_max_results: int = 60
 
+    # Context-retrieval (Стовп C / CL-3, культура P9/P10): інжект паспортів контексту
+    # у промпт агента (memory /context/search). Дефолт off — додатковий виклик/latency
+    # лише коли збір контексту увімкнено. Споживання зібраного контексту (CONTEXT_MODULE §7 крок 5).
+    enable_context_retrieval: bool = False
+    context_retrieval_top_k: int = 5
+
+    # Push через ntfy (BE3, CL-3.6) — daily-дайджест/пропозиції на телефон. Дефолт off (S1: ntfy, не FCM).
+    push_enabled: bool = False
+    ntfy_url: str = "https://ntfy.sh"
+    ntfy_topic: str = ""  # унікальний топік користувача; APK підписаний (UnifiedPush)
+
 
 settings = Settings()

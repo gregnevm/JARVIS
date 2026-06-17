@@ -327,7 +327,9 @@ async def wrap_execute(
         if blocked:
             return blocked
     if mutating and settings.computer_require_confirm and int(user_id) > 0:
-        await _touch_mutating_quota(user_id, tool, args)
+        # Не споживаємо квоту лише за видачу CONFIRM_MARKER — дію ще не застосовано.
+        # Квота рахується один раз у execute_confirmed після реального виконання
+        # (_check_mutating_quota вище блокує confirm-и понад ліміт).
         code = await save_pending(user_id, tool, args)
         desc = describe_action(tool, args)
         log_action(user_id, tool, tier, args, f"pending confirm {code}", confirmed=False)

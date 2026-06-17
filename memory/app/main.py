@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .config import settings
+from .context import router as context_router
 from .db import DB
 from .rag import Embedder, chunk_text
 
@@ -73,6 +74,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="JARVIS Memory", lifespan=lifespan)
+# Context Passport sub-package (P9/P10/C1) — store+retrieve поверх context_events.
+app.include_router(context_router)
 
 
 @app.get("/health")

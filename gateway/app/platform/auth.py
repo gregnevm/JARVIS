@@ -64,6 +64,19 @@ def platform_enabled() -> bool:
     return bool(_password())
 
 
+def primary_admin_id() -> int:
+    """Публічний доступ до основного admin uid (для client-API JWT subject, CL-1)."""
+    return _primary_admin_id()
+
+
+def verify_admin_password(username: str, password: str) -> bool:
+    """Перевірка admin-логіну (PLATFORM_PASSWORD/ADMIN_PANEL_PASSWORD) для client-API.
+
+    Reuse тієї самої логіки, що й браузерний Basic-вхід — щоб JWT-логін (CL-1.1) не
+    дублював перевірку пароля. False, якщо пароль не заданий (вхід вимкнено)."""
+    return platform_enabled() and _check_credentials(username, password)
+
+
 def _check_credentials(username: str, password: str) -> bool:
     want_user = settings.admin_panel_user.strip() or "admin"
     want_pass = _password()

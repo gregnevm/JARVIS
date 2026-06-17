@@ -45,7 +45,7 @@ Inference локальний (Ollama/Vulkan, Edge/Kobold). Зовнішні AI-A
 | «Якість як frontier (GPT-4/Claude)» | Ні на локальній 7B — компенсація: privacy, $0, контроль, fine-tune під себе |
 | «Privacy абсолютна» | Inference — так; **training** — ephemeral RunPod (ADR-007), датасет тимчасово залишає машину |
 | «Claude Code з коробки» | Ціль, не поточний стан — Стовп B на старті (мости cursor/continue → рідний агент) |
-| QLoRA локально на RX 5700 XT | Ні — cloud-burst або окрема NVIDIA |
+| QLoRA локально на наявному AMD GPU | Ні — cloud-burst або окрема NVIDIA |
 
 ### 1.4 North Star (12 місяців)
 

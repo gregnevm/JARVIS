@@ -84,7 +84,7 @@ computer-confirm з телефона. Єдина auth і єдиний API під
 | S4 | **Human-in-the-loop для дій** | мутуючі/незворотні дії (FS, PS, admin, гроші) — підтвердження; ніколи не auto-confirm для admin/power |
 | S5 | **Tier ladder** | агент ніколи не клікає мишею, якщо задачу можна зробити пряміше (T0 PS → T4 vision) |
 
-**Інженерні (з [`docs/DESIGN.md`](docs/DESIGN.md) §1.2, обов'язкові):**
+**Інженерні (P1–P10 + C1, з [`docs/DESIGN.md`](docs/DESIGN.md) §1.2 / §1.2.1, обов'язкові):**
 
 | # | Принцип | Наслідок |
 |---|---------|----------|
@@ -96,6 +96,16 @@ computer-confirm з телефона. Єдина auth і єдиний API під
 | P6 | YAGNI | будуємо потрібне зараз; не «про запас» (напр. не Celery, поки async справляється) |
 | P7 | Single Source of Truth | ModelRegistry — авторитет про версії; цей файл — про принципи |
 | P8 | Separation of Concerns | Training ≠ Inference ≠ Sync ≠ UI; gateway ≠ tools ≠ memory |
+| P9 | **Context Passport (summarize all)** | жоден артефакт не входить «голим»: кожен несе summary + embedding для контекстної індексації |
+| P10 | **Tag Everything** | кожен паспорт має namespaced-теги — для ретриву **і** як адресовний хендл (виклик блоку за тегом) |
+
+**Контекстна культура (наскрізна, критична — деталі [`DESIGN.md`](docs/DESIGN.md) §1.2.1):**
+
+> **C1 — Паспорт + теги всюди.** «Summarize all, tag everything» — це не фіча сервісу, а
+> наскрізний контракт. Усе значуще (повідомлення, подія, daily, tool, skill, subagent, файл,
+> символ, run, doc, endpoint) отримує **паспорт контексту** (`kind` + `summary` + namespaced
+> `tags` + embedding 768D). Теги мають **дві ролі**: індексація (`person:mom AND topic:rent`) і
+> **адресація** (виклик `module:scam-shield`). Новий записуваний артефакт без `summary`/тегів — баг.
 
 **Документаційний (критично для здоров'я репо):**
 
@@ -178,6 +188,7 @@ CI (`.github/workflows/ci.yml`) — matrix по `jarvis_core/gateway/memory/tool
 - ❌ **SaaS-фіча, що ламає self-hosted** — усе за `SAAS_MODE`; synthetic org backfill обов'язковий.
 - ❌ **Переписати агент-луп на LangGraph/CrewAI** чи бекенд на Celery/FastStream — поточний async достатній (P6).
 - ❌ **n8n як оркестратор** — legacy `profiles: ["legacy"]`; агент-луп живе в Python.
+- ❌ **Записувати значущий артефакт без паспорта** — `summary`+теги обов'язкові (P9/P10/C1); «голий» store/event = баг.
 
 ---
 
