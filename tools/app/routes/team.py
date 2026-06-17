@@ -14,6 +14,38 @@ from jarvis_core.context import DEFAULT_ORG_ID
 from jarvis_core.passport import Passport, normalize_tags
 
 
+class SquadCreate(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    name: str
+    parent_id: str | None = None
+    kind: str = "team"
+
+
+class SquadMemberAdd(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    squad_id: str
+    user_id: str
+    title: str | None = None
+    seniority: str | None = None
+
+
+class RelationshipUpsert(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    src: str
+    dst: str
+    kind: str
+    weight: float = 1.0
+    source: str = "declared"
+
+
+class DelegateUpsert(BaseModel):
+    org_id: str = DEFAULT_ORG_ID
+    principal_id: str
+    persona: dict[str, Any] = {}
+    scopes: list[str] = ["read:self"]
+    proactive: bool = False
+
+
 class GroupMemberSeen(BaseModel):
     chat_id: int
     telegram_id: int
@@ -31,6 +63,46 @@ class GroupCollect(BaseModel):
 
 
 def register(router: APIRouter) -> None:
+    # --- org-граф (squads / relationships / graph / delegate) — passthrough -----
+
+    @router.get("/team/squads")
+    async def squads(request: Request, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+        return await request.app.state.memory.team_get("/team/squads", {"org_id": org_id})
+
+    @router.post("/team/squads")
+    async def create_squad(req: SquadCreate, request: Request) -> dict[str, Any]:
+        return await request.app.state.memory.team_post("/team/squads", req.model_dump())
+
+    @router.post("/team/squads/member")
+    async def add_member(req: SquadMemberAdd, request: Request) -> dict[str, Any]:
+        return await request.app.state.memory.team_post("/team/squads/members", req.model_dump())
+
+    @router.get("/team/relationships")
+    async def relationships(request: Request, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+        return await request.app.state.memory.team_get("/team/relationships", {"org_id": org_id})
+
+    @router.post("/team/relationships")
+    async def upsert_rel(req: RelationshipUpsert, request: Request) -> dict[str, Any]:
+        return await request.app.state.memory.team_post("/team/relationships", req.model_dump())
+
+    @router.get("/team/graph")
+    async def graph(request: Request, user_id: str, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+        return await request.app.state.memory.team_get(
+            "/team/graph", {"user_id": user_id, "org_id": org_id}
+        )
+
+    @router.get("/team/delegate/{principal_id}")
+    async def get_delegate(principal_id: str, request: Request, org_id: str = DEFAULT_ORG_ID) -> dict[str, Any]:
+        return await request.app.state.memory.team_get(
+            f"/team/delegates/{principal_id}", {"org_id": org_id}
+        )
+
+    @router.put("/team/delegate")
+    async def put_delegate(req: DelegateUpsert, request: Request) -> dict[str, Any]:
+        return await request.app.state.memory.team_put("/team/delegates", req.model_dump())
+
+    # --- групи (presence) --------------------------------------------------------
+
     @router.get("/team/group/{chat_id}/ingest")
     async def group_ingest(chat_id: int, request: Request) -> dict[str, Any]:
         rec = await request.app.state.memory.team_get(f"/team/groups/{chat_id}")

@@ -199,3 +199,13 @@ class MemoryClient:
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning("memory team_post %s failed: %s", path, exc)
             return {"error": str(exc)}
+
+    async def team_put(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        try:
+            resp = await self._client.put(f"{self._base}{path}", json=body)
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, dict) else {}
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("memory team_put %s failed: %s", path, exc)
+            return {"error": str(exc)}

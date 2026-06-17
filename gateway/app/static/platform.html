@@ -190,6 +190,7 @@
         <button type="button" class="navitem" data-tab="subagents" role="tab" aria-selected="false"><span class="ic">🤖</span> Subagents</button>
         <button type="button" class="navitem" data-tab="teams" role="tab" aria-selected="false"><span class="ic">👥</span> Teams</button>
         <button type="button" class="navitem" data-tab="coding" role="tab" aria-selected="false"><span class="ic">💻</span> Coding</button>
+        <button type="button" class="navitem" data-tab="team" role="tab" aria-selected="false"><span class="ic">🕸️</span> Команда / Team</button>
       </div>
       <div class="nav-group">
         <div class="nav-group-label">Інтеграції / Integrations</div>
@@ -236,6 +237,7 @@
     <section class="panel" id="panel-subagents" role="tabpanel"></section>
     <section class="panel" id="panel-teams" role="tabpanel"></section>
     <section class="panel" id="panel-coding" role="tabpanel"></section>
+    <section class="panel" id="panel-team" role="tabpanel"></section>
     <section class="panel" id="panel-hooks" role="tabpanel"></section>
     <section class="panel" id="panel-logs" role="tabpanel"></section>
     <section class="panel" id="panel-settings" role="tabpanel"></section>
@@ -269,7 +271,7 @@ const TITLES = {
   overview: lbl("Огляд", "Overview"), workbench: "Workbench", memory: lbl("Памʼять", "Memory"),
   projects: lbl("Проєкти", "Projects"), jobs: lbl("Завдання", "Jobs"), planning: lbl("Планування", "Planning"),
   research: lbl("Дослідження", "Research"), mcp: "MCP", connectors: "Connectors", skills: "Skills",
-  subagents: "Subagents", teams: lbl("Команди", "Teams"), coding: "Coding", hooks: "Hooks",
+  subagents: "Subagents", teams: lbl("Команди", "Teams"), coding: "Coding", team: lbl("Команда", "Team"), hooks: "Hooks",
   logs: lbl("Логи", "Logs"), settings: lbl("Налаштування", "Settings"), users: lbl("Доступ", "Access"),
   models: lbl("Моделі", "Models"), improve: lbl("Покращення", "Improve"),
 };
@@ -1535,10 +1537,81 @@ async function improveReview(action) {
   } catch (e) { showErr(e.message); }
 }
 
+// ---------------- Команда / Team (Стовп D, TC-0) ----------------
+function renderTeam() {
+  const el = document.getElementById("panel-team");
+  if (!el.dataset.init) {
+    el.dataset.init = "1";
+    el.innerHTML =
+      '<p class="lbl">' + lbl("Граф організації: squads (відділи/групи), зв’язки (reports_to/manages), lookup сусідів.", "Org graph: squads, relationships (reports_to/manages), neighbor lookup.") + '</p>' +
+      '<div class="section">' + lbl("Створити squad", "Create squad") + '</div>' +
+      '<div class="toolbar"><input type="text" id="teamSquadName" placeholder="' + lbl("назва відділу/групи", "squad name") + '" style="flex:1;min-width:160px" />' +
+      '<select id="teamSquadKind"><option value="team">team</option><option value="department">department</option><option value="project">project</option></select>' +
+      '<button type="button" class="primary" id="teamSquadGo">' + lbl("Створити", "Create") + '</button></div><div id="teamSquadsOut"></div>' +
+      '<div class="section">' + lbl("Зв’язок (declared edge)", "Relationship (declared edge)") + '</div>' +
+      '<div class="toolbar"><input type="text" id="relSrc" placeholder="src user_id" style="width:120px" />' +
+      '<select id="relKind"><option>reports_to</option><option>manages</option><option>assists</option><option>collaborates_with</option></select>' +
+      '<input type="text" id="relDst" placeholder="dst user_id" style="width:120px" />' +
+      '<button type="button" class="primary" id="relGo">' + lbl("Додати", "Add") + '</button></div>' +
+      '<div class="section">' + lbl("Граф користувача", "User graph") + '</div>' +
+      '<div class="toolbar"><input type="text" id="graphUid" placeholder="user_id" style="width:140px" />' +
+      '<button type="button" id="graphGo">' + lbl("Показати", "Show") + '</button></div><div id="graphOut"></div>';
+    el.querySelector("#teamSquadGo").addEventListener("click", teamSquadCreate);
+    el.querySelector("#relGo").addEventListener("click", teamRelAdd);
+    el.querySelector("#graphGo").addEventListener("click", teamGraphShow);
+  }
+  loadSquads();
+}
+async function loadSquads() {
+  const out = document.getElementById("teamSquadsOut"); if (!out) return;
+  try {
+    const d = await api("/platform/api/team/squads");
+    const squads = d.squads || [];
+    if (!squads.length) { out.innerHTML = '<div class="empty">' + lbl("Squads порожні", "No squads") + '.</div>'; return; }
+    let tbl = "<table><tr><th>Name</th><th>Kind</th><th>Members</th></tr>";
+    for (const s of squads) {
+      const mem = (s.members || []).map((m) => esc(m.user_id)).join(", ");
+      tbl += `<tr><td>${esc(s.name)}</td><td>${esc(s.kind)}</td><td class="mono">${mem}</td></tr>`;
+    }
+    out.innerHTML = '<div class="card wide">' + tableWrap(tbl + "</table>") + "</div>";
+  } catch (e) { showErr(e.message); }
+}
+async function teamSquadCreate() {
+  const name = document.getElementById("teamSquadName").value.trim();
+  if (!name) return toast(lbl("вкажи назву", "enter name"));
+  const kind = document.getElementById("teamSquadKind").value;
+  try { await api("/platform/api/team/squads", { method: "POST", body: { name, kind } }); toast(lbl("створено", "created")); loadSquads(); }
+  catch (e) { showErr(e.message); }
+}
+async function teamRelAdd() {
+  const src = document.getElementById("relSrc").value.trim();
+  const dst = document.getElementById("relDst").value.trim();
+  const kind = document.getElementById("relKind").value;
+  if (!src || !dst) return toast(lbl("вкажи src і dst", "enter src and dst"));
+  try { await api("/platform/api/team/relationships", { method: "POST", body: { src, dst, kind } }); toast(lbl("ребро додано", "edge added")); }
+  catch (e) { showErr(e.message); }
+}
+async function teamGraphShow() {
+  const uid = document.getElementById("graphUid").value.trim();
+  if (!uid) return toast(lbl("вкажи user_id", "enter user_id"));
+  const out = document.getElementById("graphOut");
+  out.innerHTML = '<div class="empty">' + LOADING + '</div>';
+  try {
+    const g = await api("/platform/api/team/graph?user_id=" + encodeURIComponent(uid));
+    out.innerHTML = '<div class="card wide"><ul>' +
+      `<li>${lbl("Squads", "Squads")}: <span class="mono">${esc((g.squads||[]).join(", ")||"—")}</span></li>` +
+      `<li>${lbl("Менеджери", "Manager chain")}: <span class="mono">${esc((g.manager_chain||[]).join(" → ")||"—")}</span></li>` +
+      `<li>${lbl("Керує", "Manages")}: <span class="mono">${esc((g.manages||[]).join(", ")||"—")}</span></li>` +
+      `<li>${lbl("Підлеглі", "Reports")}: <span class="mono">${esc((g.reports||[]).join(", ")||"—")}</span></li>` +
+      `<li>${lbl("Колеги", "Collaborators")}: <span class="mono">${esc((g.collaborators||[]).join(", ")||"—")}</span></li>` +
+      "</ul></div>";
+  } catch (e) { showErr(e.message); out.innerHTML = ""; }
+}
+
 const RENDER = { overview: renderOverview, workbench: renderWorkbench, memory: renderMemory,
   projects: renderProjects, jobs: renderJobs, planning: renderPlanning, research: renderResearch,
   mcp: renderMcp, connectors: renderConnectors, skills: renderSkills, subagents: renderSubagents,
-  teams: renderTeams, coding: renderCoding, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers,
+  teams: renderTeams, coding: renderCoding, team: renderTeam, hooks: renderHooks, logs: renderLogs, settings: renderSettings, users: renderUsers,
   models: renderModels, improve: renderImprove };
 
 const initTab = (location.hash || "#overview").slice(1);
