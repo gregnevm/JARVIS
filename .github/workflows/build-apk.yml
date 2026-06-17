@@ -5,6 +5,10 @@ name: Build APK
 # на тег `mobile-v*` додатково створюється GitHub Release з APK.
 on:
   workflow_dispatch:        # ручний запуск (Actions → Build APK → Run)
+  pull_request:             # валідуємо збірку на PR, що чіпає mobile
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-apk.yml'
   push:
     branches: [main]
     tags: ['mobile-v*']
