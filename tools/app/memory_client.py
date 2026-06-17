@@ -34,6 +34,95 @@ class MemoryClient:
             logger.warning("memory search failed: %s", exc)
             return []
 
+    async def search_context(
+        self,
+        user_id: int,
+        query: str,
+        top_k: int = 5,
+        tags: list[str] | None = None,
+        since: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Ретрив паспортів контексту (P9/P10) — для інжекту в промпт. Толерантний."""
+        try:
+            resp = await self._client.post(
+                f"{self._base}/context/search",
+                json={"user_id": user_id, "query": query, "top_k": top_k,
+                      "tags": tags, "since": since},
+            )
+            resp.raise_for_status()
+            return list(resp.json().get("results", []))
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("memory context search failed: %s", exc)
+            return []
+
+    # --- Context Passport порт (для context-jobs, jarvis_core.passport.ContextStore) ---
+    async def context_pending(self, user_id: int, limit: int) -> list[dict[str, Any]]:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/context/pending", json={"user_id": user_id, "limit": limit}
+            )
+            resp.raise_for_status()
+            return list(resp.json().get("events", []))
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("context pending failed: %s", exc)
+            return []
+
+    async def context_recent(
+        self,
+        user_id: int,
+        limit: int,
+        kind: str | None = None,
+        tags: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/context/recent",
+                json={"user_id": user_id, "limit": limit, "kind": kind, "tags": tags},
+            )
+            resp.raise_for_status()
+            return list(resp.json().get("events", []))
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("context recent failed: %s", exc)
+            return []
+
+    async def context_update(
+        self, event_db_id: int, user_id: int, summary: str, tags: list[str], kind: str
+    ) -> dict[str, Any]:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/context/update",
+                json={"id": event_db_id, "user_id": user_id, "summary": summary,
+                      "tags": tags, "kind": kind},
+            )
+            resp.raise_for_status()
+            return dict(resp.json())
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("context update failed: %s", exc)
+            return {"ok": False}
+
+    async def context_ingest(self, store: dict[str, Any]) -> dict[str, Any]:
+        try:
+            resp = await self._client.post(f"{self._base}/context/ingest", json=store)
+            resp.raise_for_status()
+            return dict(resp.json())
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("context ingest failed: %s", exc)
+            return {"inserted": False}
+
+    async def context_purge(
+        self, user_id: int, before: str | None = None, kind: str | None = None
+    ) -> int:
+        try:
+            resp = await self._client.post(
+                f"{self._base}/context/purge",
+                json={"user_id": user_id, "before": before, "kind": kind},
+            )
+            resp.raise_for_status()
+            return int(resp.json().get("deleted", 0))
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("context purge failed: %s", exc)
+            return 0
+
     async def store(
         self, user_id: int, content: str, role: str = "user", project_id: int | None = None
     ) -> None:

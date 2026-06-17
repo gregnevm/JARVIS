@@ -1,0 +1,168 @@
+"""Context maintenance jobs (scheduled sweeps) — НЕ interactive `JOB_TYPES`.
+
+Окремо від user-facing черги (`jarvis_core.bg_jobs`): це обслуговуючі прогони
+(прецедент розділення — ADR-008 manual-scan). Чисте оркестрування над
+`ContextStore` (Protocol) + `Summarizer` (callable) — unit-тестовно з фейками,
+без мережі/БД/Ollama (S3, test-first). Виконавець із реальними memory+Ollama —
+у tools (інтеграційний шов; тригер manual або scheduler).
+
+  context_summarize — дозводить `pending:summary` паспорти через LLM.
+  context_daily     — зводить паспорти дня в один `kind:daily` паспорт.
+  context_retention — чистить прострочені паспорти за per-kind TTL.
+"""
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
+from typing import Any, Protocol
+
+from .tags import normalize_tags, split_tag
+
+Summarizer = Callable[[str], Awaitable[str]]
+
+PENDING_SUMMARY_TAG = "pending:summary"
+CONTEXT_JOB_NAMES = frozenset(
+    {"context_summarize", "context_daily", "context_retention", "context_proposal"}
+)
+
+# Per-kind retention (дні). raw-сигнали — коротко; нотатки/daily — довго.
+DEFAULT_RETENTION_DAYS: dict[str, int] = {
+    "notification": 14,
+    "sms": 30,
+    "call": 30,
+    "usage": 7,
+    "note": 365,
+    "daily": 3650,
+}
+
+
+class ContextStore(Protocol):
+    """Порт до memory `/context/*` (реалізація-адаптер — у tools)."""
+
+    async def pending(self, user_id: int, limit: int) -> list[dict[str, Any]]: ...
+    async def update(
+        self, event_db_id: int, user_id: int, *, summary: str, tags: list[str], kind: str
+    ) -> dict[str, Any]: ...
+    async def recent(
+        self, user_id: int, limit: int, *, kind: str | None = None, tags: list[str] | None = None
+    ) -> list[dict[str, Any]]: ...
+    async def ingest(self, store: dict[str, Any]) -> dict[str, Any]: ...
+    async def purge(
+        self, user_id: int, *, before: str | None = None, kind: str | None = None
+    ) -> int: ...
+
+
+def _kind_of(tags: list[str]) -> str:
+    for t in tags:
+        ns, val = split_tag(t)
+        if ns == "kind":
+            return val or "note"
+    return "note"
+
+
+def _has_kind(tags: list[str], kind: str) -> bool:
+    return f"kind:{kind}" in tags
+
+
+async def summarize_pending(
+    store: ContextStore, summarizer: Summarizer, user_id: int, *, limit: int = 20
+) -> int:
+    """Дозводить raw-паспорти (тег pending:summary) у якісний summary, знімає тег. К-сть оброблених."""
+    items = await store.pending(user_id, limit)
+    done = 0
+    for it in items:
+        payload = it.get("payload") or {}
+        raw = str(payload.get("raw") or it.get("summary") or "").strip()
+        if not raw:
+            continue
+        summary = (await summarizer(raw)).strip()
+        if not summary:
+            continue
+        tags = it.get("tags") or []
+        kind = _kind_of(tags)
+        new_tags = [t for t in tags if t != PENDING_SUMMARY_TAG]
+        await store.update(int(it["id"]), user_id, summary=summary, tags=new_tags, kind=kind)
+        done += 1
+    return done
+
+
+async def build_daily(
+    store: ContextStore, summarizer: Summarizer, user_id: int, *, day: str, limit: int = 200
+) -> dict[str, Any] | None:
+    """Зводить недавні паспорти в один `kind:daily`. Ідемпотентно по event_id=daily:{uid}:{day}."""
+    items = await store.recent(user_id, limit)
+    src = [it for it in items if not _has_kind(it.get("tags") or [], "daily")]
+    joined = "\n".join(f"- {it.get('summary', '')}" for it in src if it.get("summary"))
+    if not joined.strip():
+        return None
+    summary = (await summarizer(joined)).strip()
+    if not summary:
+        return None
+    store_dict: dict[str, Any] = {
+        "user_id": user_id,
+        "kind": "daily",
+        "summary": summary,
+        "tags": normalize_tags([f"day:{day}"], "daily"),
+        "source": "context_daily",
+        "event_id": f"daily:{user_id}:{day}",
+    }
+    return await store.ingest(store_dict)
+
+
+async def build_proposals(
+    store: ContextStore,
+    proposer: Summarizer,
+    user_id: int,
+    *,
+    recent_limit: int = 30,
+    max_n: int = 3,
+) -> list[str]:
+    """Генерує проактивні пропозиції дій із недавнього контексту → паспорти `kind:proposal`.
+
+    Пропозиція — звичайний паспорт (переюз інфри, YAGNI): `summary` = дія, тег `status:offered`.
+    `proposer` повертає пропозиції рядками (по одній на рядок). Повертає список тексту пропозицій."""
+    items = await store.recent(user_id, recent_limit)
+    src = [
+        it
+        for it in items
+        if not _has_kind(it.get("tags") or [], "proposal")
+        and not _has_kind(it.get("tags") or [], "daily")
+    ]
+    ctx = "\n".join(f"- {it.get('summary', '')}" for it in src if it.get("summary"))
+    if not ctx.strip():
+        return []
+    raw = await proposer(ctx)
+    proposals: list[str] = []
+    for line in raw.splitlines():
+        text = line.strip().lstrip("-•*0123456789. \t").strip()
+        if text:
+            proposals.append(text)
+        if len(proposals) >= max_n:
+            break
+    for p in proposals:
+        await store.ingest(
+            {
+                "user_id": user_id,
+                "kind": "proposal",
+                "summary": p,
+                "tags": normalize_tags(["status:offered"], "proposal"),
+                "source": "context_proposal",
+            }
+        )
+    return proposals
+
+
+async def run_retention(
+    store: ContextStore,
+    user_id: int,
+    *,
+    now: datetime,
+    policy: dict[str, int] | None = None,
+) -> dict[str, int]:
+    """Чистить прострочені паспорти per-kind (cutoff = now - TTL). Повертає {kind: deleted}."""
+    pol = policy or DEFAULT_RETENTION_DAYS
+    out: dict[str, int] = {}
+    for kind, days in pol.items():
+        before = (now - timedelta(days=days)).isoformat()
+        out[kind] = await store.purge(user_id, before=before, kind=kind)
+    return out

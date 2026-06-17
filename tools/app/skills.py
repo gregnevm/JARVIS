@@ -33,6 +33,24 @@ def _parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
     return meta, body
 
 
+def _tags_of(meta: dict[str, str]) -> list[str]:
+    """Теги скіла з frontmatter `tags: a, b`. `apk` позначає скіл, що задіює функції смартфона."""
+    raw = meta.get("tags") or meta.get("requires") or ""
+    return [t.strip().lower() for t in raw.replace(";", ",").split(",") if t.strip()]
+
+
+def _skill_card(meta: dict[str, str], body: str, sid: str) -> dict[str, Any]:
+    tags = _tags_of(meta)
+    return {
+        "name": meta.get("name") or sid,
+        "id": sid,
+        "description": meta.get("description") or body[:200],
+        "size": len(body),
+        "tags": tags,
+        "apk": "apk" in tags,  # потребує доступу APK до функцій телефона
+    }
+
+
 def list_skills() -> list[dict[str, Any]]:
     root = _skills_root()
     if not root.is_dir():
@@ -43,26 +61,10 @@ def list_skills() -> list[dict[str, Any]]:
             skill_file = entry / _SKILL_FILE
             if skill_file.is_file():
                 meta, body = _parse_frontmatter(skill_file.read_text(encoding="utf-8", errors="replace"))
-                name = meta.get("name") or entry.name
-                out.append(
-                    {
-                        "name": name,
-                        "id": entry.name,
-                        "description": meta.get("description") or body[:200],
-                        "size": len(body),
-                    }
-                )
+                out.append(_skill_card(meta, body, entry.name))
         elif entry.suffix.lower() == ".md":
             meta, body = _parse_frontmatter(entry.read_text(encoding="utf-8", errors="replace"))
-            name = meta.get("name") or entry.stem
-            out.append(
-                {
-                    "name": name,
-                    "id": entry.stem,
-                    "description": meta.get("description") or body[:200],
-                    "size": len(body),
-                }
-            )
+            out.append(_skill_card(meta, body, entry.stem))
     return out
 
 

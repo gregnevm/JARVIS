@@ -1,21 +1,22 @@
 ﻿{
-    "whisper_model":  "small",
-    "ollama_model_agent":  "qwen2.5:7b-instruct",
-    "profile":  "amd",
-    "detected_at":  "2026-06-05T17:24:54.3238615+03:00",
-    "vram_mb":  4095,
-    "gpu_vendor":  "amd",
-    "vision_on_demand":  true,
-    "gpu_name":  "AMD Radeon RX 5700 XT",
-    "ollama_vulkan":  true,
+    "whisper_model":  "large-v3",
+    "ollama_model_agent":  "qwen2.5:14b-instruct",
+    "profile":  "nvidia",
+    "detected_at":  "2026-06-11T13:19:29.1865126+03:00",
+    "vram_mb":  16311,
+    "gpu_vendor":  "nvidia",
+    "vision_on_demand":  false,
+    "gpu_name":  "NVIDIA GeForce RTX 5060 Ti",
+    "ollama_vulkan":  false,
     "notes":  [
-                  "VRAM \u003c= 8 GB — OLLAMA_VISION_ON_DEMAND=true",
-                  "AMD на Windows: OLLAMA_VULKAN=1 (Vulkan backend)"
+                  "NVIDIA: CUDA автоматично, OLLAMA_VULKAN не потрібен"
               ],
     "models":  [
                    "gemma3:4b",
-                   "qwen2.5:7b-instruct",
-                   "nomic-embed-text"
+                   "qwen2.5:14b-instruct",
+                   "nomic-embed-text",
+                   "qwen2.5vl:7b",
+                   "x/flux2-klein:4b"
                ],
     "embed_model":  "nomic-embed-text",
     "ollama_model_chat":  "gemma3:4b"

@@ -29,9 +29,9 @@
 
 | Компонент | Стан | Деталь |
 |-----------|------|--------|
-| Ollama (хост) | ✅ **Vulkan GPU** | 29/29 layers qwen2.5:7b у VRAM, 8 GiB |
-| nomic-embed-text | ✅ Vulkan GPU | 13/13 layers у VRAM |
-| VRAM загалом | ✅ 8.0 GiB | qwen ~4.6 GiB + embed ~0.5 GiB ≈ 2.9 GiB вільно |
+| Ollama (хост) | ✅ **GPU** | усі layers qwen2.5:7b у VRAM |
+| nomic-embed-text | ✅ GPU | усі layers у VRAM |
+| VRAM | ✅ вистачає | qwen ~4.6 GiB + embed ~0.5 GiB вміщаються |
 | Мікросервіси | ✅ Live + CI green | gateway, tools, memory, whisper, tts, twin |
 | Computer Use C0–C6 | ✅ Tested | hostagent, confirm, audit, Playwright |
 | jarvis_core | ✅ Wired | bootstrap.py → production path |
@@ -106,7 +106,7 @@
      FastLanguageModel + SFTTrainer + `--export-gguf` + `--dry-run`
      → model.save_pretrained_gguf("lora_v1", tokenizer, "q4_k_m")
 
-③ RunPod burst (RTX 3060+ / A100, ~$2–5)
+③ RunPod burst (споживчий CUDA-GPU / A100, ~$2–5)
      → lora_v1.gguf → download → data/twin/lora/
 
 ④ Зареєструвати та промоутити
@@ -401,12 +401,12 @@
 | ADR | Рішення | Причина |
 |-----|---------|---------|
 | ADR-001 | KoboldCPP для Edge | USB portable, один бінарник, GGUF |
-| ADR-002 | QLoRA r=16 (Unsloth) | RTX 3060 справляється, адаптер 80–200 MB |
+| ADR-002 | QLoRA r=16 (Unsloth) | споживчий CUDA-GPU справляється, адаптер 80–200 MB |
 | ADR-003 | SQLite-vec для Edge RAG | Нульові залежності, один файл |
 | ADR-004 | Modular monolith для Twin | Один розробник, zero network overhead |
 | ADR-005 | Event Bus для внутрішньої координації Twin | Підписник додається без зміни publisher; уникає tight coupling прямих викликів і зайвої залежності від Redis Pub/Sub |
 | ADR-006 | Blue-Green через symlinks | Instant rollback, zero downtime |
-| ADR-007 | Training → RunPod (cloud-burst) | Unsloth CUDA-only; AMD ROCm RDNA1 Windows — НІ |
+| ADR-007 | Training → RunPod (cloud-burst) | Unsloth CUDA-only; AMD ROCm на Windows — НІ |
 | ADR-008 | Self-improve scan — навмисно ручний тригер (`POST /improve/scan`) | Human-in-the-loop: judge відбирає кандидатів, але людина мусить review'ити перед export у training set — авто-scan ризикує засмітити датасет неякісними прикладами без нагляду |
 | E2 | Ollama на ХОСТІ (не Docker) | AMD `/dev/dri`/`/dev/kfd` недоступні у WSL2 |
 

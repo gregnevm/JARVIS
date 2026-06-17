@@ -75,22 +75,24 @@ ollama pull nomic-embed-text         # EMBED_MODEL — ембединги (768 �
 > триває хвилини. Для CPU став non-thinking instruct, напр.:
 > `ollama pull qwen2.5:3b-instruct` і `OLLAMA_MODEL_CHAT=qwen2.5:3b-instruct`.
 
-### AMD GPU без ROCm — через Vulkan (експериментально, але працює)
+### GPU-бекенд (визначається автоматично)
 
-ROCm на Windows для Ollama підтримує тільки **RDNA2/RDNA3** (RX 6000/7000). Старіші
-карти (RDNA1 — RX 5700 XT тощо) офіційно «не підтримуються». **Обхід — `OLLAMA_VULKAN=1`**:
+Залізо детектиться при setup (`scripts/lib/jarvis_hardware.ps1` → `data/hardware_profile.json`)
+і бекенд Ollama обирається сам:
+- **NVIDIA** — CUDA автоматично, нічого вмикати не треба.
+- **AMD на Windows** — якщо ROCm для картки недоступний, використовується Vulkan-бекенд
+  (`OLLAMA_VULKAN=1`); на старіших AMD це часто єдиний робочий шлях GPU-прискорення.
+- **Без GPU** — CPU-інференс (повільніше; став non-thinking instruct-модель).
+
+Ручний запуск Ollama з Vulkan (коли профіль так вирішив):
 
 ```powershell
-# зупинити поточну Ollama (якщо крутиться):
 Get-Process ollama -EA SilentlyContinue | Stop-Process -Force
-# стартувати з Vulkan-бекендом:
 $env:OLLAMA_VULKAN=1; $env:OLLAMA_HOST="0.0.0.0:11434"; ollama serve
 ```
 
-Перевірено наживо на **AMD Radeon RX 5700 XT (8 ГБ VRAM)**: qwen2.5:7b-instruct
-дає ~50-60 tok/s — **~8× швидше за CPU** на тій самій машині. Vulkan працює на
-будь-якому сучасному GPU включно з RDNA1, тож це найпростіший шлях оживити
-не-NVIDIA залізо. На NVIDIA Ollama використовує CUDA автоматично — Vulkan не потрібен.
+> GPU-прискорення дає кратний приріст tok/s проти CPU; конкретні цифри залежать від твоєї
+> картки та моделі. Профіль під твоє залізо формує `FirstSetup` — нічого хардкодити не треба.
 
 Моделі можна змінити у `.env`. Але якщо міняєш `EMBED_MODEL` на модель з **іншою
 розмірністю** вектора — треба синхронізувати `vector(768)` у `db/init.sql` (це міграція).

@@ -26,6 +26,9 @@ class FakeMem:
     async def get_project(self, user_id, project_id, *, include_content=False):  # noqa: ANN001
         return self.project
 
+    async def search_context(self, user_id, query, top_k=5, tags=None, since=None):  # noqa: ANN001
+        return [{"summary": "вчора дзвонив банк", "tags": ["kind:call"]}]
+
 
 async def test_resolve_no_active(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _no_active(_uid):
@@ -88,3 +91,24 @@ async def test_memory_context_passes_project_id(monkeypatch: pytest.MonkeyPatch)
     mem = FakeMem()
     ctx, _prof = await AgentRunner(object(), mem)._memory_context(1, "привіт", project_id=5)
     assert mem.searched_project_id == 5
+
+
+async def test_memory_context_injects_passports_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Крок 5: зібраний контекст (паспорти) тече в RAG-контекст агента за прапором."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "enable_context_retrieval", True)
+    ctx, _prof = await AgentRunner(object(), FakeMem())._memory_context(1, "банк")
+    assert "вчора дзвонив банк" in ctx
+
+
+async def test_memory_context_skips_passports_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "enable_context_retrieval", False)
+    ctx, _prof = await AgentRunner(object(), FakeMem())._memory_context(1, "банк")
+    assert "вчора дзвонив банк" not in ctx

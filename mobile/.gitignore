@@ -1,0 +1,13 @@
+# Локальний тулчейн (JDK/Android SDK/Gradle) — качається build-apk.ps1, не в git.
+.toolchain/
+# Gradle / Android build outputs
+.gradle/
+build/
+app/build/
+local.properties
+*.keystore
+!debug.keystore
+*.jks
+keystore.properties
+captures/
+.cxx/

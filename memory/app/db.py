@@ -332,3 +332,226 @@ class DB:
             max_per_item_tokens=max_per_file_tokens,
             key="content",
         )
+
+    # ----------------------- Context Passports (P9/P10, C1) -----------------------
+    @staticmethod
+    def _context_json(r: asyncpg.Record) -> dict[str, Any]:
+        return {
+            "id": int(r["id"]),
+            "kind": r["kind"],
+            "source": r["source"],
+            "summary": r["summary"],
+            "tags": list(r["tags"] or []),
+            "sensitivity": r["sensitivity"],
+            "ref": r["ref"],
+            "event_ts": r["event_ts"].isoformat() if r["event_ts"] else None,
+            "created_at": r["created_at"].isoformat() if r["created_at"] else "",
+        }
+
+    async def add_context_event(
+        self,
+        *,
+        user_id: int,
+        kind: str,
+        summary: str,
+        tags: list[str],
+        embedding: list[float] | None,
+        org_id: str,
+        source: str | None = None,
+        sensitivity: str = "personal",
+        ref: str | None = None,
+        event_id: str | None = None,
+        event_ts: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Записує паспорт контексту. Ідемпотентно по (user_id, event_id), якщо
+        event_id заданий: дубль повертає {"inserted": False} і існуючий id."""
+        import json as _json
+
+        vec = to_vector_literal(embedding) if embedding is not None else None
+        async with self.pool.acquire() as con:
+            row = await con.fetchrow(
+                "INSERT INTO context_events "
+                "(user_id, org_id, event_id, kind, source, summary, tags, "
+                " sensitivity, ref, payload, embedding, event_ts) "
+                "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::vector,$12) "
+                "ON CONFLICT (user_id, event_id) WHERE event_id IS NOT NULL "
+                "DO NOTHING RETURNING id",
+                user_id,
+                org_id,
+                event_id,
+                kind,
+                source,
+                summary,
+                tags,
+                sensitivity,
+                ref,
+                _json.dumps(payload or {}),
+                vec,
+                event_ts,
+            )
+            if row is not None:
+                return {"id": int(row["id"]), "inserted": True}
+            # Дубль (ідемпотентний повтор) — повертаємо існуючий id.
+            existing = await con.fetchval(
+                "SELECT id FROM context_events WHERE user_id=$1 AND event_id=$2",
+                user_id,
+                event_id,
+            )
+            return {"id": int(existing) if existing is not None else None, "inserted": False}
+
+    async def search_context(
+        self,
+        user_id: int,
+        embedding: list[float],
+        top_k: int,
+        *,
+        tags: list[str] | None = None,
+        since: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Семантичний ретрив по паспортах + опц. фільтр тегів (containment) і часу."""
+        vec = to_vector_literal(embedding)
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT id, kind, source, summary, tags, sensitivity, ref, "
+                "       event_ts, created_at, 1 - (embedding <=> $2::vector) AS score "
+                "FROM context_events "
+                "WHERE user_id=$1 AND embedding IS NOT NULL "
+                "  AND ($4::text[] IS NULL OR tags @> $4) "
+                "  AND ($5::timestamptz IS NULL OR created_at >= $5) "
+                "ORDER BY embedding <=> $2::vector LIMIT $3",
+                user_id,
+                vec,
+                top_k,
+                tags,
+                since,
+            )
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            item = self._context_json(r)
+            item["score"] = float(r["score"])
+            out.append(item)
+        return out
+
+    async def recent_context(
+        self,
+        user_id: int,
+        limit: int,
+        *,
+        kind: str | None = None,
+        tags: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT id, kind, source, summary, tags, sensitivity, ref, "
+                "       event_ts, created_at "
+                "FROM context_events "
+                "WHERE user_id=$1 "
+                "  AND ($3::text IS NULL OR kind=$3) "
+                "  AND ($4::text[] IS NULL OR tags @> $4) "
+                "ORDER BY created_at DESC LIMIT $2",
+                user_id,
+                limit,
+                kind,
+                tags,
+            )
+        return [self._context_json(r) for r in rows]
+
+    async def purge_context(
+        self,
+        user_id: int,
+        *,
+        before: str | None = None,
+        kind: str | None = None,
+    ) -> int:
+        """Видаляє паспорти користувача (фільтри before/kind). Повертає к-сть."""
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "DELETE FROM context_events "
+                "WHERE user_id=$1 "
+                "  AND ($2::timestamptz IS NULL OR created_at < $2) "
+                "  AND ($3::text IS NULL OR kind=$3)",
+                user_id,
+                before,
+                kind,
+            )
+        return int(res.split()[-1]) if res and res.split()[-1].isdigit() else 0
+
+    async def context_ledger(self, user_id: int, *, recent_limit: int = 20) -> dict[str, Any]:
+        """Журнал прозорості (E3): скільки/яких паспортів зібрано + останні. Лише власні (anti-IDOR)."""
+        async with self.pool.acquire() as con:
+            total = await con.fetchval(
+                "SELECT count(*) FROM context_events WHERE user_id=$1", user_id
+            )
+            by_kind = await con.fetch(
+                "SELECT kind, count(*) AS c FROM context_events WHERE user_id=$1 "
+                "GROUP BY kind ORDER BY c DESC",
+                user_id,
+            )
+            by_source = await con.fetch(
+                "SELECT COALESCE(source,'—') AS source, count(*) AS c FROM context_events "
+                "WHERE user_id=$1 GROUP BY source ORDER BY c DESC",
+                user_id,
+            )
+            recent = await con.fetch(
+                "SELECT id, kind, source, summary, tags, created_at FROM context_events "
+                "WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2",
+                user_id,
+                recent_limit,
+            )
+        return {
+            "total": int(total or 0),
+            "by_kind": {str(r["kind"]): int(r["c"]) for r in by_kind},
+            "by_source": {str(r["source"]): int(r["c"]) for r in by_source},
+            "recent": [self._context_json(r) for r in recent],
+        }
+
+    async def pending_context(self, user_id: int, limit: int) -> list[dict[str, Any]]:
+        """Паспорти, що чекають дозведення (`pending:summary`) — з payload (raw) для job."""
+        import json as _json
+
+        async with self.pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT id, summary, tags, payload FROM context_events "
+                "WHERE user_id=$1 AND tags @> ARRAY['pending:summary'] "
+                "ORDER BY created_at ASC LIMIT $2",
+                user_id,
+                limit,
+            )
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            payload = r["payload"]
+            if isinstance(payload, str):
+                payload = _json.loads(payload)
+            out.append(
+                {
+                    "id": int(r["id"]),
+                    "summary": r["summary"],
+                    "tags": list(r["tags"] or []),
+                    "payload": payload or {},
+                }
+            )
+        return out
+
+    async def update_context_event(
+        self,
+        event_db_id: int,
+        user_id: int,
+        *,
+        summary: str,
+        tags: list[str],
+        embedding: list[float] | None,
+    ) -> bool:
+        """Оновлює summary+tags+embedding паспорта (для context_summarize). Ownership-guard."""
+        vec = to_vector_literal(embedding) if embedding is not None else None
+        async with self.pool.acquire() as con:
+            res = await con.execute(
+                "UPDATE context_events SET summary=$3, tags=$4, embedding=$5::vector "
+                "WHERE id=$1 AND user_id=$2",
+                event_db_id,
+                user_id,
+                summary,
+                tags,
+                vec,
+            )
+        return res.endswith("1")

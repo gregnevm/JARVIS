@@ -47,6 +47,7 @@ COMMANDS = frozenset(
         "/keyboard",
         "/project",
         "/cursor",
+        "/apk",
     }
 )
 
@@ -254,7 +255,19 @@ async def handle_command(
 
     if cmd == "/start":
         start_args = raw.split(maxsplit=1)
-        payload = (start_args[1] if len(start_args) > 1 else "").strip().lower()
+        raw_payload = (start_args[1] if len(start_args) > 1 else "").strip()
+        payload = raw_payload.lower()
+        # Telegram-логін мобільного застосунку: APK відкриває t.me/<bot>?start=tgauth_<token>,
+        # тут прив'язуємо token → telegram_id (case-sensitive токен з raw_payload). APK потім
+        # обмінює token на JWT через /api/v1/auth/telegram/poll.
+        if payload.startswith("tgauth_") and redis is not None:
+            token = raw_payload[len("tgauth_"):]
+            if token:
+                await redis.setex(f"tgauth:{token}", 300, str(user_id))
+                await tg.send_message(
+                    chat_id, "✅ Вхід у застосунок JARVIS підтверджено — повертайся в додаток."
+                )
+            return True
         if payload == "app":
             await _send_mini_app(chat_id, tg, svc, user_id=user_id)
             return True
@@ -294,6 +307,22 @@ async def handle_command(
 
     if cmd == "/app":
         await _send_mini_app(chat_id, tg, svc, user_id=user_id, ps=True)
+        return True
+
+    if cmd == "/login":
+        if redis is not None:
+            from ..applogin import mint_login_link
+
+            link = await mint_login_link(redis, user_id)
+            await tg.send_message(
+                chat_id,
+                "🔐 Вхід у застосунок <b>одним тапом</b> — натисни посилання нижче "
+                "(відкриється JARVIS уже авторизованим, дійсне 10 хв):\n\n"
+                f"<code>{esc(link)}</code>",
+                parse_mode="HTML",
+            )
+        else:
+            await tg.send_message(chat_id, "Логін недоступний (redis off).")
         return True
 
     if cmd == "/help":
@@ -430,6 +459,11 @@ async def handle_command(
             return True
         await send_plan_confirm(chat_id, str(plan.get("id") or ""), str(plan.get("summary") or task), tg)
         return True
+
+    if cmd == "/apk":
+        from .apk import handle_apk_command
+
+        return await handle_apk_command(chat_id, user_id, tg, redis=redis)
 
     if cmd == "/cursor":
         if tools is None:

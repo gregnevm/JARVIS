@@ -71,6 +71,38 @@ async def test_wrap_returns_confirm_marker(redis_env):
     assert CONFIRM_MARKER.split("{")[0] in out
 
 
+async def test_confirm_roundtrip_counts_quota_once(
+    redis_env, monkeypatch: pytest.MonkeyPatch
+):
+    """Confirm round-trip споживає рівно один слот ліміту (regression: рахувалось 2)."""
+    import re
+
+    executed: list[str] = []
+
+    async def _fake_internal(tool, args, *, trusted=False):
+        executed.append(tool)
+        return "written"
+
+    monkeypatch.setattr("app.computer.execute_internal", _fake_internal)
+
+    async def _run() -> str:
+        return "should-not-run-directly"
+
+    out = await wrap_execute(1, "fs_write", {"path": "/x", "content": "y"}, _run)
+    assert CONFIRM_MARKER.split("{")[0] in out
+    # Лише видача маркера не повинна торкатись лічильника й застосовувати дію.
+    assert sum(redis_env.counts.values()) == 0
+    assert not executed
+
+    m = re.search(r"COMPUTER_CONFIRM:([a-f0-9]+)", out)
+    assert m
+    result, _ = await execute_confirmed(1, m.group(1))
+    assert result == "written"
+    assert executed == ["fs_write"]
+    # Рівно один інкремент на годинному ключі після реального виконання.
+    assert sum(redis_env.counts.values()) == 1
+
+
 async def test_admin_two_step_confirm(redis_env, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "admin_user_ids", "1")
     monkeypatch.setattr(settings, "computer_allow_admin", True)

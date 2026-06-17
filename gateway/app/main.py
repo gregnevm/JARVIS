@@ -28,6 +28,7 @@ from .services import ServicesClient
 from .admin_panel import router as admin_panel_router
 from .platform import router as platform_router
 from .openai_api import router as openai_router
+from .client_api import router as client_api_router
 from .webapp import router as webapp_router
 from .tools_client import ToolsClient
 from .ratelimit import RateLimiter
@@ -112,6 +113,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     bg_job_task = asyncio.create_task(
         bg_job_runner_loop(app.state.tools, app.state.tg, interval=3.0)
     )
+    ctx_sched_task: asyncio.Task[None] | None = None
+    if settings.context_scheduler_enabled:
+        from .context_scheduler import context_scheduler_loop
+
+        ctx_sched_task = asyncio.create_task(context_scheduler_loop(app.state.redis))
 
     # BotFather UI: команди, опис, Mini App menu button.
     await register_bot_ui(app.state.tg)
@@ -129,7 +135,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
 
-    for task in (poll_task, reminder_task, health_task, job_task, bg_job_task):
+    for task in (poll_task, reminder_task, health_task, job_task, bg_job_task, ctx_sched_task):
         if task is not None:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -178,6 +184,7 @@ app.include_router(webapp_router)
 app.include_router(admin_panel_router)
 app.include_router(platform_router)
 app.include_router(openai_router)
+app.include_router(client_api_router)
 
 
 @app.middleware("http")

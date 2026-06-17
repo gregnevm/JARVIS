@@ -50,6 +50,12 @@ class TelegramClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def get_me(self) -> dict[str, Any]:
+        """Інфо про бота (getMe.result) — для побудови t.me/<username> deeplink."""
+        data = await self._call("getMe", {})
+        result = data.get("result") if isinstance(data, dict) else None
+        return result if isinstance(result, dict) else {}
+
     async def set_webhook(
         self,
         url: str,

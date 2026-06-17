@@ -91,6 +91,7 @@ EXPECTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/lora/deploy"),
     ("POST", "/cursor/tasks"),
     ("POST", "/cursor/tasks/run"),
+    ("POST", "/context/jobs/{name}"),
 }
 
 

@@ -104,19 +104,21 @@ CL-0 (TG+MiniApp+/platform ✅) ─► CL-1 (спільний client-API + JWT)
 
 ---
 
-## CL-1 — Спільний client-API + єдина auth · **блокується SAAS PR#1**
+## CL-1 — Спільний client-API + єдина auth · **🟡 self-hosted MVP done** (SAAS PR#1 ✅ розблокував)
 
 **Мета:** один контракт для всіх клієнтів; JWT поряд із initData.
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| CL-1.1 | JWT auth (signup/login/refresh) — `gateway/app/saas/auth.py` | SAAS PR#6 | [ ] |
-| CL-1.2 | `link-telegram` — JWT-акаунт ↔ telegram_id (зберегти legacy дані) | SAAS §6.1 | [ ] |
-| CL-1.3 | Консолідувати client-API: `/app/*` + `/platform/api/*` → стабільний `/api/v1/*` | Versioned контракт | [ ] |
-| CL-1.4 | Auth-матриця: Telegram initData · JWT · API-key · Basic — один resolver | `RequestContext` (SAAS §2.2) | [ ] |
-| CL-1.5 | OpenAPI для client-API (для генерації mobile-клієнта) | `/openapi.json` | [ ] |
+| CL-1.1 | JWT auth — `gateway/app/saas/auth.py` (HS256, login/refresh, за прапором `JWT_SECRET`) | self-hosted | [x] login/refresh для admin; multi-user signup → SAAS PR#6 |
+| CL-1.2 | `link-telegram` — JWT-акаунт ↔ telegram_id (зберегти legacy дані) | SAAS §6.1 | [ ] ⏭️ потребує `users`-таблиці (PR#2/PR#6) |
+| CL-1.3 | Консолідувати client-API → стабільний `/api/v1/*` | Versioned контракт | [x] seed (`/api/v1/auth/*`, `/whoami`); `/app/*`+`/platform/api/*` мігрують поетапно |
+| CL-1.4 | Auth-матриця: initData · JWT · Basic — один resolver `resolve_client_context` | `RequestContext` (SAAS §2.2) | [x] (`gateway/app/client_api/deps.py`; api-key `sk-jarvis` → AP-1) |
+| CL-1.5 | OpenAPI для client-API (для генерації mobile-клієнта) | `/openapi.json` | [x] tag `client-api` на `/api/v1/*` |
 
-**Вихід CL-1:** будь-який клієнт логіниться (JWT або initData) і ходить в єдиний `/api/v1/*`.
+**Вихід CL-1:** будь-який клієнт логіниться (JWT або initData) і ходить в єдиний `/api/v1/*`. ✅ для self-hosted
+(JWT admin-логін + Basic + initData → `resolve_client_context` → `RequestContext`). Реалізовано в
+`gateway/app/{saas/auth.py, client_api/}`; тести `gateway/tests/test_client_api.py`.
 
 ---
 
@@ -148,12 +150,17 @@ CL-0 (TG+MiniApp+/platform ✅) ─► CL-1 (спільний client-API + JWT)
 |---|--------|-----|--------|
 | CL-3.1 | ADR: стек (PWA-wrap / Flutter / React Native / Kotlin) — критерій: швидкість + voice/push | `docs/adr/` | [ ] |
 | CL-3.2 | Каркас `mobile/`: логін (JWT), список чатів, налаштування сервера (URL) | APK збирається | [ ] |
-| CL-3.3 | Чат + streaming (SSE/WebSocket) | Друкована відповідь | [ ] |
+| CL-3.3 | Чат + streaming (SSE/WebSocket) | Друкована відповідь | 🟡 backend `POST /api/v1/chat` ✅ (`client_api/chat.py`, reuse `tools.process` — S3); SSE-стрім + Android-UI попереду |
 | CL-3.4 | Voice: запис → STT (whisper) → агент → TTS-відтворення | E2E voice | [ ] |
 | CL-3.5 | Computer-confirm UX (тап ✅/❌, перегляд дії) — закриває CC5 | Inline approve | [ ] |
 | CL-3.6 | Push (FCM) для job/reminder/confirm-pending | Доставка у фоні | [ ] |
 | CL-3.7 | Workbench-lite (mode picker, tool trace) | Mobile-friendly | [ ] |
 | CL-3.8 | Реліз: signed APK + (опц.) F-Droid/Play | `mobile/README` build | [ ] |
+| CL-3.9 | **Ambient-context ingest API** (`/api/v1/ingest/events` + `/context/{search,recent,purge}`) → memory `context_events` із паспортами P9/P10; flag `ENABLE_CONTEXT_API`; колектор `scripts/jarvis_context.py` | бекенд + тести (memory + gateway), mypy strict | **[x]** |
+
+> **Збір контексту вже працює без APK (CL-3.9):** будь-який клієнт (скрипт на хості, платформа,
+> згодом APK) ллє паспорти в `/api/v1/ingest/events`. Пропозиція ambient-companion (дзвінки/SMS/
+> сповіщення/проактив, рівні чутливості, daily-summary, proposal-engine) — [`proposals/CL-3_mobile_context_companion.md`](proposals/CL-3_mobile_context_companion.md).
 
 > **Рекомендація для оцінки:** почати з **PWA-wrap** (CL-2 PWA у WebView + нативні voice/push мости) —
 > найдешевший шлях до APK, що перевикористовує web-app. Рідний (Flutter/RN) — якщо PWA впреться в

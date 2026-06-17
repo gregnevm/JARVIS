@@ -9,6 +9,7 @@ from . import (
     coding,
     computer,
     connectors,
+    context,
     core,
     cursor,
     dataset,
@@ -45,6 +46,7 @@ _ROUTE_MODULES = (
     improve,
     lora,
     cursor,
+    context,
 )
 
 
