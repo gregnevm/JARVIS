@@ -13,7 +13,12 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from jarvis_core.context import DEFAULT_ORG_ID
-from jarvis_core.passport import normalize_sensitivity, normalize_tags
+from jarvis_core.passport import (
+    default_redactor,
+    normalize_sensitivity,
+    normalize_tags,
+    should_store_raw,
+)
 
 logger = logging.getLogger("jarvis.memory.context")
 
@@ -99,9 +104,23 @@ async def context_ingest(req: ContextIngestRequest, request: Request) -> dict[st
     summary = (req.summary or req.content or "").strip()
     if not summary:
         raise HTTPException(status_code=400, detail="summary or content required")
-    summary = summary[:4000]
     kind = (req.kind or "note").strip() or "note"
     tags = normalize_tags(req.tags, kind)
+    sensitivity = normalize_sensitivity(req.sensitivity)
+
+    # Серверний backstop редакції (C1): пристрій міг не пре-редактити (self-ingest
+    # нотатки) → не пускаємо секрети/картки/OTP у context_events cleartext.
+    redactor = default_redactor()
+    summary = redactor.redact(summary[:4000])
+    payload = req.payload
+    if payload:
+        if should_store_raw(sensitivity):
+            payload = {
+                k: (redactor.redact(v) if isinstance(v, str) else v)
+                for k, v in payload.items()
+            }
+        else:
+            payload = {}  # health/finance — сире не зберігаємо взагалі
 
     embedding = await _embed_or_none(request, summary)
     res = await request.app.state.db.add_context_event(
@@ -112,11 +131,11 @@ async def context_ingest(req: ContextIngestRequest, request: Request) -> dict[st
         embedding=embedding,
         org_id=req.org_id or DEFAULT_ORG_ID,
         source=req.source,
-        sensitivity=normalize_sensitivity(req.sensitivity),
+        sensitivity=sensitivity,
         ref=req.ref,
         event_id=req.event_id,
         event_ts=req.event_ts,
-        payload=req.payload,
+        payload=payload,
     )
     return {
         "id": res.get("id"),

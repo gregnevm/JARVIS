@@ -33,8 +33,18 @@ class PlatformAuth:
 def resolve_uid(auth: "PlatformAuth", user_id: int | None) -> int:
     """uid з query/body, якщо заданий (admin може запитувати від імені іншого user_id),
     інакше — uid автентифікованого користувача. Той самий патерн повторювався
-    у кожному platform-роуті (`int(user_id) if user_id is not None else auth.user_id`)."""
-    return int(user_id) if user_id is not None else auth.user_id
+    у кожному platform-роуті (`int(user_id) if user_id is not None else auth.user_id`).
+
+    Anti-IDOR (AGENTS §5): cross-uid (діяти від імені ІНШОГО user_id) дозволено лише
+    справжньому адміну. Сьогодні обидва канали platform-auth = admin-only, тож guard
+    no-op; але він стає load-bearing, щойно постануть non-owner ролі (SaaS PR#6) —
+    тоді не-адмін не зможе зімперсонити чужий uid через `?user_id=`."""
+    if user_id is None or int(user_id) == auth.user_id:
+        return auth.user_id
+    admins = settings.admin_ids
+    if admins and auth.user_id not in admins:
+        raise HTTPException(status_code=403, detail="cross-user access requires admin")
+    return int(user_id)
 
 
 def resolve_context(

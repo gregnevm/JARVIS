@@ -96,16 +96,17 @@
 - [x] P1-3 precommit_gate dead entry прибрано
 - [x] P1-1 dead commands /plan /improve /login → у COMMANDS
 
-### Batch 2 — Multi-tenant ground-work (AGENTS §5)
-- [ ] P1-4 ratelimit org-prefix
-- [ ] P1-5 memory context org_id scoping
-- [ ] P2-1 PR#4 headers: підключити to_headers() OR відмітити not-done
-- [ ] P0-3 platform resolve_uid role-guard
+### Batch 2 — Multi-tenant ground-work (AGENTS §5) ✅ (частково)
+- [x] P1-4 ratelimit org-prefix (`jarvis:{org_id}:rl:...` через redis_key)
+- [~] P1-5 memory context org_id scoping — **відкладено**: 0 поточного впливу (синтетична
+  org), належить треку team-ecosystem (owner→policy scope). Форсувати зараз = P6/YAGNI.
+- [~] P2-1 PR#4 headers — **доковий фікс у Batch 5** (код шле user_id у body; to_headers() мертвий → позначити not-done чесно)
+- [x] P0-3 platform resolve_uid role-guard (cross-uid лише адміну; load-bearing під SaaS)
 
-### Batch 3 — Correctness
-- [ ] P1-6 memory embed_dim guard (real dim)
-- [ ] P1-7 twin /ingest/logs delta_start_idx
-- [ ] P2-4 memory redactor on ingest
+### Batch 3 — Correctness ✅
+- [x] P1-6 memory embed_dim guard — додано перевірку РЕАЛЬНОЇ розмірності pgvector-колонки
+- [x] P1-7 twin /ingest/logs delta_start_idx (дедуп re-push)
+- [x] P2-4 memory redactor on ingest (summary+payload backstop)
 
 ### Batch 4 — /v1 hardening
 - [ ] P0-5 /v1 rate-limit

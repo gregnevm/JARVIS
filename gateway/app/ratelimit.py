@@ -9,6 +9,8 @@ import logging
 import time
 from typing import Any, Protocol
 
+from jarvis_core.context import DEFAULT_ORG_ID, redis_key
+
 logger = logging.getLogger("jarvis.ratelimit")
 
 
@@ -22,12 +24,16 @@ class RateLimiter:
         self._redis = redis
         self._limit = limit_per_min
 
-    async def allow(self, user_id: int, *, limit: int | None = None) -> bool:
+    async def allow(
+        self, user_id: int, *, limit: int | None = None, org_id: str | None = None
+    ) -> bool:
         cap = self._limit if limit is None else limit
         if cap <= 0 or self._redis is None:
             return True
         window = int(time.time() // 60)
-        key = f"rl:{user_id}:{window}"
+        # Org-префіксований ключ (AGENTS §5): `jarvis:{org_id}:rl:{user_id}:{window}`.
+        # Self-hosted = синтетична org; під SaaS org розділяє лічильники між тенантами.
+        key = redis_key(org_id or DEFAULT_ORG_ID, "rl", str(user_id), str(window))
         try:
             count = await self._redis.incr(key)
             if count == 1:

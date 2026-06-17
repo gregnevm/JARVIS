@@ -30,6 +30,12 @@ class DB:
         warn = alembic_migrate.embed_dim_mismatch(meta)
         if warn:
             logger.warning(warn)
+        # Друга, надійніша перевірка: РЕАЛЬНА розмірність pgvector-колонки vs env.
+        col_warn = alembic_migrate.column_dim_mismatch(
+            await alembic_migrate.column_embed_dim(self)
+        )
+        if col_warn:
+            logger.warning(col_warn)
 
     async def migrate(self) -> None:
         """Alembic upgrade head (idempotent). Викликати окремо без connect()."""
