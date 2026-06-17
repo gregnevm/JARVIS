@@ -105,3 +105,20 @@ jobs:
             data/artifacts/jarvis-mvp.apk
             data/artifacts/jarvis-mvp.apk.meta.json
           generate_release_notes: true
+
+      # Rolling-реліз: кожен білд на main оновлює тег `apk-latest` свіжим APK —
+      # постійне публічне посилання для встановлення з телефону (один тап), без
+      # секретів. CI створює реліз через GITHUB_TOKEN (permissions: contents:write).
+      - name: Publish rolling APK release (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: JARVIS MVP APK — latest build
+          prerelease: true
+          body: |
+            Автозбірка останнього `main`. Встанови з телефону: натисни `jarvis-mvp.apk` →
+            дозволь «з невідомих джерел» → відкрий → вкажи URL свого JARVIS-сервера.
+          files: |
+            data/artifacts/jarvis-mvp.apk
+            data/artifacts/jarvis-mvp.apk.meta.json
