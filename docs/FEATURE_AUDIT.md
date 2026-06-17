@@ -94,7 +94,8 @@
 - [x] P0-2 uid=0 guards на app_set_mode/app_trust/app_run_macro (`_require_identified`)
 - [x] P1-2 /window/focus malformed PS (переписано за патерном /uia/invoke)
 - [x] P1-3 precommit_gate dead entry прибрано
-- [x] P1-1 dead commands /plan /improve /login → у COMMANDS
+- [x] P1-1 dead commands /plan /improve /login → виправлено (після merge з main баг усунено
+  рефактором у `CommandRegistry`: `is_command` тепер питає `registry.has(cmd)`, всі три зареєстровані)
 
 ### Batch 2 — Multi-tenant ground-work (AGENTS §5) ✅ (частково)
 - [x] P1-4 ratelimit org-prefix (`jarvis:{org_id}:rl:...` через redis_key)
