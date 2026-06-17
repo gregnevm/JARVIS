@@ -26,6 +26,7 @@
   "GET /skills/{skill_id}",
   "GET /subagents",
   "GET /tasks",
+  "GET /team/group/{chat_id}/ingest",
   "GET /teams",
   "GET /teams/{team_id}",
   "POST /agent",
@@ -59,6 +60,8 @@
   "POST /skills/active",
   "POST /subagents/run",
   "POST /subagents/spawn",
+  "POST /team/group/collect",
+  "POST /team/group/member",
   "POST /teams/run",
   "POST /teams/spawn"
 ]

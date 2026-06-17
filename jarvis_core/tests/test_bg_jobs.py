@@ -6,7 +6,20 @@ from jarvis_core.bg_jobs import JOB_TYPES, normalize_payload, platform_create_me
 def test_job_types_complete():
     assert "agent_turn" in JOB_TYPES
     assert "coding_task" in JOB_TYPES
-    assert len(JOB_TYPES) == 7
+    assert "delegate_tick" in JOB_TYPES
+    assert len(JOB_TYPES) == 8
+
+
+def test_normalize_delegate_tick():
+    out = normalize_payload("delegate_tick", {"principal_id": "A", "org_id": "o", "cursor": "c1"})
+    assert out == {"principal_id": "A", "org_id": "o", "cursor": "c1"}
+
+
+def test_normalize_delegate_tick_requires_principal():
+    import pytest
+
+    with pytest.raises(ValueError):
+        normalize_payload("delegate_tick", {"org_id": "o"})
 
 
 def test_platform_create_method_mapping():

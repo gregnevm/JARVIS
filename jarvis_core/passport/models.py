@@ -45,6 +45,12 @@ class Passport:
     event_id: str | None = None
     event_ts: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
+    # Стовп D (TEAM_ECOSYSTEM §4.1) — командна видимість. Дефолти зберігають
+    # owner-scoped поведінку (private, без суб'єктів) → solo-user незмінний (S2).
+    subjects: list[str] = field(default_factory=list)   # про кого (user_id/tg_id/person:tag)
+    visibility: str = "private"                          # private|squad|org|custom
+    audience: list[str] = field(default_factory=list)   # явні user_id/squad_id (для custom)
+    group_ref: int | None = None                        # chat_id, якщо паспорт із групи
 
     def to_store(self) -> dict[str, Any]:
         """Плоский dict для memory `/context/ingest` (без owner/org — їх дає RequestContext)."""
@@ -58,4 +64,8 @@ class Passport:
             "event_id": self.event_id,
             "event_ts": self.event_ts,
             "payload": self.payload,
+            "subjects": self.subjects,
+            "visibility": self.visibility,
+            "audience": self.audience,
+            "group_ref": self.group_ref,
         }

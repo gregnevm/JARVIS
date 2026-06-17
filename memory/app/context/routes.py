@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from jarvis_core.context import DEFAULT_ORG_ID
+from jarvis_core.orggraph.models import normalize_visibility
 from jarvis_core.passport import (
     default_redactor,
     normalize_sensitivity,
@@ -38,6 +39,11 @@ class ContextIngestRequest(BaseModel):
     event_ts: str | None = None
     payload: dict[str, Any] = {}
     org_id: str = DEFAULT_ORG_ID
+    # Командна видимість (Стовп D §4.1) — дефолти зберігають owner-scoped (private).
+    subjects: list[str] = []
+    visibility: str = "private"
+    audience: list[str] = []
+    group_ref: int | None = None
 
 
 class ContextSearchRequest(BaseModel):
@@ -135,7 +141,11 @@ async def context_ingest(req: ContextIngestRequest, request: Request) -> dict[st
         ref=req.ref,
         event_id=req.event_id,
         event_ts=req.event_ts,
-        payload=payload,
+        payload=payload,  # відредаговано (P2-4)
+        subjects=req.subjects,
+        visibility=normalize_visibility(req.visibility),
+        audience=req.audience,
+        group_ref=req.group_ref,
     )
     return {
         "id": res.get("id"),

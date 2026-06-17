@@ -16,9 +16,10 @@ from .tools_client_base import FALLBACK, ToolsClientBase, extract_text
 from .tools_client_computer import ComputerMixin
 from .tools_client_jobs import JobsMixin
 from .tools_client_orchestrator import OrchestratorMixin
+from .tools_client_team import TeamMixin
 
 __all__ = ["FALLBACK", "ToolsClient", "extract_text"]
 
 
-class ToolsClient(AgentMixin, ComputerMixin, JobsMixin, OrchestratorMixin, ToolsClientBase):
+class ToolsClient(AgentMixin, ComputerMixin, JobsMixin, OrchestratorMixin, TeamMixin, ToolsClientBase):
     """Агрегатор усіх доменних mixin-ів. Спільний HTTP-плумбінг — у ToolsClientBase."""

@@ -24,6 +24,11 @@ class JWTError(Exception):
     """Невалідний / прострочений / не того типу токен."""
 
 
+# Ім'я HttpOnly-cookie з access-JWT для браузерних сесій (Telegram one-tap → веб-консоль).
+# Спільне для `/connect` (видає), platform/auth і client_api/deps (приймають як 4-й канал).
+JWT_COOKIE = "jarvis_jwt"
+
+
 def jwt_enabled() -> bool:
     """JWT-логін активний лише якщо заданий секрет (інакше лишаються initData/Basic)."""
     return bool(settings.jwt_secret.strip())
