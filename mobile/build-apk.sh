@@ -45,11 +45,19 @@ JAVA_MAJOR="$("$JAVA_HOME/bin/java" -version 2>&1 | sed -n 's/.*version "\([0-9]
 step "Android SDK ($PLATFORM + build-tools $BUILD_TOOLS_VER)"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$SDK_DEFAULT}}"
 sdkmanager_bin() {
-  for p in "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-           "$SDK/cmdline-tools/bin/sdkmanager" \
-           "$(command -v sdkmanager 2>/dev/null || true)"; do
-    [ -x "$p" ] && { echo "$p"; return 0; }
-  done
+  # 1) явний cmdline-tools/latest
+  if [ -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+    echo "$SDK/cmdline-tools/latest/bin/sdkmanager"; return 0
+  fi
+  # 2) будь-яка версія cmdline-tools (CI-образ кладе у versioned dir, напр. 16.0/) —
+  #    беремо найновішу. НЕ legacy `tools/bin/sdkmanager` (розуміє лише SDK XML v3).
+  local m
+  m="$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1 || true)"
+  if [ -n "$m" ] && [ -x "$m" ]; then echo "$m"; return 0; fi
+  # 3) PATH, але свідомо пропускаємо застарілий tools/bin
+  local p; p="$(command -v sdkmanager 2>/dev/null || true)"
+  case "$p" in */tools/bin/sdkmanager) p="" ;; esac
+  if [ -n "$p" ]; then echo "$p"; return 0; fi
   return 1
 }
 if ! SDKMGR="$(sdkmanager_bin)"; then
