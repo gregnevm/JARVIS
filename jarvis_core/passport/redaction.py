@@ -42,6 +42,15 @@ _DEFAULT_RULES: list[Rule] = [
     # AWS access key ID: AKIA/ASIA + рівно 16 великих alnum (всього 20 символів).
     # Префікс дуже специфічний → нульовий ризик хибних спрацювань на звичайному тексті.
     Rule("aws_key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "[REDACTED:secret]"),
+    # Google API key: 'AIza' + рівно 35 символів (всього 39) — фіксований формат.
+    Rule("google_key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"), "[REDACTED:secret]"),
+    # Окремий JWT (3 base64url-сегменти через крапку) — ловить токени поза 'Bearer'
+    # (тіла, логи, трейсбеки). 'eyJ' = base64 від '{"' заголовка → дуже специфічно.
+    Rule(
+        "jwt",
+        re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b"),
+        "[REDACTED:secret]",
+    ),
     # Bearer-токен в Authorization-хедері: 'Bearer eyJ…' → ключове слово лишаємо.
     Rule(
         "bearer",

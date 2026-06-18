@@ -112,6 +112,28 @@ def test_redact_aws_key_no_false_positive():
     assert out == "AKIA is an Amazon prefix word"
 
 
+def test_redact_google_api_key():
+    key = "AIzaSy" + "B" * 33  # 'AIza' + 35 -> 39 chars
+    out = default_redactor().redact(f"gmaps {key} ok")
+    assert "[REDACTED:secret]" in out and key not in out
+
+
+def test_redact_standalone_jwt():
+    jwt = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+        ".eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+        ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+    )
+    # без key=value-контексту — спрацьовує саме jwt-правило, не cred_kv
+    out = default_redactor().redact(f"received {jwt} from client")
+    assert "[REDACTED:secret]" in out and jwt not in out
+
+
+def test_redact_jwt_no_false_positive_on_dotted_name():
+    out = default_redactor().redact("import module.submodule.func")
+    assert out == "import module.submodule.func"
+
+
 def test_redact_bearer_and_credential_kv():
     r = default_redactor()
     bearer = r.redact("Authorization: Bearer eyJhbGciOi.payloadpart.signaturehere")
