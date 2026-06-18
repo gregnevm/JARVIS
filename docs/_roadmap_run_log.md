@@ -117,3 +117,27 @@ default OFF (ADR-008). 6 фаз: code→review→refactor→analyze→test→evo
 - Platform tab `autopilot.py` (status/tick/OKR/dashboard) wired у router; 4 settings-прапори.
 - Skill `data/skills/auto-coder`, seed `data/okr/okr.json`, `data/autopilot/dashboard.md`.
 - e2e: platform-ендпоїнти 200 через TestClient; mypy `gateway/app` (101) + `jarvis_core` (31) green.
+
+## Kaizen window 2026-06-18-kaizen-2 (max-utilization, 7 PR змерджено в green `main`)
+
+Автономний прогон скіла `kaizen` (`profile:jarvis`). На відміну від попередніх локальних
+прогонів — кожне покращення доставлено як **змерджений PR** (code → local CI-gate → push →
+PR → watch CI green → squash-merge). `main` зелений увесь час; жодного revert. Стоп:
+`backlog_dry` (безпечні offline-1-ітерація задачі вичерпано; решта потребує
+сервісів/секретів/GPU або людського рев'ю — SaaS, vision/UIA, SPA, IDOR). 50.8/300 хв вікна.
+
+- **#30** `feat(safety)` — `jarvis_core/safety/blast_radius.py`: fail-closed allow/deny path-guard
+  (safety_guard-порт, deny-wins, basename-deny для секретів), 24 тести.
+- **#31** `refactor(jsonl)` — єдиний `JsonlLog` SSOT у `jarvis_core`; `twin/app/session_log.py` →
+  тонкий re-export (усунуто дублювання, P8/DRY); `read_from` портовано на core + 7 тестів.
+- **#32** `test(parsers)` — `test_parsers.py` (29 кейсів): guard-гілки
+  `extract_json_object`/`kobold_token`/`ollama_chunk`/`ollama_chat_chunk`/`ollama_inference_stats`.
+- **#33** `feat(redaction)` — маскування AWS access key ID (AKIA/ASIA).
+- **#34** `docs(context)` — D1 doc-sync: `redis_key` reframed PR#3→Live + звірений список 7 споживачів.
+- **#35** `feat(redaction)` — Google API key (AIza) + standalone JWT (eyJ.x.y).
+- **#36** `fix(redaction)` — рекурсивна редакція payload (вкладені dict/list на будь-якій глибині).
+
+Підсумок: jarvis_core-тести 144 → **210** (+66); redactor-бекстоп покриває канонічний набір
+секретів + вкладені структури; нова safety-цеглина для автономних правок. kaizen-score 86 (+8).
+Артефакти: `data/artifacts/self-improve/` (20 паспортів, `window.json`,
+`runs/2026-06-18-kaizen-2/{summary.json,digest.md}`).
