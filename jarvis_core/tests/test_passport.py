@@ -170,6 +170,26 @@ def test_redact_passport_keeps_redacted_payload_for_personal():
     assert out.payload["text"] == "код [REDACTED:otp]"
 
 
+def test_redact_passport_recurses_nested_payload():
+    r = default_redactor()
+    key = "sk-ABCDEF0123456789abcdef"
+    p = Passport(
+        kind="note", summary="x", tags=["kind:note"], sensitivity="personal",
+        payload={
+            "top": key,
+            "nested": {"inner": key, "n": 7},
+            "lst": [key, {"deep": key}],
+        },
+    )
+    out = r.redact_passport(p)
+    assert out.payload["top"] == "[REDACTED:secret]"
+    assert out.payload["nested"]["inner"] == "[REDACTED:secret]"
+    assert out.payload["nested"]["n"] == 7  # не-рядки лишаються як є
+    assert out.payload["lst"][0] == "[REDACTED:secret]"
+    assert out.payload["lst"][1]["deep"] == "[REDACTED:secret]"
+    assert key not in str(out.payload)
+
+
 def test_custom_rules_override_defaults():
     import re
 
