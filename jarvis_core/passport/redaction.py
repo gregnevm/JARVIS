@@ -104,11 +104,22 @@ class Redactor:
             payload = {}  # health/finance — сире не зберігаємо взагалі
         return replace(p, summary=clean_summary, payload=payload)
 
+    def _redact_value(self, v: Any) -> Any:
+        """Рекурсивна редакція значення payload (str/dict/list на будь-якій глибині).
+
+        Секрети ховаються і у вкладених структурах — не лише в top-level рядках.
+        Ключі не чіпаємо (це назви полів, не значення). Скаляри (int/bool/None)
+        повертаються як є."""
+        if isinstance(v, str):
+            return self.redact(v)
+        if isinstance(v, dict):
+            return {k: self._redact_value(val) for k, val in v.items()}
+        if isinstance(v, list):
+            return [self._redact_value(item) for item in v]
+        return v
+
     def _redact_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        out: dict[str, Any] = {}
-        for k, v in (payload or {}).items():
-            out[k] = self.redact(v) if isinstance(v, str) else v
-        return out
+        return {k: self._redact_value(v) for k, v in (payload or {}).items()}
 
 
 _default = Redactor()
