@@ -10,8 +10,8 @@ Framework-нейтральний (без FastAPI) — на відміну від
 
 Споживачі по фазах:
   * PR#1 (зараз): `resolve_context()` у gateway, `whoami`-відповідь.
-  * PR#3: `redis_key(org_id, …)` — org-префіксовані Redis-ключі (вже у вжитку:
-    applogin/context_scheduler/ratelimit).
+  * Live: `redis_key(org_id, …)` — org-префіксовані Redis-ключі, уже у вжитку в
+    gateway (applogin, auth_links, client_api, context_scheduler, ratelimit, platform/apk).
   * PR#4 (НЕ підключено): `to_headers()` визначений, але gateway→tools client
     (`tools_client_http`) його ЩЕ не чіпляє — user_id наразі їде в JSON-body, не
     у `X-JARVIS-*`. Тобто `to_headers()/from_headers()` поки лише інфраструктура під
@@ -88,8 +88,8 @@ def synthetic_context(
 def redis_key(org_id: str | None, *parts: str) -> str:
     """Org-префіксований Redis-ключ: `jarvis:{org_id}:{parts...}` (SAAS_DEEP_DIVE §1.4).
 
-    `org_id=None` (поточний self-hosted до PR#3 backfill) → `jarvis:{parts...}` —
-    збігається з наявними ключами, тож міграція безшовна. Споживається у PR#3."""
+    `org_id=None` (legacy unscoped form, до org-backfill) → `jarvis:{parts...}` —
+    збігається з наявними ключами, тож міграція безшовна. Уже у вжитку в gateway-сторах."""
     suffix = ":".join(str(p) for p in parts)
     if org_id:
         return f"jarvis:{org_id}:{suffix}"
