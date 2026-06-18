@@ -39,6 +39,9 @@ _DEFAULT_RULES: list[Rule] = [
         re.compile(r"\b(?:sk|pk|ghp|gho|ghs|xox[bp])[-_][A-Za-z0-9][A-Za-z0-9_-]{14,}[A-Za-z0-9]\b"),
         "[REDACTED:secret]",
     ),
+    # AWS access key ID: AKIA/ASIA + рівно 16 великих alnum (всього 20 символів).
+    # Префікс дуже специфічний → нульовий ризик хибних спрацювань на звичайному тексті.
+    Rule("aws_key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "[REDACTED:secret]"),
     # Bearer-токен в Authorization-хедері: 'Bearer eyJ…' → ключове слово лишаємо.
     Rule(
         "bearer",
