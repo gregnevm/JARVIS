@@ -99,6 +99,19 @@ def test_redact_jarvis_multisegment_key():
     assert key not in out
 
 
+def test_redact_aws_access_key():
+    r = default_redactor()
+    out = r.redact("creds AKIAIOSFODNN7EXAMPLE and ASIAY34FZKBOKMUTVV7A here")
+    assert out.count("[REDACTED:secret]") == 2
+    assert "AKIAIOSFODNN7EXAMPLE" not in out and "ASIAY34FZKBOKMUTVV7A" not in out
+
+
+def test_redact_aws_key_no_false_positive():
+    # 'AKIA' як звичайне слово (не 20-символьний ключ) лишається недоторканим
+    out = default_redactor().redact("AKIA is an Amazon prefix word")
+    assert out == "AKIA is an Amazon prefix word"
+
+
 def test_redact_bearer_and_credential_kv():
     r = default_redactor()
     bearer = r.redact("Authorization: Bearer eyJhbGciOi.payloadpart.signaturehere")
