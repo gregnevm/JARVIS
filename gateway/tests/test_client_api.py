@@ -91,6 +91,13 @@ def test_whoami_via_jwt(client_jwt):
     assert d["plan"] == "studio"
     assert d["org_id"] == "00000000-0000-0000-0000-000000000001"
     assert d["legacy_uid"] == 42
+    # plan limits surfaced (AP-4.3): studio = self-hosted owner → усі стелі null (UNLIMITED)
+    assert d["limits"] == {
+        "requests_per_day": None,
+        "tokens_per_month": None,
+        "max_api_keys": None,
+        "rate_limit_per_min": None,
+    }
 
 
 def test_whoami_via_basic(client_jwt):
