@@ -25,6 +25,24 @@ def test_mutating_needs_scope_for_auto() -> None:
     assert requires_confirmation(a, {"act:auto"}) is False   # зі scope → auto
 
 
+def test_unknown_kind_fails_closed() -> None:
+    """Невідомий, не явно-безпечний kind (усі прапорці дефолтні) → confirm (S4 fail-closed)."""
+    a = ProposedAction(kind="archive", summary="archive thread")
+    assert requires_confirmation(a) is True
+
+
+def test_unknown_kind_fails_closed_even_with_auto_scope() -> None:
+    """act:auto не авто-апрувить НЕВІДОМИЙ kind — лише явно-мутуючі дії покриті цим scope."""
+    a = ProposedAction(kind="reassign", summary="reassign owner")
+    assert requires_confirmation(a, {"act:auto"}) is True
+
+
+def test_typo_safe_kind_not_silently_auto() -> None:
+    """Друкарська помилка в безпечному kind ('snd' замість 'send') не зрізає підтвердження."""
+    a = ProposedAction(kind="snd", summary="maybe-send")
+    assert requires_confirmation(a) is True
+
+
 def test_gate_partitions() -> None:
     actions = [
         ProposedAction(kind="draft", summary="reply draft"),
