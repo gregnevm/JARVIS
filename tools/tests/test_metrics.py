@@ -84,3 +84,42 @@ async def test_record_and_summary(monkeypatch: pytest.MonkeyPatch):
     assert s["rag_queries"] == 2
     assert s["rag_hit_rate"] == 0.5
     assert "calc" in s["tools"]
+
+
+@pytest.mark.asyncio
+async def test_org_id_scopes_keys_and_isolates(monkeypatch: pytest.MonkeyPatch):
+    """AP-4.4: org_id produces `jarvis:{org}:metrics:*` keys; the default (None)
+    org is isolated from a scoped org and stays byte-compatible (S2)."""
+    fake = FakeRedis()
+    monkeypatch.setattr(metrics, "get_redis", lambda: fake)
+
+    await metrics.record_turn(1000, "agent", 1, org_id="acme")
+    await metrics.record_tool("calc", 42, org_id="acme")
+    await metrics.record_rag(1, org_id="acme")
+
+    # keys carry the org prefix
+    assert "jarvis:acme:metrics:turns" in fake.lists
+    assert "jarvis:acme:metrics:tool_lat:calc" in fake.lists
+    assert "jarvis:acme:metrics:rag_queries" in fake.kv
+
+    # the scoped org reads back its own data
+    s_acme = await metrics.summary(org_id="acme")
+    assert s_acme["turn_ms"]["count"] == 1
+    assert "calc" in s_acme["tools"]
+    assert s_acme["rag_queries"] == 1
+
+    # default (unscoped) org sees none of acme's data — isolation holds
+    s_default = await metrics.summary()
+    assert s_default["turn_ms"]["count"] == 0
+    assert s_default["tools"] == {}
+    assert s_default["rag_queries"] == 0
+
+
+def test_default_keys_are_byte_compatible_with_legacy():
+    """S2: org_id=None must yield the exact pre-split literals so self-hosted
+    deployments keep their existing metrics keys — zero migration."""
+    assert metrics._mkey(None, "turns") == "jarvis:metrics:turns"
+    assert metrics._mkey(None, "tok_s") == "jarvis:metrics:tok_s"
+    assert metrics._mkey(None, "rag_queries") == "jarvis:metrics:rag_queries"
+    assert metrics._mkey(None, "rag_hits") == "jarvis:metrics:rag_hits"
+    assert metrics._mkey(None, "tool_lat", "calc") == "jarvis:metrics:tool_lat:calc"
