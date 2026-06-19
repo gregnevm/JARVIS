@@ -9,6 +9,7 @@ from jarvis_core.plan_limits import (
     PlanLimits,
     exceeds,
     limits_for,
+    public_limits,
 )
 
 
@@ -71,3 +72,16 @@ def test_limits_are_immutable():
 
     with pytest.raises(FrozenInstanceError):
         limits_for("free").requests_per_day = 999  # type: ignore[misc]
+
+
+def test_public_limits_studio_all_none():
+    # UNLIMITED → None у публічній проєкції (чесний JSON для /whoami та Billing-табу).
+    pub = public_limits("studio")
+    assert set(pub) == set(RESOURCES)
+    assert all(v is None for v in pub.values())
+
+
+def test_public_limits_free_are_concrete_ints():
+    pub = public_limits("free")
+    assert pub["max_api_keys"] == PLAN_LIMITS["free"].cap("max_api_keys")
+    assert all(isinstance(v, int) for v in pub.values())

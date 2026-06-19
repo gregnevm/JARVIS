@@ -170,7 +170,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 |---|--------|-----|--------|
 | AP-4.1 | Per-key rate-limit (org-scoped — поверх через tenant ctx) | `jarvis:ratelimit:{key}:{min}` | [x] `openai_key_rate_limit_per_min` (0=off); 429 `rate_limit_error`; root без ліміту; best-effort |
 | AP-4.2 | `usage_events` запис на кожен виклик (turn/token/embed/job) | append-only + nightly rollup | [~] per-key request-метрика є (AP-2.4 `UsageStore`); token/embed-розбивка + rollup — попереду |
-| AP-4.3 | `plan_limits.py` enforcement (free/pro/team/studio) | 402 при перевищенні | [~] політика-SSOT `jarvis_core/plan_limits.py` (`PLAN_LIMITS` + чистий `exceeds()`; studio/enterprise UNLIMITED — S2; 9 тестів); HTTP-402 wiring у request-path — попереду (AP-4.5) |
+| AP-4.3 | `plan_limits.py` enforcement (free/pro/team/studio) | 402 при перевищенні | [~] політика-SSOT `jarvis_core/plan_limits.py` (`PLAN_LIMITS` + чистий `exceeds()` + `public_limits()`; studio/enterprise UNLIMITED — S2); споживач: `/api/v1/whoami` віддає `limits` (UNLIMITED→null); HTTP-402 wiring у request-path — попереду (AP-4.5) |
 | AP-4.4 | Per-org metrics (розщепити глобальні, SAAS §0.2) | `jarvis:{org}:metrics:*` | [ ] |
 | AP-4.5 | Soft/hard ліміти + grace (fail-open ops, fail-closed billing) | Config | [ ] |
 

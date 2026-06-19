@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from jarvis_core.context import DEFAULT_ORG_ID, RequestContext, redis_key
+from jarvis_core.plan_limits import public_limits
 
 from ..config import settings
 from ..platform.auth import primary_admin_id, verify_admin_password
@@ -160,6 +161,7 @@ async def whoami(ctx: RequestContext = Depends(resolve_client_context)) -> dict[
         "user_id": ctx.user_id,
         "role": ctx.role,
         "plan": ctx.plan,
+        "limits": public_limits(ctx.plan),  # стелі плану (UNLIMITED→null) — AP-4.3
         "legacy_uid": ctx.legacy_uid,
         "via": ctx.via,
     }

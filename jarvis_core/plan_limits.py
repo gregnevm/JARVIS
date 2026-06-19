@@ -104,3 +104,13 @@ def limits_for(plan: str) -> PlanLimits:
 def exceeds(plan: str, resource: str, current: int) -> bool:
     """Чи досяг `current` стелі `resource` для `plan` (→ `402`). Невідомий ресурс → `ValueError`."""
     return limits_for(plan).exceeds(resource, current)
+
+
+def public_limits(plan: str) -> dict[str, int | None]:
+    """Публічна проєкція стель плану для API/консолі (`/whoami`, Billing-таб AP-6.4).
+
+    `UNLIMITED` (`-1`) → `None` — чесний JSON «без стелі», щоб клієнт не трактував
+    службове `-1` як реальний ліміт. Решта — як є (включно з `0` = повна заборона).
+    """
+    lim = limits_for(plan)
+    return {r: (None if lim.cap(r) == UNLIMITED else lim.cap(r)) for r in RESOURCES}
