@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from .._helpers import AGENT_MODES_AUTO, require_mode
 from ..saas.api_keys import ApiKeyStore
 from ..saas.request_log import RequestLogStore
 from ..saas.usage import UsageStore
@@ -83,7 +84,8 @@ def register(router: APIRouter) -> None:
         text = (body.input or "").strip()
         if not text:
             raise HTTPException(status_code=400, detail="input required")
+        mode = require_mode(body.mode or "auto", AGENT_MODES_AUTO)  # fail-fast (P2)
         result = await request.app.state.tools.process(
-            {"user_id": auth.user_id, "text": text, "mode": (body.mode or "auto").strip()}
+            {"user_id": auth.user_id, "text": text, "mode": mode}
         )
         return {"output": result}

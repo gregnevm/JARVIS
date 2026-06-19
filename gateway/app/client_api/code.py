@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from jarvis_core.context import RequestContext
 
+from .._helpers import require_mode
 from ..agent_payload import build_agent_payload
 from ..config import settings
 from .deps import resolve_client_context
@@ -38,13 +39,20 @@ def _uid(ctx: RequestContext) -> int:
 def register(router: APIRouter) -> None:
     @router.get("/code/modes")
     async def code_modes() -> dict[str, Any]:
-        """Доступні режими/бекенди кодування + стан прапорів."""
+        """Доступні режими/бекенди кодування + стан прапорів.
+
+        `local`/`claude` — валідні REST `target` для `/code/task`. `bridges`
+        (cursor/continue) — окрема категорія: вони дispatch-аться через Telegram-флоу
+        (`/cursor`), НЕ є `target`-ами `/code/task` (тому validator там приймає лише
+        `{local, claude}`).
+        """
         return {
             "local": {"available": True, "desc": "рідний coding-агент (repo tools, diff-edit, тести)"},
             "claude": {"available": bool(getattr(settings, "enable_claude_code_bridge", False)),
                        "desc": "Claude-міст (cloud, opt-in за ENABLE_CLAUDE_CODE_BRIDGE)"},
             "bridges": {"cursor": getattr(settings, "cursor_tasks_enabled", False),
-                        "continue": getattr(settings, "enable_continue_dev", False)},
+                        "continue": getattr(settings, "enable_continue_dev", False),
+                        "via": "telegram", "rest_target": False},
         }
 
     @router.post("/code/task")
@@ -54,7 +62,9 @@ def register(router: APIRouter) -> None:
         text = (body.text or "").strip()
         if not text:
             raise HTTPException(status_code=400, detail="text required")
-        target = (body.target or "local").strip().lower()
+        # Fail-fast (P2): лише задокументовані таргети; раніше невідомий target
+        # (напр. "cursor") тихо падав у local-гілку замість 400.
+        target = require_mode(body.target or "local", {"local", "claude"}, field="target")
         if target == "claude" and not getattr(settings, "enable_claude_code_bridge", False):
             raise HTTPException(status_code=503,
                                 detail="Claude bridge disabled (set ENABLE_CLAUDE_CODE_BRIDGE)")

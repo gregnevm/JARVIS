@@ -102,6 +102,14 @@ def test_playground_empty_400_and_auth(client: TestClient) -> None:
     assert client.post("/platform/api/developer/playground", json={"input": "x"}).status_code == 401
 
 
+def test_playground_rejects_bad_mode(client: TestClient) -> None:
+    # fail-fast (P2): playground валідує mode як кожен agent-entry
+    r = client.post(
+        "/platform/api/developer/playground", json={"input": "hi", "mode": "garbage"}, auth=AUTH
+    )
+    assert r.status_code == 400
+
+
 def test_console_key_lifecycle(client: TestClient) -> None:
     # create
     r = client.post(
