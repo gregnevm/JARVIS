@@ -211,17 +211,23 @@ def append_run_log(data_dir: str, result: CycleResult) -> None:
 
 # --- дашборд (чистий рендер) ---------------------------------------------------
 
-def render_dashboard(okr: OKR, recent: list[CycleResult]) -> str:
-    """Markdown-дашборд OKR-прогресу + останні цикли (для artifact-канвасу)."""
+def render_dashboard(okr: OKR, recent: list[CycleResult], *, bypass: bool = False) -> str:
+    """Markdown-дашборд OKR-прогресу + останні цикли (для artifact-канвасу).
+
+    `bypass=True` показує режим 🔓 Bypass permissions (auto-apply без підтверджень),
+    дзеркало однойменного режиму Claude Code; інакше — 🔒 supervised.
+    """
     bar_w = 20
 
     def bar(ratio: float) -> str:
         filled = int(round(max(0.0, min(ratio, 1.0)) * bar_w))
         return "█" * filled + "░" * (bar_w - filled)
 
+    mode = "🔓 Bypass permissions (auto, без підтверджень)" if bypass else "🔒 Supervised (під наглядом)"
     out: list[str] = [
         "# 🤖 Autopilot — OKR Dashboard",
         "",
+        f"**Режим:** {mode}",
         f"**Цикл:** {okr.cycle} · **Загальний прогрес:** {okr.progress * 100:.0f}%",
     ]
     if okr.admin_context.strip():
@@ -247,10 +253,12 @@ def render_dashboard(okr: OKR, recent: list[CycleResult]) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
-def save_dashboard(data_dir: str, okr: OKR, recent: list[CycleResult]) -> Path:
+def save_dashboard(
+    data_dir: str, okr: OKR, recent: list[CycleResult], *, bypass: bool = False
+) -> Path:
     path = Path(data_dir) / "autopilot" / "dashboard.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_dashboard(okr, recent), encoding="utf-8")
+    path.write_text(render_dashboard(okr, recent, bypass=bypass), encoding="utf-8")
     return path
 
 
@@ -415,9 +423,15 @@ async def auto_coroutine_loop(
     repo_path: str,
     dispatch: StageDispatch,
     interval: float,
+    bypass: bool = False,
 ) -> None:
     """Періодично крутить `run_cycle`, зберігає OKR, run-log і дашборд."""
-    logger.info("Auto-coroutine started (interval=%ss user=%s)", interval, user_id)
+    logger.info(
+        "Auto-coroutine started (interval=%ss user=%s mode=%s)",
+        interval,
+        user_id,
+        "bypass" if bypass else "supervised",
+    )
     recent: list[CycleResult] = []
     while True:
         try:
@@ -429,7 +443,7 @@ async def auto_coroutine_loop(
                 save_okr(data_dir, new_okr)
                 append_run_log(data_dir, result)
                 recent.append(result)
-                save_dashboard(data_dir, new_okr, recent)
+                save_dashboard(data_dir, new_okr, recent, bypass=bypass)
                 logger.info(
                     "cycle done: %s (%d/%d ok)",
                     result.objective_id,

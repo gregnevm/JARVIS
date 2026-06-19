@@ -132,6 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 repo_path=settings.auto_coroutine_repo_path or ".",
                 dispatch=make_tools_dispatch(app.state.tools),
                 interval=settings.auto_coroutine_interval,
+                bypass=settings.auto_coroutine_bypass_permissions,
             )
         )
 

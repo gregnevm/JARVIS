@@ -37,6 +37,7 @@ async def _main() -> int:
     ap.add_argument("--data-dir", default="data", help="де лежить okr/okr.json і пишуться артефакти")
     ap.add_argument("--user-id", type=int, default=42)
     ap.add_argument("--tests", nargs="*", default=None, help="pytest-таргети для test-фази")
+    ap.add_argument("--bypass", action="store_true", help="режим Bypass permissions (auto, без підтверджень)")
     args = ap.parse_args()
 
     okr = load_okr(args.data_dir)
@@ -45,7 +46,8 @@ async def _main() -> int:
         return 2
 
     dispatch = make_local_dispatch(args.repo, test_targets=args.tests)
-    print(f"▶️  Старт циклу · cycle={okr.cycle} · objectives={len(okr.objectives)}")
+    mode = "🔓 bypass" if args.bypass else "🔒 supervised"
+    print(f"▶️  Старт циклу · режим={mode} · cycle={okr.cycle} · objectives={len(okr.objectives)}")
 
     new_okr, result = await run_cycle(
         okr, dispatch, user_id=args.user_id, repo_path=args.repo
@@ -60,7 +62,7 @@ async def _main() -> int:
 
     save_okr(args.data_dir, new_okr)
     append_run_log(args.data_dir, result)
-    save_dashboard(args.data_dir, new_okr, [result])
+    save_dashboard(args.data_dir, new_okr, [result], bypass=args.bypass)
 
     print(f"\n📊 OKR прогрес: {okr.progress * 100:.0f}% → {new_okr.progress * 100:.0f}% · cycle={new_okr.cycle}")
     print(f"📝 run-log: {args.data_dir}/autopilot/run_log.md")

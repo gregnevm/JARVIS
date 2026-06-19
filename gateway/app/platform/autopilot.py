@@ -35,9 +35,12 @@ class TickBody(BaseModel):
 
 def _state(data_dir: str) -> dict[str, Any]:
     okr = load_okr(data_dir)
+    bypass = settings.auto_coroutine_bypass_permissions
     return {
         "enabled": settings.auto_coroutine_enabled,
         "interval": settings.auto_coroutine_interval,
+        "bypass_permissions": bypass,
+        "mode": "bypass" if bypass else "supervised",
         "okr": okr_to_dict(okr),
     }
 
@@ -54,7 +57,7 @@ def register(router: APIRouter) -> None:
         _auth: PlatformAuth = Depends(require_platform_auth),
     ) -> dict[str, Any]:
         okr = load_okr(settings.data_dir)
-        return {"markdown": render_dashboard(okr, [])}
+        return {"markdown": render_dashboard(okr, [], bypass=settings.auto_coroutine_bypass_permissions)}
 
     @router.post("/platform/api/autopilot/okr")
     async def autopilot_okr_mutate(
@@ -67,7 +70,7 @@ def register(router: APIRouter) -> None:
             kr_deltas=body.kr_deltas,
         )
         save_okr(settings.data_dir, okr)
-        save_dashboard(settings.data_dir, okr, [])
+        save_dashboard(settings.data_dir, okr, [], bypass=settings.auto_coroutine_bypass_permissions)
         return {"okr": okr_to_dict(okr)}
 
     @router.post("/platform/api/autopilot/tick")
@@ -85,7 +88,7 @@ def register(router: APIRouter) -> None:
         if result is None:
             return {"ran": False, "reason": "no actionable objectives"}
         save_okr(settings.data_dir, new_okr)
-        save_dashboard(settings.data_dir, new_okr, [result])
+        save_dashboard(settings.data_dir, new_okr, [result], bypass=settings.auto_coroutine_bypass_permissions)
         return {
             "ran": True,
             "objective": result.objective_id,

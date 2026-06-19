@@ -177,6 +177,10 @@ class Settings(BaseSettings):
     # Корінь репо для test/fix фаз (на хост-агенті). Порожньо → CWD виконавця.
     auto_coroutine_repo_path: str = ""
     auto_coroutine_interval: float = 3600.0  # сек між циклами
+    # Bypass-permissions: autopilot застосовує правки БЕЗ підтверджень (auto-apply),
+    # дзеркало режиму «Bypass permissions» у Claude Code. Лише індикатор+намір на
+    # gateway-боці; фактичний auto-apply вмикає tools-політика CODING_HEADLESS_APPLY.
+    auto_coroutine_bypass_permissions: bool = False
 
     # Стовп D (TEAM_ECOSYSTEM): обробка Telegram-груп (presence/ambient). Дефолт off —
     # self-hosted solo-user не зачіпає (S2); вмикати свідомо для командного режиму.
