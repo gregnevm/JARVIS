@@ -72,16 +72,17 @@ AUTO_COROUTINE_INTERVAL=3600              # сек між циклами
 AUTO_COROUTINE_BYPASS_PERMISSIONS=false   # 🔓 auto-apply без підтверджень (індикатор+намір)
 ```
 
-### Автономний режим (Bypass permissions)
+### Автономний режим (Bypass permissions + ULTRACODE)
 
-Дзеркало режиму **«Bypass permissions»** у Claude Code — повний цикл «ось так
-автоматично», без жодних підтверджень. **Один майстер-вимикач** у спільному `.env`:
+Дзеркало режимів **«Bypass permissions»** і **«Ultracode»** у Claude Code — повний
+цикл «ось так автоматично», без підтверджень, у max-effort. Прапори в спільному `.env`:
 
 | Прапор (один `.env`) | Роль |
 |--------|------|
 | **`BYPASS_CONFIRMATIONS=true`** | 🔓 глобально знімає ВСІ ✅/❌: мутуючі дії (fs/CLI/PS/code_edit) + headless code-apply + авто-апрув планів |
 | `AUTO_COROUTINE_ENABLED=true` | запускає фоновий autopilot-loop |
 | `AUTO_COROUTINE_BYPASS_PERMISSIONS=true` | індикатор+намір loop'а; `status` → `mode=bypass`, дашборд → 🔓 |
+| **`AUTO_COROUTINE_ULTRACODE=true`** | ⚡ ULTRACODE: code/refactor у max-effort (вищий orchestrator `worker_budget=8` + exhaustive-рамка промпта); `status` → `mode=…+ultracode`, дашборд → ⚡ |
 
 `BYPASS_CONFIRMATIONS` гейтить три точки в `tools`: `computer_confirm.wrap_execute`
 (мутуючі дії), `headless.authorize_headless_apply` (CLI apply), `agent.code_plan`
@@ -93,8 +94,9 @@ AUTO_COROUTINE_BYPASS_PERMISSIONS=false   # 🔓 auto-apply без підтве�
 > (`COMPUTER_SESSION_TRUST_MINUTES` / «Full trust» у Mini App): дії в trust-вікні без ✅.
 > **Виняток:** друге admin-confirm для elevated PowerShell лишається за `COMPUTER_ALLOW_ADMIN`.
 
-Status (`GET /platform/api/autopilot/status`) повертає `mode: bypass|supervised`;
-дашборд має рядок **Режим:** 🔓/🔒. Локально перевірити: `python scripts/autopilot_run.py --bypass`.
+Status (`GET /platform/api/autopilot/status`) повертає `mode` (напр. `bypass+ultracode`)
++ `bypass_permissions`/`ultracode`; дашборд — рядок **Режим:** 🔓/🔒 · ⚡. Локально:
+`python scripts/autopilot_run.py --bypass --ultracode`.
 
 ## 7. Зроблено в цьому зрізі
 

@@ -211,11 +211,14 @@ def append_run_log(data_dir: str, result: CycleResult) -> None:
 
 # --- дашборд (чистий рендер) ---------------------------------------------------
 
-def render_dashboard(okr: OKR, recent: list[CycleResult], *, bypass: bool = False) -> str:
+def render_dashboard(
+    okr: OKR, recent: list[CycleResult], *, bypass: bool = False, ultracode: bool = False
+) -> str:
     """Markdown-дашборд OKR-прогресу + останні цикли (для artifact-канвасу).
 
-    `bypass=True` показує режим 🔓 Bypass permissions (auto-apply без підтверджень),
-    дзеркало однойменного режиму Claude Code; інакше — 🔒 supervised.
+    `bypass=True` показує 🔓 Bypass permissions (auto-apply без підтверджень);
+    `ultracode=True` додає ⚡ ULTRACODE (max-effort code/refactor). Дзеркало
+    однойменних режимів Claude Code.
     """
     bar_w = 20
 
@@ -224,6 +227,8 @@ def render_dashboard(okr: OKR, recent: list[CycleResult], *, bypass: bool = Fals
         return "█" * filled + "░" * (bar_w - filled)
 
     mode = "🔓 Bypass permissions (auto, без підтверджень)" if bypass else "🔒 Supervised (під наглядом)"
+    if ultracode:
+        mode += " · ⚡ ULTRACODE (max-effort)"
     out: list[str] = [
         "# 🤖 Autopilot — OKR Dashboard",
         "",
@@ -254,11 +259,13 @@ def render_dashboard(okr: OKR, recent: list[CycleResult], *, bypass: bool = Fals
 
 
 def save_dashboard(
-    data_dir: str, okr: OKR, recent: list[CycleResult], *, bypass: bool = False
+    data_dir: str, okr: OKR, recent: list[CycleResult], *, bypass: bool = False, ultracode: bool = False
 ) -> Path:
     path = Path(data_dir) / "autopilot" / "dashboard.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_dashboard(okr, recent, bypass=bypass), encoding="utf-8")
+    path.write_text(
+        render_dashboard(okr, recent, bypass=bypass, ultracode=ultracode), encoding="utf-8"
+    )
     return path
 
 
@@ -269,16 +276,30 @@ def _err(out: dict[str, Any]) -> str | None:
     return str(e) if e else None
 
 
-def make_tools_dispatch(tools: Any, *, worker_budget: int = 4) -> StageDispatch:
+# ULTRACODE: максимальний effort для code/refactor фаз routine (вичерпно й коректно,
+# не найшвидше). Підіймає orchestrator worker_budget і додає exhaustive-рамку в промпт.
+_ULTRACODE_BUDGET = 8
+_ULTRACODE_FRAME = (
+    "[ULTRACODE] Працюй максимально ретельно й коректно (не найшвидше): врахуй edge-cases, "
+    "помилки, безпеку; додай/онови тести; самоперевір diff перед завершенням. "
+)
+
+
+def make_tools_dispatch(
+    tools: Any, *, worker_budget: int = 4, ultracode: bool = False
+) -> StageDispatch:
     """Прод-диспатч: маршрутизує фази на наявні tools-RPC.
 
     `code`/`refactor`/`analyze` → orchestrator (планує+кодить); `review` →
     self-improve scan; `test` → headless coding job (`/agent/code/fix`, pytest).
     Усі мутації — `no_confirm`, гейтяться `CODING_HEADLESS_APPLY` на tools-боці.
+    `ultracode` → вищий worker_budget + exhaustive-рамка промпта (max-effort routine).
     """
+    eff_budget = _ULTRACODE_BUDGET if ultracode else worker_budget
+    frame = _ULTRACODE_FRAME if ultracode else ""
 
     async def _orchestrate(task: str, ctx: StageContext) -> StageOutcome:
-        out = await tools.spawn_orchestrator(ctx.user_id, task, worker_budget=worker_budget)
+        out = await tools.spawn_orchestrator(ctx.user_id, frame + task, worker_budget=eff_budget)
         err = _err(out)
         return StageOutcome(
             ok=err is None,
@@ -379,13 +400,15 @@ def _pytest_summary(out: str, code: int) -> str:
 
 
 def make_local_dispatch(
-    repo_path: str, *, test_targets: list[str] | None = None
+    repo_path: str, *, test_targets: list[str] | None = None, ultracode: bool = False
 ) -> StageDispatch:
     """Диспатч без зовнішніх сервісів: `test` — справжній pytest, `analyze` — знімок
     репо, `review` — `git diff --stat`. `code`/`refactor` — зафіксований план (без
     codegen, бо тут немає LLM/agent). Для наглядового першого прогону й офлайн-демо.
+    `ultracode` лише позначає план як max-effort (реальний codegen — у прод-диспатчі).
     """
     targets = test_targets or ["jarvis_core/tests/test_okr.py"]
+    tag = "[ULTRACODE] " if ultracode else ""
 
     async def dispatch(ctx: StageContext) -> StageOutcome:
         obj = ctx.objective
@@ -393,7 +416,7 @@ def make_local_dispatch(
             src = obj.roadmap or "ROADMAP.md"
             return StageOutcome(
                 ok=True,
-                summary=f"план зафіксовано (local mode, без codegen): {ctx.stage} «{obj.title}» ← {src}",
+                summary=f"{tag}план зафіксовано (local mode, без codegen): {ctx.stage} «{obj.title}» ← {src}",
             )
         if ctx.stage == "review":
             code, out = await _run_cmd(["git", "diff", "--stat", "HEAD~1"], repo_path, timeout=60)
@@ -424,13 +447,15 @@ async def auto_coroutine_loop(
     dispatch: StageDispatch,
     interval: float,
     bypass: bool = False,
+    ultracode: bool = False,
 ) -> None:
     """Періодично крутить `run_cycle`, зберігає OKR, run-log і дашборд."""
     logger.info(
-        "Auto-coroutine started (interval=%ss user=%s mode=%s)",
+        "Auto-coroutine started (interval=%ss user=%s mode=%s%s)",
         interval,
         user_id,
         "bypass" if bypass else "supervised",
+        "+ultracode" if ultracode else "",
     )
     recent: list[CycleResult] = []
     while True:
@@ -443,7 +468,7 @@ async def auto_coroutine_loop(
                 save_okr(data_dir, new_okr)
                 append_run_log(data_dir, result)
                 recent.append(result)
-                save_dashboard(data_dir, new_okr, recent, bypass=bypass)
+                save_dashboard(data_dir, new_okr, recent, bypass=bypass, ultracode=ultracode)
                 logger.info(
                     "cycle done: %s (%d/%d ok)",
                     result.objective_id,

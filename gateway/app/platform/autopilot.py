@@ -36,11 +36,16 @@ class TickBody(BaseModel):
 def _state(data_dir: str) -> dict[str, Any]:
     okr = load_okr(data_dir)
     bypass = settings.auto_coroutine_bypass_permissions
+    ultracode = settings.auto_coroutine_ultracode
+    mode = "bypass" if bypass else "supervised"
+    if ultracode:
+        mode += "+ultracode"
     return {
         "enabled": settings.auto_coroutine_enabled,
         "interval": settings.auto_coroutine_interval,
         "bypass_permissions": bypass,
-        "mode": "bypass" if bypass else "supervised",
+        "ultracode": ultracode,
+        "mode": mode,
         "okr": okr_to_dict(okr),
     }
 
@@ -57,7 +62,14 @@ def register(router: APIRouter) -> None:
         _auth: PlatformAuth = Depends(require_platform_auth),
     ) -> dict[str, Any]:
         okr = load_okr(settings.data_dir)
-        return {"markdown": render_dashboard(okr, [], bypass=settings.auto_coroutine_bypass_permissions)}
+        return {
+            "markdown": render_dashboard(
+                okr,
+                [],
+                bypass=settings.auto_coroutine_bypass_permissions,
+                ultracode=settings.auto_coroutine_ultracode,
+            )
+        }
 
     @router.post("/platform/api/autopilot/okr")
     async def autopilot_okr_mutate(
@@ -70,7 +82,13 @@ def register(router: APIRouter) -> None:
             kr_deltas=body.kr_deltas,
         )
         save_okr(settings.data_dir, okr)
-        save_dashboard(settings.data_dir, okr, [], bypass=settings.auto_coroutine_bypass_permissions)
+        save_dashboard(
+            settings.data_dir,
+            okr,
+            [],
+            bypass=settings.auto_coroutine_bypass_permissions,
+            ultracode=settings.auto_coroutine_ultracode,
+        )
         return {"okr": okr_to_dict(okr)}
 
     @router.post("/platform/api/autopilot/tick")
@@ -80,7 +98,9 @@ def register(router: APIRouter) -> None:
         auth: PlatformAuth = Depends(require_platform_auth),
     ) -> dict[str, Any]:
         uid = resolve_uid(auth, body.user_id)
-        dispatch = make_tools_dispatch(request.app.state.tools)
+        dispatch = make_tools_dispatch(
+            request.app.state.tools, ultracode=settings.auto_coroutine_ultracode
+        )
         okr = load_okr(settings.data_dir)
         new_okr, result = await run_cycle(
             okr, dispatch, user_id=uid, repo_path=settings.data_dir
@@ -88,7 +108,13 @@ def register(router: APIRouter) -> None:
         if result is None:
             return {"ran": False, "reason": "no actionable objectives"}
         save_okr(settings.data_dir, new_okr)
-        save_dashboard(settings.data_dir, new_okr, [result], bypass=settings.auto_coroutine_bypass_permissions)
+        save_dashboard(
+            settings.data_dir,
+            new_okr,
+            [result],
+            bypass=settings.auto_coroutine_bypass_permissions,
+            ultracode=settings.auto_coroutine_ultracode,
+        )
         return {
             "ran": True,
             "objective": result.objective_id,

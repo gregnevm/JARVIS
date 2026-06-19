@@ -130,9 +130,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 data_dir=settings.data_dir,
                 user_id=settings.auto_coroutine_uid,
                 repo_path=settings.auto_coroutine_repo_path or ".",
-                dispatch=make_tools_dispatch(app.state.tools),
+                dispatch=make_tools_dispatch(
+                    app.state.tools, ultracode=settings.auto_coroutine_ultracode
+                ),
                 interval=settings.auto_coroutine_interval,
                 bypass=settings.auto_coroutine_bypass_permissions,
+                ultracode=settings.auto_coroutine_ultracode,
             )
         )
 
