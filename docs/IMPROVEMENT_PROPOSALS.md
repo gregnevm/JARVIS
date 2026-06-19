@@ -3,7 +3,7 @@
 > Генерується/оновлюється циклом `/loop покращуй всі фічі згідно roadmap…`.
 > Кожен прохід: перевірка (mypy/tests) → архітектурний огляд → нові пропозиції → позначення закритих.
 
-**Останній прохід:** 2026-06-19
+**Останній прохід:** 2026-06-20
 
 ---
 
@@ -221,6 +221,30 @@ R5 (транспорт↔логіка в gateway-router). Усе без змін
   DI-підміну (що правильно для ІЗОЛЯЦІЇ їхньої логіки від Redis), нічого
   не лишає прямого тесту для самого хелпера. Варто прямо запитати:
   "чи хтось взагалі тестує ЦЮ функцію, а не підміняє її?"
+
+### Прохід 2026-06-19 (kaizen window-4, iter2) — S4-гейт: fail-closed для невідомих дій + дрейф notify (фундамент)
+- **Знайдено fail-open у S4-гейті** (`jarvis_core/proactive/gate.py::requires_confirmation`):
+  фінальний fall-through повертав `False` (авто-апрув) для дії з kind НЕ в `_SAFE_KINDS`,
+  не-мутуючої й без чутливих прапорців. Тобто **невідомий kind тихо авто-апрувився без
+  підтвердження** — пряме порушення S4 (human-in-the-loop) і власного докстрінга «дефолт —
+  безпека». Фікс: fall-through → `return True` (fail-closed; щоб авто, kind треба явно
+  додати в `_SAFE_KINDS` — P3 explicit over implicit).
+- **Адверсарний multi-agent рев'ю (ultracode, 13 агентів) спіймав реальну регресію, яку
+  я пропустив**, бо ганяв лише `test_proactive_gate.py`, а не повний сервіс: `watchers.py`
+  емітить `ProposedAction(kind="notify")` (read-only сповіщення), але `_SAFE_KINDS` мав
+  `notify_self`, НЕ `notify`. До фіксу `notify` авто-апрувився **випадково через fail-open**;
+  після fail-closed він став би вимагати підтвердження → ламав наявний
+  `test_watchers.py::test_proposals_are_readonly_notify`. **Повний фікс:** додано `notify`
+  у `_SAFE_KINDS` (легітимно read-only; це ще й закриває латентний D1-дрейф notify/notify_self,
+  який маскувався fail-open).
+- **Тести:** +3 (`test_proactive_gate.py`: невідомий kind → confirm; невідомий+`act:auto`
+  → confirm; друкарська помилка safe-kind → confirm). Решта гейту/делегата/watchers — зелені.
+- **Верифікація:** повний `pytest jarvis_core/tests` ✅ 237/237; `mypy jarvis_core` ✅ 45 файлів
+  (strict). Лише allow-paths (`jarvis_core/**`).
+- **Урок (двічі за вікно):** при зміні СПІЛЬНОЇ функції ганяй ПОВНИЙ сервісний сьют, не лише
+  торкнутий тест-файл — регресія була в `test_watchers.py`, не в тому, що я редагував.
+  І: коли закриваєш fail-open, він міг маскувати латентний дрейф продюсера-vs-allowlist —
+  закривай обидва в одному PR.
 
 ### Прохід 2026-06-19 (kaizen window-4) — bugfix: inline tool-call парсер губив вкладені arguments (Стовп B)
 - **Знайдено активний баг втрати даних** (live-reproduced): `_parse_inline_tool_calls`

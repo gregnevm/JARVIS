@@ -10,7 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 # Дії, що завжди read-only/чернеткові — кандидати на авто (якщо scope дозволяє).
-_SAFE_KINDS = frozenset({"read", "draft", "summarize", "notify_self", "observe"})
+# `notify` — read-only сповіщення principal (watchers.process_watch_proposals); enrol-имо
+# явно (P3), бо до fail-closed дефолту воно авто-апрувилось лише випадково через fail-open.
+_SAFE_KINDS = frozenset({"read", "draft", "summarize", "notify", "notify_self", "observe"})
 # Жорсткий перелік — ніколи не авто, незалежно від scopes (S4).
 _ALWAYS_CONFIRM_KINDS = frozenset({"send", "pay", "delete", "external", "schedule_external"})
 
@@ -42,7 +44,11 @@ def requires_confirmation(action: ProposedAction, scopes: frozenset[str] | set[s
     # Мутуюча, але локальна/нечутлива: авто лише за явним scope `act:auto`.
     if action.mutating:
         return "act:auto" not in scopes
-    return False
+    # Невідомий, не явно-безпечний kind (не в _SAFE_KINDS, не мутуючий, без чутливих
+    # прапорців): fail-closed за дефолтом безпеки S4 — підтверджуємо. Щоб дію авто-
+    # апрувити, її kind треба явно додати в _SAFE_KINDS (explicit over implicit, P3).
+    # Раніше тут було `return False` → невідома дія тихо авто-апрувилась (fail-open).
+    return True
 
 
 def gate_actions(
