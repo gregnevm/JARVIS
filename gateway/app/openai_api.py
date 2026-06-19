@@ -76,6 +76,11 @@ class _OpenAIErrorRoute(APIRoute):
                     content=_openai_error_body(exc.status_code, exc.detail),
                     headers=getattr(exc, "headers", None),
                 )
+            except Exception:  # noqa: BLE001 — будь-яка неперехоплена → OpenAI 500-конверт
+                # Деталі (traceback) у лог; клієнту — узагальнене, без сирого exc (no info-leak).
+                logger.exception("/v1 handler crashed at %s", request.url.path)
+                status = 500
+                return JSONResponse(status_code=500, content=_openai_error_body(500, "internal error"))
             finally:
                 try:
                     from .saas.request_log import RequestLogStore
