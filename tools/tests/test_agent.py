@@ -237,6 +237,108 @@ def test_parse_inline_none():
     assert agent._parse_inline_tool_calls("звичайний текст без викликів") == []
 
 
+def test_parse_inline_nested_object_args():
+    """Вкладений arguments-об'єкт (mcp_call) має зберегтись повністю, не зрізатись до {}."""
+    content = '{"name": "mcp_call", "arguments": {"server": "s", "tool": "t", "arguments": {"q": "hi"}}}'
+    calls = agent._parse_inline_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "mcp_call"
+    assert calls[0]["function"]["arguments"] == {
+        "server": "s",
+        "tool": "t",
+        "arguments": {"q": "hi"},
+    }
+
+
+def test_parse_inline_list_and_nested_args():
+    """arguments зі списком об'єктів (code_edit_batch) парситься без втрати."""
+    content = (
+        '<tool_call>{"name": "code_edit_batch", "arguments": '
+        '{"edits": [{"path": "a.py", "new": "x"}, {"path": "b.py", "new": "y"}]}}</tool_call>'
+    )
+    calls = agent._parse_inline_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["function"]["arguments"]["edits"][1] == {"path": "b.py", "new": "y"}
+
+
+def test_parse_inline_braces_in_string_value():
+    """Дужки всередині рядкового значення не ламають баланс."""
+    content = '{"name": "fs_write", "arguments": {"path": "a", "content": "a {b} c}"}}'
+    calls = agent._parse_inline_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["function"]["arguments"] == {"path": "a", "content": "a {b} c}"}
+
+
+def test_parse_inline_multiple_calls_one_nested():
+    """Кілька викликів підряд, один із вкладеним об'єктом — обидва зчитані коректно."""
+    content = (
+        '{"name": "calc", "arguments": {"expression": "2+2"}} і ще '
+        '{"name": "mcp_call", "arguments": {"tool": "t", "arguments": {"q": "x"}}}'
+    )
+    calls = agent._parse_inline_tool_calls(content)
+    assert len(calls) == 2
+    assert calls[0]["function"]["arguments"] == {"expression": "2+2"}
+    assert calls[1]["function"]["arguments"] == {"tool": "t", "arguments": {"q": "x"}}
+
+
+def test_parse_inline_unterminated_object_emits_name_with_empty_args():
+    """Стрім обірвано посеред виклику: scanner → None, але ім'я емітимо, args={}, без зависання."""
+    content = '<tool_call>{"name": "mcp_call", "arguments": {"server": "s", "tool": "t"'
+    calls = agent._parse_inline_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "mcp_call"
+    assert calls[0]["function"]["arguments"] == {}
+
+
+def test_parse_inline_balanced_but_invalid_json():
+    """Збалансовані дужки, але невалідний JSON (trailing comma) → name є, args={}, без винятку."""
+    content = '{"name": "x", "arguments": {"a": 1,}}'
+    calls = agent._parse_inline_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "x"
+    assert calls[0]["function"]["arguments"] == {}
+
+
+def test_parse_inline_deeply_nested_args_no_raise():
+    """json.loads кидає RecursionError на глибокій вкладеності — фолбек не падає, args={}."""
+    inner = "1"
+    for _ in range(2000):
+        inner = '{"a":' + inner + "}"
+    content = '{"name": "mcp_call", "arguments": ' + inner + "}"
+    calls = agent._parse_inline_tool_calls(content)  # не має кидати
+    assert calls[0]["function"]["name"] == "mcp_call"
+    assert calls[0]["function"]["arguments"] == {}
+
+
+def test_parse_inline_many_unbalanced_stays_linear():
+    """Повторювані обрізані відкриття не дають O(n²): break зупиняє ре-сканування до EOF."""
+    content = '{"name":"x","arguments":{' * 20000  # ~0.5 MB, усі незакриті
+    import time as _t
+
+    t0 = _t.perf_counter()
+    calls = agent._parse_inline_tool_calls(content)
+    elapsed = _t.perf_counter() - t0
+    assert elapsed < 1.0  # лінійно (без break — десятки секунд); великий запас на CI-шум
+    assert len(calls) == 1  # перше відкриття незбалансоване → один виклик, потім break
+    assert calls[0]["function"]["arguments"] == {}
+
+
+def test_parse_inline_multiline_pretty_nested():
+    """Pretty-printed (багаторядковий) вкладений arguments має пережити зняття re.DOTALL."""
+    content = (
+        "<tool_call>\n{\n"
+        '  "name": "mcp_call",\n'
+        '  "arguments": {\n'
+        '    "server": "s",\n'
+        '    "arguments": {\n'
+        '      "q": "hi"\n'
+        "    }\n  }\n}\n</tool_call>"
+    )
+    calls = agent._parse_inline_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["function"]["arguments"] == {"server": "s", "arguments": {"q": "hi"}}
+
+
 async def test_run_agent_handles_inline_tool_call(monkeypatch):
     """Модель віддала tool call текстом → loop має його виконати, а не злити юзеру."""
     monkeypatch.setattr(settings, "agent_mode", "agent")
