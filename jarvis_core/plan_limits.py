@@ -21,6 +21,7 @@ SSOT мапінгу «план → ліміти ресурсу». Чистий: 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 from .context import VALID_PLANS
 
@@ -114,3 +115,94 @@ def public_limits(plan: str) -> dict[str, int | None]:
     """
     lim = limits_for(plan)
     return {r: (None if lim.cap(r) == UNLIMITED else lim.cap(r)) for r in RESOURCES}
+
+
+# ── AP-4.5: soft/hard ліміти + grace ───────────────────────────────────────────
+# `exceeds` дає одну (жорстку) межу на стелі. AP-4.5 розрізняє «soft» (стеля плану) і
+# «hard» (стеля + grace-смуга) та політику «fail-open ops, fail-closed billing»:
+#
+#   * **ops** (`requests_per_day`, `rate_limit_per_min`) — операційні лічильники. Транзієнтний
+#     сплеск не має одразу різати доступ: над стелею є grace-смуга, де дія ще проходить, але
+#     позначається `GRACE` (попередити/білити overage). Якщо лічильник недоступний (Redis-збій) —
+#     **fail-open** (дозволити): операційний guard не повинен класти запит через інфра-збій.
+#   * **billing** (`tokens_per_month`, `max_api_keys`) — тарифні/провіженінг-стелі. Grace немає:
+#     `hard == soft`, на стелі вже `BLOCKED`. За невизначеності лічильника — **fail-closed**
+#     (відхилити): не роздаємо неоплачений ресурс.
+#
+# Чисто (дані + детерміновані переходи), без Redis/HTTP — request-path enforcement підключає це
+# окремо так само, як робить із `exceeds` (див. модульний docstring). UNLIMITED → завжди `OK`.
+
+# Дефолтна grace-смуга над soft-стелею для ops-ресурсів (10%). Перекривається аргументом.
+DEFAULT_GRACE = 0.10
+
+# Класифікація ресурсу: чи операційний (fail-open + grace) чи тарифний/провіженінг (fail-closed).
+RESOURCE_KIND: dict[str, str] = {
+    "requests_per_day": "ops",
+    "rate_limit_per_min": "ops",
+    "tokens_per_month": "billing",
+    "max_api_keys": "billing",
+}
+
+# Fail-fast (P2/P3): kind-мапа мусить покривати рівно `RESOURCES`, інакше ресурс «протече» повз
+# політику grace/fail-open. Звіряємо на імпорті — той самий патерн, що `PLAN_LIMITS == VALID_PLANS`.
+assert set(RESOURCE_KIND) == set(RESOURCES), (
+    "RESOURCE_KIND must cover exactly RESOURCES "
+    f"(missing={set(RESOURCES) - set(RESOURCE_KIND)}, extra={set(RESOURCE_KIND) - set(RESOURCES)})"
+)
+
+
+class LimitStatus(str, Enum):
+    """Стан ресурсу відносно стелі плану. `str`-enum — серіалізується як рядок у JSON/лог."""
+
+    OK = "ok"          # під soft-стелею — дозволити без позначки
+    GRACE = "grace"    # у grace-смузі [soft, hard) для ops — дозволити, але позначити overage
+    BLOCKED = "blocked"  # на/над hard (ops) або на/над soft (billing) — відхилити (`402`)
+
+
+def is_ops(resource: str) -> bool:
+    """Чи ресурс операційний (ops). Невідомий ресурс → `ValueError` (fail-fast, як `cap`)."""
+    if resource not in RESOURCE_KIND:
+        raise ValueError(f"unknown resource: {resource!r}")
+    return RESOURCE_KIND[resource] == "ops"
+
+
+def fail_open(resource: str) -> bool:
+    """Політика за недоступного лічильника: ops → `True` (fail-open), billing → `False`.
+
+    Контракт для request-path enforcement (AP-4.5): коли usage недоступний (Redis-збій),
+    операційний guard пропускає (`fail-open ops`), а білінговий відхиляє (`fail-closed billing`).
+    """
+    return is_ops(resource)
+
+
+def hard_cap(plan: str, resource: str, grace: float = DEFAULT_GRACE) -> int:
+    """Hard-стеля: ops отримує grace-смугу над soft-стелею; billing — без grace (`hard == soft`).
+
+    `UNLIMITED` → `UNLIMITED`. Невідомий ресурс → `ValueError`. Grace застосовується через
+    `floor(cap·(1+grace))`, тож стеля `0` (повна заборона) лишається `0` за будь-якого grace.
+    """
+    cap = limits_for(plan).cap(resource)
+    if cap == UNLIMITED:
+        return UNLIMITED
+    if is_ops(resource) and grace > 0:
+        return int(cap * (1.0 + grace))  # floor для додатних — grace ніколи не «округляє вгору» 0
+    return cap
+
+
+def classify(plan: str, resource: str, current: int, grace: float = DEFAULT_GRACE) -> LimitStatus:
+    """Класифікує `current` як `OK`/`GRACE`/`BLOCKED` для `plan`/`resource` (AP-4.5).
+
+    * `UNLIMITED` → завжди `OK` (S2: self-hosted `studio` ніколи не впирається).
+    * `current < soft` → `OK`.
+    * billing → на/над soft одразу `BLOCKED` (grace немає, fail-closed).
+    * ops → `[soft, hard)` → `GRACE`; на/над `hard` → `BLOCKED`.
+    Невідомий ресурс → `ValueError`. Узгоджено з `exceeds` (soft-межа = `current >= soft`).
+    """
+    soft = limits_for(plan).cap(resource)
+    if soft == UNLIMITED:
+        return LimitStatus.OK
+    if current < soft:
+        return LimitStatus.OK
+    if not is_ops(resource):
+        return LimitStatus.BLOCKED
+    return LimitStatus.GRACE if current < hard_cap(plan, resource, grace) else LimitStatus.BLOCKED

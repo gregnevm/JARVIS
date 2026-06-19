@@ -172,7 +172,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 | AP-4.2 | `usage_events` запис на кожен виклик (turn/token/embed/job) | append-only + nightly rollup | [~] per-key request-метрика є (AP-2.4 `UsageStore`); token/embed-розбивка + rollup — попереду |
 | AP-4.3 | `plan_limits.py` enforcement (free/pro/team/studio) | 402 при перевищенні | [~] політика-SSOT `jarvis_core/plan_limits.py` (`PLAN_LIMITS` + чистий `exceeds()` + `public_limits()`; studio/enterprise UNLIMITED — S2); споживач: `/api/v1/whoami` віддає `limits` (UNLIMITED→null); HTTP-402 wiring у request-path — попереду (AP-4.5) |
 | AP-4.4 | Per-org metrics (розщепити глобальні, SAAS §0.2) | `jarvis:{org}:metrics:*` | [ ] |
-| AP-4.5 | Soft/hard ліміти + grace (fail-open ops, fail-closed billing) | Config | [ ] |
+| AP-4.5 | Soft/hard ліміти + grace (fail-open ops, fail-closed billing) | Config | [~] політика-SSOT у `jarvis_core/plan_limits.py`: `classify()`→`LimitStatus{ok\|grace\|blocked}`, `hard_cap()` (ops = soft+grace `DEFAULT_GRACE=10%`, billing = `hard==soft`), `fail_open()` (`RESOURCE_KIND`: ops→fail-open / billing→fail-closed); чисто+детерміновано, +14 тестів. HTTP-402 wiring у request-path — попереду (потребує key→plan через tenant ctx) |
 
 **Вихід AP-4:** перевищення ліміту → 402; usage видно в консолі й готовий до білінгу.
 

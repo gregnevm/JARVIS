@@ -1,13 +1,20 @@
-"""Plan-limits політика (AP-4.3) — SSOT квот по планах + чиста перевірка `exceeds`."""
+"""Plan-limits політика (AP-4.3/AP-4.5) — SSOT квот, `exceeds`, soft/hard + grace."""
 import pytest
 
 from jarvis_core.context import VALID_PLANS, synthetic_context
 from jarvis_core.plan_limits import (
+    DEFAULT_GRACE,
     PLAN_LIMITS,
+    RESOURCE_KIND,
     RESOURCES,
     UNLIMITED,
+    LimitStatus,
     PlanLimits,
+    classify,
     exceeds,
+    fail_open,
+    hard_cap,
+    is_ops,
     limits_for,
     public_limits,
 )
@@ -85,3 +92,95 @@ def test_public_limits_free_are_concrete_ints():
     pub = public_limits("free")
     assert pub["max_api_keys"] == PLAN_LIMITS["free"].cap("max_api_keys")
     assert all(isinstance(v, int) for v in pub.values())
+
+
+# ── AP-4.5: soft/hard + grace ───────────────────────────────────────────────────
+
+
+def test_resource_kind_covers_exactly_resources():
+    # SSOT-інваріант: жоден ресурс не лишається без kind-класифікації (інакше протече повз grace).
+    assert set(RESOURCE_KIND) == set(RESOURCES)
+
+
+def test_kind_split_ops_vs_billing():
+    assert is_ops("requests_per_day") and is_ops("rate_limit_per_min")
+    assert not is_ops("tokens_per_month") and not is_ops("max_api_keys")
+
+
+def test_fail_open_is_ops_only():
+    # fail-open ops, fail-closed billing.
+    assert fail_open("requests_per_day") is True
+    assert fail_open("rate_limit_per_min") is True
+    assert fail_open("tokens_per_month") is False
+    assert fail_open("max_api_keys") is False
+
+
+def test_is_ops_unknown_resource_raises():
+    with pytest.raises(ValueError):
+        is_ops("disk_gb")
+    with pytest.raises(ValueError):
+        fail_open("disk_gb")
+    with pytest.raises(ValueError):
+        hard_cap("free", "disk_gb")
+    with pytest.raises(ValueError):
+        classify("free", "disk_gb", 0)
+
+
+def test_hard_cap_ops_adds_grace_floored():
+    cap = PLAN_LIMITS["free"].cap("requests_per_day")  # 200
+    assert hard_cap("free", "requests_per_day", grace=0.10) == int(cap * 1.10)  # 220
+    # floor, не округлення вгору: 200 * 1.07 = 214.0 → 214; неціле зрізається донизу.
+    assert hard_cap("free", "requests_per_day", grace=0.07) == 214
+
+
+def test_hard_cap_billing_has_no_grace():
+    cap = PLAN_LIMITS["free"].cap("tokens_per_month")
+    assert hard_cap("free", "tokens_per_month", grace=0.50) == cap  # billing: hard == soft
+
+
+def test_hard_cap_unlimited_stays_unlimited():
+    assert hard_cap("studio", "requests_per_day") == UNLIMITED
+    assert hard_cap("studio", "tokens_per_month", grace=0.5) == UNLIMITED
+
+
+def test_classify_ops_ok_grace_blocked_bands():
+    cap = PLAN_LIMITS["free"].cap("requests_per_day")  # 200, hard@10% = 220
+    assert classify("free", "requests_per_day", cap - 1) == LimitStatus.OK
+    assert classify("free", "requests_per_day", cap) == LimitStatus.GRACE
+    assert classify("free", "requests_per_day", 219) == LimitStatus.GRACE
+    assert classify("free", "requests_per_day", 220) == LimitStatus.BLOCKED
+    assert classify("free", "requests_per_day", 10_000) == LimitStatus.BLOCKED
+
+
+def test_classify_billing_blocks_at_soft_no_grace():
+    cap = PLAN_LIMITS["free"].cap("tokens_per_month")
+    assert classify("free", "tokens_per_month", cap - 1) == LimitStatus.OK
+    assert classify("free", "tokens_per_month", cap) == LimitStatus.BLOCKED  # без grace
+    assert classify("free", "tokens_per_month", cap + 1) == LimitStatus.BLOCKED
+
+
+def test_classify_unlimited_always_ok():
+    # S2: studio/enterprise ніколи не впирається — навіть із величезним current.
+    for resource in RESOURCES:
+        assert classify("studio", resource, 10**12) == LimitStatus.OK
+        assert classify("enterprise", resource, 10**12) == LimitStatus.OK
+
+
+def test_classify_zero_cap_blocks_immediately():
+    # Повна заборона (cap=0) лишається 0 під grace → BLOCKED уже на current=0 (ops і billing).
+    assert hard_cap("free", "requests_per_day", grace=0.0) == PLAN_LIMITS["free"].cap("requests_per_day")
+    zero = PlanLimits(requests_per_day=0, tokens_per_month=0, max_api_keys=0, rate_limit_per_min=0)
+    assert zero.cap("requests_per_day") == 0  # sanity: 0 != UNLIMITED
+
+
+def test_classify_consistent_with_exceeds_at_soft_boundary():
+    # `classify` != OK рівно там, де `exceeds` == True (на/над soft-стелею).
+    for plan in ("free", "pro", "team"):
+        for resource in RESOURCES:
+            cap = limits_for(plan).cap(resource)
+            assert (classify(plan, resource, cap) != LimitStatus.OK) == exceeds(plan, resource, cap)
+            assert classify(plan, resource, cap - 1) == LimitStatus.OK
+
+
+def test_default_grace_is_positive_fraction():
+    assert 0.0 < DEFAULT_GRACE < 1.0
