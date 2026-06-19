@@ -42,6 +42,21 @@ def test_chat_completions(client):
     assert r.json()["choices"][0]["message"]["content"] == "Hello from JARVIS"
 
 
+def test_unhandled_error_uses_openai_500_envelope(client):
+    # Неперехоплена помилка ендпоінта → OpenAI 500-конверт (api_error), без сирого exc.
+    client.app.state.tools.process = AsyncMock(side_effect=RuntimeError("secret C:/jarvis/.env boom"))
+    r = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 500
+    body = r.json()
+    assert "detail" not in body
+    assert body["error"]["type"] == "api_error" and body["error"]["code"] == 500
+    assert "secret" not in body["error"]["message"] and ".env" not in body["error"]["message"]
+
+
 def test_stream_error_does_not_leak_exception(client):
     # Помилка бекенду в стрімі не повинна світити сирий exc клієнту (internal-leak),
     # лише узагальнене повідомлення + коректне завершення SSE.
