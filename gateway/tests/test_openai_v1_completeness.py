@@ -116,6 +116,18 @@ def test_models_lists_embeddings(client: TestClient) -> None:
     assert "nomic-embed-text" in ids
 
 
+def test_models_objects_are_sdk_compliant(client: TestClient) -> None:
+    # OpenAI Model object: id:str, object:"model", created:int, owned_by:str — усі обовʼязкові,
+    # інакше openai-SDK `client.models.list()` падає на pydantic-валідації.
+    data = client.get("/v1/models", headers=_auth()).json()["data"]
+    assert data
+    for m in data:
+        assert isinstance(m["id"], str) and m["id"]
+        assert m["object"] == "model"
+        assert isinstance(m["created"], int)
+        assert isinstance(m["owned_by"], str) and m["owned_by"]
+
+
 def test_models_merges_ollama_catalog(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     client.app.state.svc.dashboard = AsyncMock(return_value={"ollama_host": "http://ollama"})
     monkeypatch.setattr(
