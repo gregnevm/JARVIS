@@ -174,3 +174,27 @@ PR → watch CI green → squash-merge). `main` зелений увесь час
 (plan-limits enforcement = YAGNI до multi-tenant; решта roadmap потребує сервісів/секретів/SPA/GPU).
 kaizen-score 90 (+4). Артефакти: `data/artifacts/self-improve/` (паспорти, `window.json`,
 `runs/2026-06-19-1/{summary.json,digest.md}`).
+
+## Kaizen — window 2026-06-19-2 (1 merged PR, main green)
+
+Свіже 5-год вікно. Реально вікно майже все спожив suspended-session gap (старт ~09:24Z,
+фініш ~15:05Z, активного компуту ~36 хв) → `remaining≈-41 хв` → wind-down після 1 ітерації.
+
+- **#48** `feat(plan-limits)` — AP-4.5 політика soft/hard + grace як **чистий SSOT** у
+  `jarvis_core/plan_limits.py`: `classify()→LimitStatus{ok|grace|blocked}`, `hard_cap()`
+  (ops = soft+grace `DEFAULT_GRACE=10%`, floor; billing = `hard==soft`), `RESOURCE_KIND`
+  ops/billing-split + `fail_open()` (кодує «fail-open ops, fail-closed billing»); import-assert
+  `RESOURCE_KIND==RESOURCES` (той самий fail-fast, що `PLAN_LIMITS==VALID_PLANS`). +14 тестів
+  (24 у `test_plan_limits.py`). jarvis_core mypy strict (45) + повний suite (234) green; remote
+  CI run `27833174401` success. AP-4.5 `[ ]→[~]`.
+
+Чесно про YAGNI (P6): попереднє вікно відклало *enforcement-wiring* як YAGNI до multi-tenant
+(потрібен key→plan через tenant ctx). Ця ітерація додала лише *чисту політику* — задокументований
+SSOT-шар, який модуль сам анонсує («enforcement підключає цю політику окремо»), той самий патерн,
+що `exceeds()`/`public_limits()` (останній уже має споживача `/whoami`). Споживача в classify/hard_cap
+поки немає — це усвідомлений SSOT-first, не дрейф.
+
+Стоп: **window edge** (вікно вичерпане реальним wall-clock; suspended-gap). Безпечна offline-жила
+теж стоншала — лишилось переважно те, що потребує сервісів/секретів/міграцій/SPA. kaizen-score 88 (-2:
+менший throughput за вікно, але якість висока й main зелений усе вікно). Артефакти:
+`data/artifacts/self-improve/` (паспорти 0038–0042, `window.json`, `runs/2026-06-19-2/{summary.json,digest.md}`).
