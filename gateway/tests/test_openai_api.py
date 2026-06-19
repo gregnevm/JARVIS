@@ -42,6 +42,26 @@ def test_chat_completions(client):
     assert r.json()["choices"][0]["message"]["content"] == "Hello from JARVIS"
 
 
+def test_stream_error_does_not_leak_exception(client):
+    # Помилка бекенду в стрімі не повинна світити сирий exc клієнту (internal-leak),
+    # лише узагальнене повідомлення + коректне завершення SSE.
+    async def boom(_payload):
+        raise RuntimeError("secret-internal-path C:/jarvis/.env leaked")
+        yield  # noqa: unreachable — робить функцію async-генератором
+
+    client.app.state.tools.stream = boom
+    r = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 200
+    body = r.text
+    assert "secret-internal-path" not in body and ".env" not in body
+    assert "[stream error]" in body
+    assert "data: [DONE]" in body
+
+
 def test_bad_key(client):
     r = client.post(
         "/v1/chat/completions",
