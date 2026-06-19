@@ -72,7 +72,7 @@ tenant-фундаменті з SAAS_DEEP_DIVE.
 
 | Критерій | Оцінка | Коментар |
 |----------|--------|----------|
-| `/v1` сумісність | **7/10** | chat+models+embeddings+jobs+error-envelope (AP-0, AP-2.1/2.5/2.6); немає responses/usage |
+| `/v1` сумісність | **9/10** | chat+models(SDK-shape: `created`)+embeddings+responses+usage+jobs + повний error-envelope (`HTTPException`/422/500, без info-leak; AP-2.1/2.2/2.4/2.5/2.6); залишок: токен-облік usage (поки нулі) |
 | Identity / keys | **2/10** | один глобальний ключ; немає org/scopes/revoke |
 | Developer console | **2/10** | немає keys/usage/playground UI |
 | Метеринг / ліміти | **3/10** | rate-limit глобальний; немає per-key usage |
@@ -84,10 +84,10 @@ tenant-фундаменті з SAAS_DEEP_DIVE.
 | # | Gap | Вплив |
 |---|-----|-------|
 | AB1 | Один глобальний ключ замість per-org | Немає мультикористувацького API |
-| AB2 | Немає `/v1/embeddings`, `/v1/responses`, `/v1/usage` | Неповна сумісність |
+| ~~AB2~~ | ~~Немає `/v1/embeddings`, `/v1/responses`, `/v1/usage`~~ ✅ закрито | реалізовано: AP-2.1 embeddings, AP-2.2 responses, AP-2.4 usage |
 | AB3 | Немає developer-console (keys/usage/playground) | Розробник не self-serve |
 | AB4 | Rate-limit і metrics глобальні (SAAS §0.2) | Немає per-key метерингу/білінгу |
-| AB5 | `get_by_id` без ownership (SAAS §4.0 IDOR) | Cross-tenant читання — блокер перед публічним API |
+| ~~AB5~~ | ~~`get_by_id` без ownership (SAAS §4.0 IDOR)~~ ✅ закрито | ownership-гейт `register_tools_get_by_id(owner_scoped=)` (PR#0 / AP-1.0) — cross-user → 404 |
 | AB6 | Немає SDK/OpenAPI/quickstart | Високий поріг входу |
 
 ---
