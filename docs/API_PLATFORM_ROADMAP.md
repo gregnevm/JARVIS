@@ -140,7 +140,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 | AP-2.3 | `GET /v1/models` із реальним каталогом (CHAT/AGENT/VISION/EMBED/LoRA) | tags із Ollama | [x] merge Ollama-каталогу (`svc.dashboard`+`_ollama_tags`), dedupe, best-effort fallback на статичний список |
 | AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [x] `UsageStore` (Redis hash/день); best-effort запис у `_authenticate`; `GET /v1/usage?days=N` по ключу-викликачу |
 | AP-2.5 | `POST /v1/jobs` + `GET /v1/jobs/{id}` — async (research/team/coding) | Reuse bg_jobs | [x] `create_bg_job`/`get_bg_job`; 400 empty / 502 backend / 404 missing; `require_scope('jobs')` |
-| AP-2.6 | Error-codes per OpenAI (401/402/404/429) | Сумісні тіла помилок | [x] `_OpenAIErrorRoute` → `{error:{message,type,code}}` лише на `/v1` |
+| AP-2.6 | Error-codes per OpenAI (401/402/404/429) | Сумісні тіла помилок | [x] `_OpenAIErrorRoute` → `{error:{message,type,code}}` лише на `/v1`; покриває і `HTTPException`, і Pydantic-валідацію (422 → `invalid_request_error`, не дефолтний `{detail}`) — SDK-сумісність |
 
 **Вихід AP-2:** `openai.OpenAI(base_url=…).chat/embeddings/models` працюють незмінно.
 

@@ -98,6 +98,18 @@ def test_error_envelope_on_bad_key(client: TestClient) -> None:
     assert err["type"] == "authentication_error" and err["code"] == 401
 
 
+def test_validation_error_uses_openai_envelope(client: TestClient) -> None:
+    # AP-2.6: malformed body (Pydantic 422) must use the OpenAI {"error": {...}} shape,
+    # not FastAPI's default {"detail": [...]} — the official openai SDK parses `error`.
+    r = client.post("/v1/chat/completions", json={"model": "jarvis"}, headers=_auth())
+    assert r.status_code == 422
+    body = r.json()
+    assert "detail" not in body
+    assert body["error"]["type"] == "invalid_request_error"
+    assert body["error"]["code"] == 422
+    assert isinstance(body["error"]["message"], str)
+
+
 def test_models_lists_embeddings(client: TestClient) -> None:
     r = client.get("/v1/models", headers=_auth())
     ids = {m["id"] for m in r.json()["data"]}
