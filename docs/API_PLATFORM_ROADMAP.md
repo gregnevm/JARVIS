@@ -118,8 +118,8 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-1.0 | **SAAS PR#0** — IDOR fix (`get_by_id` ownership) | Cross-tenant get → 404 | [ ] (per-org tenant) |
-| AP-1.1 | **SAAS PR#1** — `jarvis_core/context.py` RequestContext + tenant headers | `X-JARVIS-Org-Id/User-Id` | [ ] (per-org tenant) |
+| AP-1.0 | **SAAS PR#0** — IDOR fix (`get_by_id` ownership) | Cross-tenant get → 404 | [x] ownership-гейт `register_tools_get_by_id(owner_scoped=)` (`platform/proxy.py`) + `bgjobs_get(job_id, user_id)` → cross-user 404 (тести `test_platform_jobs` / tools `test_bg_jobs`); SAAS PR#0 `1211acb`/`8abc022`. Per-org розшарування — зверху через tenant ctx |
+| AP-1.1 | **SAAS PR#1** — `jarvis_core/context.py` RequestContext + tenant headers | `X-JARVIS-Org-Id/User-Id` | [x] `RequestContext.to_headers()` (`X-JARVIS-Org-Id/User-Id/Role/Plan`, `context.py`) + `resolve_context`/`resolve_client_context` + `/whoami` (`client_api`); SAAS PR#1. Per-org розшарування — зверху через tenant ctx |
 | AP-1.2 | Сховище ключів (prefix, hash, scopes, revoked) | show-once | [x] `gateway/app/saas/api_keys.py` `ApiKeyStore` (Redis; sha256+prefix; constant-time verify; per-org — поверх через tenant ctx) |
 | AP-1.3 | Management endpoints — create / list / revoke | root-gated | [x] `POST/GET/DELETE /saas/api/keys` (`saas/routes.py`, лише root-ключ) |
 | AP-1.4 | `/v1` auth → керований ключ АБО глобальний (self-hosted fallback) | Backward compat | [x] `_authenticate` приймає root АБО `sk-jarvis-…`; revoke → 401 |
