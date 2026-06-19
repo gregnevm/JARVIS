@@ -192,9 +192,11 @@ def system_computer() -> str:
 # Деякі моделі (qwen2.5 в Ollama) інколи емітять tool call як текст
 # <tool_call>{"name":..., "arguments":{...}}</tool_call> замість поля tool_calls.
 # Ловимо такий inline-JSON як фолбек, щоб не зливати «сирий» виклик користувачу.
-_INLINE_TOOL_RE = re.compile(
-    r'\{\s*"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*(\{.*?\})\s*\}',
-    re.DOTALL,
+# Матчимо лише ВІДКРИТТЯ об'єкта (до `{` аргументів); сам об'єкт дочитуємо
+# балансувальником дужок — нежадібний `\{.*?\}` обрізав би вкладені arguments
+# (mcp_call, code_edit_batch) на першій внутрішній `}` → JSONDecodeError → args={}.
+_INLINE_TOOL_OPEN_RE = re.compile(
+    r'\{\s*"name"\s*:\s*"(\w+)"\s*,\s*"arguments"\s*:\s*\{',
 )
 _CONFIRM_RE = re.compile(r"\[\[COMPUTER_CONFIRM:([a-f0-9]+)\]\]\s*(.*)", re.DOTALL)
 
@@ -249,15 +251,64 @@ def _tool_status(name: str) -> str:
     return _TOOL_STATUS.get(name, f"🔧 {name}…")
 
 
+def _scan_balanced_json(s: str, start: int) -> tuple[str | None, int]:
+    """Від `{` у s[start] повертає (підрядок збалансованого об'єкта, індекс після нього).
+
+    Поважає рядкові літерали та екранування, тож дужки всередині рядкових значень
+    (напр. ``"a{b}c"``) не ламають баланс. Якщо об'єкт незакритий → (None, start).
+    """
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(s)):
+        ch = s[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start : i + 1], i + 1
+    return None, start
+
+
 def _parse_inline_tool_calls(content: str) -> list[dict[str, Any]]:
     """Витягує tool calls, які модель помилково віддала текстом, а не у tool_calls."""
     out: list[dict[str, Any]] = []
-    for m in _INLINE_TOOL_RE.finditer(content or ""):
+    text = content or ""
+    pos = 0
+    while True:
+        m = _INLINE_TOOL_OPEN_RE.search(text, pos)
+        if not m:
+            break
+        name = m.group(1)
+        # m.start() вказує на зовнішню `{` всього об'єкта — дочитуємо його цілком.
+        obj_str, end = _scan_balanced_json(text, m.start())
+        if obj_str is None:
+            # Незбалансовано: решта буфера — один незакритий об'єкт; жодне пізніше
+            # відкриття не дасть валідного верхньорівневого виклику. Емітимо ім'я
+            # (контракт фолбеку) і зупиняємось — інакше кожне наступне відкриття
+            # ре-сканувало б до EOF → O(n²) на повторюваних обрізках (анти-DoS).
+            out.append({"function": {"name": name, "arguments": {}}})
+            break
+        args: dict[str, Any] = {}
         try:
-            args = json.loads(m.group(2))
-        except json.JSONDecodeError:
-            args = {}
-        out.append({"function": {"name": m.group(1), "arguments": args}})
+            parsed = json.loads(obj_str)
+        except (json.JSONDecodeError, RecursionError):
+            parsed = None  # биті дужки / надмірна вкладеність → деградуємо, не падаємо
+        if isinstance(parsed, dict) and isinstance(parsed.get("arguments"), dict):
+            args = parsed["arguments"]
+        pos = end  # продовжуємо ПІСЛЯ цього об'єкта (не всередині нього)
+        out.append({"function": {"name": name, "arguments": args}})
     return out
 
 
