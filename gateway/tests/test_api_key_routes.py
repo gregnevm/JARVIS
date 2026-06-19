@@ -128,12 +128,23 @@ def test_unknown_key_rejected(client: TestClient) -> None:
 
 def test_per_key_rate_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "openai_key_rate_limit_per_min", 2)
+    # Пінимо годинник у середині вікна (now=...430 → window starts ...400, reset ...460),
+    # щоб усі 3 виклики потрапили в ОДНЕ хвилинне вікно (інакше тест флакає на межі
+    # хвилини) і заголовки були детермінованими.
+    from app import openai_api
+
+    monkeypatch.setattr(openai_api.time, "time", lambda: 1_700_000_430.0)
     key = client.post("/saas/api/keys", json={"scopes": ["chat"]}, headers=_root()).json()["key"]
     assert _chat(client, _bearer(key)).status_code == 200
     assert _chat(client, _bearer(key)).status_code == 200
     r = _chat(client, _bearer(key))  # 3rd in the same minute → over limit
     assert r.status_code == 429
     assert r.json()["error"]["type"] == "rate_limit_error"
+    # стандартні rate-limit заголовки для SDK-backoff (AP-4):
+    assert r.headers["x-ratelimit-limit"] == "2"
+    assert r.headers["x-ratelimit-remaining"] == "0"
+    assert r.headers["retry-after"] == "30"  # 1700000460 - 1700000430
+    assert r.headers["x-ratelimit-reset"] == "1700000460"
     # root key is not rate-limited
     assert _chat(client, _root()).status_code == 200
 
