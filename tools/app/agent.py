@@ -793,7 +793,8 @@ class AgentRunner:
         # ручного ✅; поза вікном — звичайний pending + confirm-маркер.
         from .computer_trust import trust_level
 
-        auto = (await trust_level(user_id)) is not None
+        # bypass_confirmations → план авто-апрувиться завжди; інакше — лише в trust-вікні.
+        auto = settings.bypass_confirmations or (await trust_level(user_id)) is not None
         rec = await plans.create_plan(
             user_id,
             summary=str(parsed.get("summary") or text[:500]),

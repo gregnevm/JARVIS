@@ -36,6 +36,7 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
         "computer_profile": settings.computer_profile,
         "computer_session_trust_minutes": settings.computer_session_trust_minutes,
         "computer_require_confirm": settings.computer_require_confirm,
+        "bypass_confirmations": settings.bypass_confirmations,
         "computer_auto_vision": settings.computer_auto_vision,
         "computer_allow_power": settings.computer_allow_power,
         "image_gen": (settings.image_gen_url or "—") + (

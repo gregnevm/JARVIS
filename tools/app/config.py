@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     cli_whitelist: str = ""
     computer_timeout: float = 30.0
     computer_require_confirm: bool = True
+    # 🔓 Глобальний bypass усіх підтверджень (майстер-вимикач): мутуючі computer-дії,
+    # headless code-apply і авто-апрув планів — БЕЗ жодного ✅. Default false (ADR-008:
+    # вмикати свідомо). Винятки: elevated-admin (друге admin-confirm) лишається за
+    # власним гейтом computer_allow_admin. Один прапор замість трьох (= «ось так автоматично»).
+    bypass_confirmations: bool = False
     # Після ✅ додати cmdlet/exe у data/computer_learned.json; повтор — без підтвердження.
     computer_auto_learn_whitelist: bool = True
     computer_auto_trust_learned: bool = True

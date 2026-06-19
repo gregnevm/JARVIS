@@ -75,19 +75,23 @@ AUTO_COROUTINE_BYPASS_PERMISSIONS=false   # 🔓 auto-apply без підтве�
 ### Автономний режим (Bypass permissions)
 
 Дзеркало режиму **«Bypass permissions»** у Claude Code — повний цикл «ось так
-автоматично», без жодних підтверджень. Вмикається свідомо на **двох** сервісах:
+автоматично», без жодних підтверджень. **Один майстер-вимикач** у спільному `.env`:
 
 | Прапор (один `.env`) | Роль |
 |--------|------|
-| `COMPUTER_REQUIRE_CONFIRM=false` | **головне** — прибирає ✅/❌ на КОЖНУ мутуючу дію (fs/CLI/PS/code_edit) |
-| `CODING_HEADLESS_APPLY=true` | headless apply правок coding-агента (без confirm) |
-| `AUTO_COROUTINE_ENABLED=true` | запускає фоновий loop |
-| `AUTO_COROUTINE_BYPASS_PERMISSIONS=true` | індикатор+намір; `status` → `mode=bypass`, дашборд → 🔓 |
+| **`BYPASS_CONFIRMATIONS=true`** | 🔓 глобально знімає ВСІ ✅/❌: мутуючі дії (fs/CLI/PS/code_edit) + headless code-apply + авто-апрув планів |
+| `AUTO_COROUTINE_ENABLED=true` | запускає фоновий autopilot-loop |
+| `AUTO_COROUTINE_BYPASS_PERMISSIONS=true` | індикатор+намір loop'а; `status` → `mode=bypass`, дашборд → 🔓 |
 
-> ⚠️ `COMPUTER_REQUIRE_CONFIRM=false` знімає підтвердження і в **інтерактиві** (не лише
-> для autopilot). Альтернатива без глобального зняття — видати full session-trust власнику
-> (`COMPUTER_SESSION_TRUST_MINUTES` / кнопка «Full trust» у Mini App): мутуючі дії в
-> trust-вікні застосовуються без ✅.
+`BYPASS_CONFIRMATIONS` гейтить три точки в `tools`: `computer_confirm.wrap_execute`
+(мутуючі дії), `headless.authorize_headless_apply` (CLI apply), `agent.code_plan`
+(авто-апрув). Гранулярна альтернатива (без майстра): `COMPUTER_REQUIRE_CONFIRM=false`
++ `CODING_HEADLESS_APPLY=true`.
+
+> ⚠️ Знімає підтвердження **і в інтерактиві** (не лише для autopilot). Якщо треба без
+> confirm лише для autopilot — лиши майстер off і видай власнику full session-trust
+> (`COMPUTER_SESSION_TRUST_MINUTES` / «Full trust» у Mini App): дії в trust-вікні без ✅.
+> **Виняток:** друге admin-confirm для elevated PowerShell лишається за `COMPUTER_ALLOW_ADMIN`.
 
 Status (`GET /platform/api/autopilot/status`) повертає `mode: bypass|supervised`;
 дашборд має рядок **Режим:** 🔓/🔒. Локально перевірити: `python scripts/autopilot_run.py --bypass`.
