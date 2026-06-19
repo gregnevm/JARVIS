@@ -43,14 +43,17 @@ def advance(proc: Process, step_id: str, status: str) -> bool:
 
 
 def _sync_status(proc: Process) -> None:
-    if proc.status in ("cancelled", "paused", "draft"):
-        if proc.status == "draft" and any(s.status != "pending" for s in proc.steps):
-            proc.status = "running"
+    # cancelled/paused — липкі (не воскресають переходом кроку).
+    if proc.status in ("cancelled", "paused"):
         return
-    if is_complete(proc):
-        proc.status = "done"
-    else:
-        proc.status = "running"
+    # Незайманий draft (жоден крок ще не зрушив) лишається draft.
+    if proc.status == "draft" and not any(s.status != "pending" for s in proc.steps):
+        return
+    # Інакше — єдине рішення done/running. Раніше draft робив ранній `return` ПІСЛЯ
+    # bump-у в "running", тож draft, який завершується ОДНИМ переходом (процес із
+    # одного кроку, або останній pending-крок прямо з draft), залипав у "running"
+    # назавжди й ніколи не ставав "done".
+    proc.status = "done" if is_complete(proc) else "running"
 
 
 def is_complete(proc: Process) -> bool:
