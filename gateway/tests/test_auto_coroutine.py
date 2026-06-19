@@ -131,6 +131,21 @@ def test_render_dashboard_contains_objective_and_admin_context():
     assert "Autopilot" in md and "`O`" in md and "Admin context" in md and "Цикл:** 3" in md
 
 
+def test_render_dashboard_mode_reflects_bypass_flag():
+    okr = OKR(objectives=(Objective(id="O", title="Obj"),))
+    assert "🔒 Supervised" in render_dashboard(okr, [])
+    assert "🔓 Bypass permissions" in render_dashboard(okr, [], bypass=True)
+
+
+def test_save_dashboard_bypass_persists_mode(tmp_path):
+    from app.auto_coroutine import save_dashboard
+
+    okr = OKR(objectives=(Objective(id="O", title="Obj"),))
+    save_dashboard(str(tmp_path), okr, [], bypass=True)
+    text = (tmp_path / "autopilot" / "dashboard.md").read_text(encoding="utf-8")
+    assert "🔓 Bypass permissions" in text
+
+
 # --- production dispatch over a fake ToolsClient ---
 
 class FakeTools:

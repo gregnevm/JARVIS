@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "cycle": 3,
+  "cycle": 4,
   "admin_context": "Фокус кварталу: дозріти нативний coding-агент і замкнути autopilot-петлю. Не чіпати multi-tenant/Stripe без явного дозволу.",
-  "progress": 0.5667,
+  "progress": 0.5944,
   "objectives": [
     {
       "id": "CA",
@@ -10,13 +10,13 @@
       "roadmap": "docs/CODING_AGENT_ROADMAP.md",
       "priority": 1,
       "status": "active",
-      "progress": 0.75,
+      "progress": 0.8333,
       "key_results": [
         {
           "id": "CA-edit",
           "text": "edit/repo-context maturity ≥ 8/10",
           "target": 1.0,
-          "progress": 0.7,
+          "progress": 0.95,
           "metric": "ratio"
         },
         {
