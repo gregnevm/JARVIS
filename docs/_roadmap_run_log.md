@@ -198,3 +198,30 @@ SSOT-шар, який модуль сам анонсує («enforcement підк
 теж стоншала — лишилось переважно те, що потребує сервісів/секретів/міграцій/SPA. kaizen-score 88 (-2:
 менший throughput за вікно, але якість висока й main зелений усе вікно). Артефакти:
 `data/artifacts/self-improve/` (паспорти 0038–0042, `window.json`, `runs/2026-06-19-2/{summary.json,digest.md}`).
+
+## Kaizen — window 2026-06-19-3 (1 merged PR, main green)
+
+Свіже 5-год вікно (старт ~19:56, ~47 хв активного компуту). Вікно перетнулося з
+**паралельним autopilot-писачем** у тому ж робочому дереві.
+
+- **#51** `docs(roadmap)` — D1 doc-code sync: AP-4.4 `[ ]→[~]`. Конкурентний писач змерджив
+  *ідентичну* AP-4.4 код-зміну (org-scoped metrics keys через `redis_key`) як **#50**
+  (byte-for-byte мій docstring+`_mkey`) — але без roadmap-write-back. Ця ітерація закрила
+  саме той D1-дрейф, що #50 лишив: точна нотатка (org_id=None → legacy `jarvis:metrics:*`
+  байт-у-байт S2; реальний org → `jarvis:{org}:metrics:*`; `record_*`/`summary` беруть
+  keyword-only `org_id`; +2 тести; threading у call-sites чекає tenant-ctx). Merged `16bc444`,
+  remote CI 7/7 green.
+
+Контекст: **#50** `feat(tools)` (AP-4.4 org-scoped metrics, +2 тести, 7/7 green) — субстантивна
+цеглина pillar-A, змерджена паралельним писачем у це ж вікно; цей прогон закрив її doc-half.
+
+Чесно про контенцію: робота йшла в **ізольованому git-worktree**, бо main-дерево активно
+перемикав гілки й ревертив незакомічені правки інший автономний loop (autopilot). Це трактовано
+як kill-switch-подібну аномалію (safety-contract §1) → wind-down після 1 ітерації, без піраміди
+конфліктних PR.
+
+Стоп: **concurrent-writer contention + backlog_dry** (безпечна offline-жила стоншала; решта
+потребує сервісів/секретів/SPA/міграцій або tenant-ctx до tools — той самий gate, що AP-4.3/4.5).
+kaizen-score 86 (-2: низький власний throughput через колізію, але якість висока й main зелений
+усе вікно; D1-дрейф закрито). Артефакти: `data/artifacts/self-improve/` (паспорти 0043–0046,
+`window.json`, `runs/2026-06-19-3/{summary.json,digest.md}`).
