@@ -1,0 +1,16 @@
+{
+  "i": 20,
+  "kind": "plan",
+  "summary": "PLAN iter1 (window 2026-06-19-1): AP-4.3 plan_limits — ship pure policy SSOT jarvis_core/plan_limits.py (plan->quota caps + pure exceeds()); studio/enterprise UNLIMITED (S2 self-hosted never 402); offline unit-tested; blast-radius jarvis_core/**+docs/**. L1 leverage: pillar-A foundation, unblocks AP-4.5/AP-6; effort small; fully completable+verifiable offline",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:1",
+    "pillar:A",
+    "status:planned",
+    "task:AP-4.3",
+    "kind:plan"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T06:20:02+00:00"
+}

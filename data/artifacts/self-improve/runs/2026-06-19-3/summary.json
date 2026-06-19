@@ -1,0 +1,38 @@
+{
+  "run_id": "2026-06-19-3",
+  "day": 9,
+  "iters": 1,
+  "duration_min": 47.0,
+  "ci": "green",
+  "kaizen_score": 86,
+  "score_delta": -2,
+  "score_history": [78, 86, 90, 88, 86],
+  "shipped": [
+    {
+      "title": "AP-4.4 doc-code sync after org-scoped metrics merge (PR#51)",
+      "before": "PR#50 shipped the org-aware metrics key layer (tools/app/metrics.py via redis_key) but the roadmap still showed AP-4.4 as [ ] — a D1 doc-code drift",
+      "after": "AP-4.4 [ ]->[~] with an accurate note: org_id=None keeps legacy jarvis:metrics:* byte-for-byte (S2), real org yields jarvis:{org}:metrics:*, record_*/summary take keyword-only org_id, +2 tests; caller-threading awaits tenant-ctx. main verified green (16bc444, 7/7 CI)",
+      "pillar": "A"
+    }
+  ],
+  "tests_delta": "+0",
+  "tokens": {
+    "total": 0,
+    "note": "local-first; doc-sync increment; substantive AP-4.4 code (+2 tests) landed concurrently as PR#50"
+  },
+  "reverted": [],
+  "risks": [
+    {
+      "note": "Concurrent autopilot writer contested the shared main tree this window (merged the identical AP-4.4 code as PR#50 before this run's commit, branch-switched main, deleted the kaizen branch). Mitigated by working in an isolated git worktree. Treated as a kill-switch-like anomaly -> wind-down after 1 iter."
+    },
+    {
+      "note": "Safe offline backlog thinning: remaining AP/CL items need services/secrets/SPA/migrations or tenant-ctx propagation to tools (AP-4.3/4.4/4.5 caller-threading gate)"
+    }
+  ],
+  "meta_kr": {
+    "felt": true,
+    "green_streak": 2,
+    "eco_no_local_violation": false,
+    "drift": 0
+  }
+}

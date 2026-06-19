@@ -1,0 +1,17 @@
+{
+  "i": 22,
+  "kind": "write",
+  "summary": "Iter1: jarvis_core/plan_limits.py — pure plan->quota policy SSOT (PLAN_LIMITS + exceeds()); studio/enterprise UNLIMITED (S2 self-hosted never 402); unknown plan->free fail-closed, unknown resource->ValueError; import-invariant covers VALID_PLANS (P7); 9 tests; AP-4.3 [~]",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:1",
+    "pillar:A",
+    "status:done",
+    "pr:38",
+    "kind:feature",
+    "ref:2972d0d"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T06:51:43+00:00"
+}

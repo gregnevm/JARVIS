@@ -1,0 +1,17 @@
+{
+  "i": 29,
+  "kind": "write",
+  "summary": "Iter5: /v1 streaming no info-leak — chat stream except now logs exc server-side (jarvis.gateway.openai) + yields generic '[stream error]' instead of raw exc; closes info-disclosure on public /v1; +regression test (raw exc/.env absent from body); PR#43 merged 006a5c5",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:5",
+    "pillar:A",
+    "status:done",
+    "pr:43",
+    "kind:security",
+    "ref:006a5c5"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T07:47:12+00:00"
+}

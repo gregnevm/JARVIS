@@ -1,0 +1,16 @@
+{
+  "i": 17,
+  "kind": "write",
+  "summary": "Iter7: recursive payload redaction — _redact_value recurses dict/list at any depth; closes nested-secret leak in pre-store backstop; 1 test",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-18-2",
+    "iter:7",
+    "pillar:foundation",
+    "status:done",
+    "pr:36",
+    "kind:security"
+  ],
+  "ref": "7d0946d",
+  "ts": "2026-06-18T18:38:04+00:00"
+}

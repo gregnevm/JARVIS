@@ -1,0 +1,16 @@
+{
+  "i": 44,
+  "kind": "roadmap",
+  "summary": "Iter1 WRITE/ROADMAP: PR#51 docs(roadmap) AP-4.4 [ ]->[~] with accurate note (org-aware key layer landed in #50; org_id=None byte-compat S2; +2 tests; caller-threading awaits tenant-ctx). Docs-only, isolated worktree to dodge contested main tree.",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-3",
+    "iter:1",
+    "pillar:A",
+    "task:AP-4.4",
+    "kind:doc-sync",
+    "status:done"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T18:42:32+00:00"
+}

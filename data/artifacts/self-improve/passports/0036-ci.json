@@ -1,0 +1,15 @@
+{
+  "i": 36,
+  "kind": "ci",
+  "summary": "Iter8 CI-gate: docs-only; remote run 27813648569 all 7 checks pass; PR#46 merged fd9655a",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:8",
+    "status:done",
+    "ci:green",
+    "ref:fd9655a"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T08:10:15+00:00"
+}

@@ -1,0 +1,17 @@
+{
+  "i": 27,
+  "kind": "write",
+  "summary": "Iter4: fix /v1 OpenAI error envelope — _OpenAIErrorRoute now catches RequestValidationError (422) too, returns {error:{type:invalid_request_error,code:422}} not FastAPI {detail}; closes drop-in SDK-compat gap (AP-2.6); _validation_message() json-safe; test-first (failed on old, passes on fix); PR#42 merged 7d06c9c",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:4",
+    "pillar:A",
+    "status:done",
+    "pr:42",
+    "kind:bugfix",
+    "ref:7d06c9c"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T07:37:57+00:00"
+}

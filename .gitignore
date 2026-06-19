@@ -36,3 +36,14 @@ data/gm_status.txt
 .env.bak*
 # code_edit git-safety backups (CA-1.3) — створюються host-agent поряд із файлом
 .jarvis_backup/
+
+# kaizen (self-improve): ефемерний стан лупа — регенерується щопрогону, не комітимо.
+# passports/, summary.json, дайджести лишаються трекабельними (durable felt-evidence).
+data/artifacts/self-improve/resume.json
+data/artifacts/self-improve/window.json
+data/artifacts/self-improve/signatures.json
+data/artifacts/self-improve/runs/**/run.jsonl
+
+# build-артефакти (APK тощо) — не сорс, не комітимо.
+data/artifacts/*.apk
+data/artifacts/*.apk.meta.json

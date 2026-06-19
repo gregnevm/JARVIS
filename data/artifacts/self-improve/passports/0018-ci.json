@@ -1,0 +1,14 @@
+{
+  "i": 18,
+  "kind": "ci",
+  "summary": "Iter7 CI-gate: jarvis_core 210 local green; remote run 27781159834 all 7 checks pass; merged 7d0946d",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-18-2",
+    "iter:7",
+    "status:done",
+    "ci:green"
+  ],
+  "ref": "7d0946d",
+  "ts": "2026-06-18T18:38:04+00:00"
+}

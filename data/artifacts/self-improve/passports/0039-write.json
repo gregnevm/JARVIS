@@ -1,0 +1,14 @@
+{
+  "i": 39,
+  "kind": "write",
+  "summary": "Iter1 WRITE: jarvis_core/plan_limits.py +LimitStatus/classify/hard_cap/fail_open/RESOURCE_KIND; ops grace-band (DEFAULT_GRACE=10%, floor), billing hard==soft; import-assert RESOURCE_KIND==RESOURCES; +14 tests",
+  "tags": [
+    "routine:kaizen",
+    "iter:1",
+    "pillar:A",
+    "status:done",
+    "ref:530cf2a"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T15:07:00+00:00"
+}

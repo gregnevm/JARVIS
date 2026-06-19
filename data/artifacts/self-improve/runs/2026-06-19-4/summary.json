@@ -1,0 +1,36 @@
+{
+  "run_id": "2026-06-19-4",
+  "day": 4,
+  "iters": 1,
+  "duration_min": 47.0,
+  "ci": "green",
+  "kaizen_score": 90,
+  "score_delta": 2,
+  "score_history": [
+    88,
+    90,
+    88,
+    86,
+    90
+  ],
+  "shipped": [
+    {
+      "title": "inline tool-call parser preserves nested-object arguments (PR#53)",
+      "pillar": "B",
+      "before": "nested arguments (mcp_call/code_edit_batch) silently collapsed to {} — tool ran with NO args",
+      "after": "balanced-brace scanner preserves full nested args; +9 tests; quadratic-DoS & RecursionError hardened"
+    }
+  ],
+  "tests_delta": "+9 (tools/tests/test_agent.py: 27->36 inline-parser cases)",
+  "tokens": {
+    "total": 0,
+    "note": "ultracode multi-agent: ~1.1M subagent tokens (plan 417k + review 671k)"
+  },
+  "reverted": [],
+  "risks": [],
+  "meta_kr": {
+    "green_kept": true,
+    "felt_improvement": true,
+    "backlog_truthful": true
+  }
+}

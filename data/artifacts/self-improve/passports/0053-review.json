@@ -1,0 +1,16 @@
+{
+  "i": 53,
+  "kind": "review",
+  "summary": "Iter2 REVIEW (ultracode adversarial, 13 agents, 3 lenses): caught a REAL regression I missed - watchers.py emits kind=notify but _SAFE_KINDS had notify_self not notify; fail-open had masked it; my fix broke test_watchers.py (verdict BLOCK). Completed fix: enrolled 'notify' in _SAFE_KINDS (also closes latent notify/notify_self D1 drift). Other findings: no-change affirmations + 1 nit. Lesson: run FULL service suite on shared-fn changes.",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-4",
+    "iter:2",
+    "pillar:foundation",
+    "kind:review",
+    "verdict:block-then-fixed",
+    "status:done"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T21:04:28+00:00"
+}

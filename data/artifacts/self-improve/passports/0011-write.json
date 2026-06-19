@@ -1,0 +1,16 @@
+{
+  "i": 11,
+  "kind": "write",
+  "summary": "Iter4: redactor masks AWS access key IDs (AKIA/ASIA) — new aws_key rule + 2 tests; additive security hardening of the passport pre-store wrapper",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-18-2",
+    "iter:4",
+    "pillar:foundation",
+    "status:done",
+    "pr:33",
+    "kind:security"
+  ],
+  "ref": "e5ddf04",
+  "ts": "2026-06-18T18:20:44+00:00"
+}

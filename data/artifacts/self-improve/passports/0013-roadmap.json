@@ -1,0 +1,16 @@
+{
+  "i": 13,
+  "kind": "roadmap",
+  "summary": "Iter5: D1 doc-sync — context.py redis_key reframed PR#3->Live with verified 7-module consumer list; closes constitution-flagged drift",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-18-2",
+    "iter:5",
+    "pillar:foundation",
+    "status:done",
+    "pr:34",
+    "kind:doc-sync"
+  ],
+  "ref": "ad1d182",
+  "ts": "2026-06-18T18:27:13+00:00"
+}

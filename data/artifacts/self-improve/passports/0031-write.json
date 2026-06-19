@@ -1,0 +1,17 @@
+{
+  "i": 31,
+  "kind": "write",
+  "summary": "Iter6: /v1 500 envelope — _OpenAIErrorRoute now catches generic Exception last -> {error:{type:api_error,code:500}}, traceback logged server-side, no exc to client; completes AP-2.6 error-envelope (HTTPException+422+500, no info-leak); +test; PR#44 merged ac7a828",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:6",
+    "pillar:A",
+    "status:done",
+    "pr:44",
+    "kind:bugfix",
+    "ref:ac7a828"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T07:57:58+00:00"
+}

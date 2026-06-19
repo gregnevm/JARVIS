@@ -1,0 +1,17 @@
+{
+  "i": 23,
+  "kind": "roadmap",
+  "summary": "Iter2: D1 doc-sync — verified+marked AP-1.0 (PR#0 IDOR owner_scoped gate, cross-user 404, tests) & AP-1.1 (PR#1 RequestContext.to_headers X-JARVIS-*, resolve_context/whoami) [x]; closes track-roadmap drift vs SAAS_DEEP_DIVE §4.0; PR#39 merged 3bd22ff",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:2",
+    "pillar:A",
+    "status:done",
+    "pr:39",
+    "kind:doc-sync",
+    "ref:3bd22ff"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T06:59:53+00:00"
+}

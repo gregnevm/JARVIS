@@ -1,0 +1,93 @@
+{
+  "run_id": "2026-06-19-1",
+  "day": 8,
+  "iters": 8,
+  "duration_min": 109.9,
+  "ci": "green",
+  "kaizen_score": 90,
+  "score_delta": 4,
+  "score_history": [
+    72,
+    78,
+    86,
+    90
+  ],
+  "shipped": [
+    {
+      "title": "plan_limits policy SSOT (AP-4.3)",
+      "pillar": "A",
+      "pr": 38,
+      "before": "VALID_PLANS existed but no plan→quota policy anywhere",
+      "after": "jarvis_core/plan_limits.py: PLAN_LIMITS + pure exceeds(); studio/enterprise UNLIMITED (S2); 9 tests"
+    },
+    {
+      "title": "AP-1.0/1.1 doc-sync",
+      "pillar": "A",
+      "pr": 39,
+      "before": "AP-1.0/1.1 marked [ ] though PR#0 IDOR + PR#1 RequestContext shipped",
+      "after": "[x] with verified code evidence; track roadmap matches SAAS §4.0"
+    },
+    {
+      "title": "/whoami surfaces plan limits",
+      "pillar": "A",
+      "pr": 41,
+      "before": "/whoami returned plan only; plan_limits was dead code",
+      "after": "/whoami returns limits (UNLIMITED→null); policy is now a live consumer"
+    },
+    {
+      "title": "/v1 422 → OpenAI error envelope",
+      "pillar": "A",
+      "pr": 42,
+      "before": "malformed /v1 body → FastAPI {detail:[...]}; openai SDK can't parse",
+      "after": "422 → {error:{type:invalid_request_error,code:422}}"
+    },
+    {
+      "title": "/v1 streaming: no exception leak",
+      "pillar": "A",
+      "pr": 43,
+      "before": "stream backend error yielded raw exc ([error: <exc>]) to client",
+      "after": "generic [stream error] + server-side log; no info-disclosure"
+    },
+    {
+      "title": "/v1 500 → OpenAI error envelope",
+      "pillar": "A",
+      "pr": 44,
+      "before": "unhandled /v1 error → {detail:Internal Server Error}",
+      "after": "500 → {error:{type:api_error,code:500}}, traceback logged not leaked"
+    },
+    {
+      "title": "/v1/models SDK-required created",
+      "pillar": "A",
+      "pr": 45,
+      "before": "/v1/models objects lacked created → SDK client.models.list() fails validation",
+      "after": "every model carries created:int (full Model shape)"
+    },
+    {
+      "title": "/v1 maturity doc-sync (AB2/AB5)",
+      "pillar": "A",
+      "pr": 46,
+      "before": "maturity section: 'немає responses/usage'; gaps AB2/AB5 still open",
+      "after": "compat 9/10; AB2 & AB5 closed (verified vs code)"
+    }
+  ],
+  "tests_delta": "+15",
+  "tokens": {
+    "total": null,
+    "note": "n/a (autonomous run; metric=cost-per-felt-improvement)"
+  },
+  "reverted": [],
+  "risks": [
+    {
+      "note": "plan_limits enforcement (402 wiring) deferred — needs non-studio tenant; YAGNI now"
+    },
+    {
+      "note": "usage token accounting still zeros (AP-4.2 [~])"
+    }
+  ],
+  "meta_kr": {
+    "felt": true,
+    "green_streak": 8,
+    "eco_no_local_violation": false,
+    "drift": 0
+  }
+}
