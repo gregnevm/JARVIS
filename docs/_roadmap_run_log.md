@@ -141,3 +141,36 @@ PR → watch CI green → squash-merge). `main` зелений увесь час
 секретів + вкладені структури; нова safety-цеглина для автономних правок. kaizen-score 86 (+8).
 Артефакти: `data/artifacts/self-improve/` (20 паспортів, `window.json`,
 `runs/2026-06-18-kaizen-2/{summary.json,digest.md}`).
+
+## Kaizen window 2026-06-19-1 (max-utilization, 8 PR змерджено в green `main`)
+
+Автономний прогон скіла `kaizen` (`profile:jarvis`) у свіжому 5-год вікні. Кожне покращення —
+**змерджений PR** (code → local CI-gate → push → PR → watch CI green → squash-merge). `main`
+зелений увесь час; жодного revert. Робота велась у git-worktree `O:/JARVIS-kaizen` з `origin/main`
+(основне дерево `claude/platform-context-mobile-buildout` має брудний WIP — не чіпали). Два знайдені
+вектори: **plan-limits (Стовп A foundation)** і **повна OpenAI-SDK-сумісність `/v1`** (попереднє
+вікно зупинилось на `backlog_dry`, але ці жили лишались незачеплені). ~110/300 хв вікна.
+
+- **#38** `feat(saas)` — `jarvis_core/plan_limits.py`: чиста політика-SSOT план→квоти + `exceeds()`;
+  studio/enterprise UNLIMITED (S2: self-hosted ніколи не впирається в 402); 9 тестів (AP-4.3 `[~]`).
+- **#39** `docs(roadmap)` — D1: AP-1.0/AP-1.1 `[x]` (PR#0 IDOR owner-gate + PR#1 RequestContext —
+  звірено з кодом; track-roadmap = SAAS §4.0).
+- **#41** `feat(api)` — `/api/v1/whoami` віддає `limits` плану (UNLIMITED→null); `public_limits()` —
+  plan_limits стає живим споживачем, не мертвим кодом.
+- **#42** `fix(api)` — `/v1` 422 (Pydantic-валідація) у OpenAI-конверт `{error:{...}}`, не дефолтний
+  `{detail}`; інакше офіційний openai SDK не парсить помилку (AP-2.6).
+- **#43** `fix(api)` — стрім `/v1` більше не світить сирий exc клієнту (info-leak): лог на сервері +
+  узагальнене `[stream error]`; +regression-тест.
+- **#44** `fix(api)` — неперехоплені помилки `/v1` → 500 OpenAI-конверт (`api_error`), traceback у лог,
+  не клієнту; завершує error-envelope AP-2.6 (HTTPException+422+500).
+- **#45** `fix(api)` — обʼєкти `/v1/models` отримали обовʼязкове SDK-поле `created:int` (інакше
+  `client.models.list()` падає на валідації); +SDK-shape тест.
+- **#46** `docs(roadmap)` — D1: «чесна зрілість» `/v1` 7→9/10 (responses/usage присутні, models
+  SDK-shape, повний envelope), закрито застарілі gaps AB2 і AB5 (звірено з кодом).
+
+Підсумок: `/v1` тепер drop-in OpenAI-сумісний по всіх error-шляхах (422/500/stream, без info-leak)
+і Model-shape; нова pillar-A цеглина plan-limits + її перший споживач (`/whoami`). +15 тестів
+(jarvis_core +11, gateway +4). Стоп: `backlog_dry` — обидві безпечні offline-жили вичерпано
+(plan-limits enforcement = YAGNI до multi-tenant; решта roadmap потребує сервісів/секретів/SPA/GPU).
+kaizen-score 90 (+4). Артефакти: `data/artifacts/self-improve/` (паспорти, `window.json`,
+`runs/2026-06-19-1/{summary.json,digest.md}`).
