@@ -1,0 +1,15 @@
+{
+  "i": 56,
+  "kind": "plan",
+  "summary": "Iter3 PLAN window-4: reused iter1 judge-panel (L2). Picked mode-validation guard-parity (648): /api/v1/chat, /code/task target, developer playground passed mode/target unvalidated while siblings (workbench/admin/settings/webapp) use require_mode SSOT. Fail-fast P2, pillar C, offline.",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-4",
+    "iter:3",
+    "pillar:C",
+    "task:mode-validation-parity",
+    "status:done"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T21:37:12+00:00"
+}

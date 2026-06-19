@@ -1,0 +1,15 @@
+{
+  "i": 5,
+  "kind": "write",
+  "summary": "Iter1: blast-radius path guard merged to main (jarvis_core/safety) — pure fail-closed allow/deny matcher, safety_guard port; 24 tests",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-18-2",
+    "iter:1",
+    "pillar:foundation",
+    "status:done",
+    "pr:30"
+  ],
+  "ref": "0d06b84",
+  "ts": "2026-06-18T17:55:10+00:00"
+}

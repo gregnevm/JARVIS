@@ -1,0 +1,47 @@
+{
+  "run_id": "2026-06-18-kaizen-1",
+  "day": 1,
+  "iters": 2,
+  "duration_min": 30,
+  "ci": "green",
+  "kaizen_score": 72,
+  "score_delta": 0,
+  "score_history": [
+    72
+  ],
+  "shipped": [
+    {
+      "title": "blast-radius safety guard",
+      "before": "no autonomy safety, only post-hoc CI revert (L4)",
+      "after": "fail-closed path allow/deny, deny-wins, 24 tests, mypy-strict",
+      "pillar": "B",
+      "passport": true
+    },
+    {
+      "title": "fix D1 doc-drift in context.py",
+      "before": "docstring: redis_key 'consumed in PR#3' (future)",
+      "after": "redis_key is live, consumed across gateway",
+      "pillar": "foundation",
+      "passport": true
+    }
+  ],
+  "tests_delta": "+24",
+  "tokens": {
+    "total": 0,
+    "inner_local": 0,
+    "outer_remote": 0
+  },
+  "reverted": [],
+  "risks": [
+    {
+      "title": "two-speed + token telemetry not yet wired",
+      "task": "slice:#3"
+    }
+  ],
+  "meta_kr": {
+    "felt": true,
+    "green_streak": 2,
+    "eco_no_local_violation": false,
+    "drift": 0
+  }
+}

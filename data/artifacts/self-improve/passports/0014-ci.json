@@ -1,0 +1,14 @@
+{
+  "i": 14,
+  "kind": "ci",
+  "summary": "Iter5 CI-gate: jarvis_core green; remote run 27780469056 all 7 checks pass; merged ad1d182",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-18-2",
+    "iter:5",
+    "status:done",
+    "ci:green"
+  ],
+  "ref": "ad1d182",
+  "ts": "2026-06-18T18:27:13+00:00"
+}

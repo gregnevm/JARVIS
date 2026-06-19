@@ -1,0 +1,17 @@
+{
+  "i": 35,
+  "kind": "roadmap",
+  "summary": "Iter8: D1 doc-sync of /v1 'honest maturity' section — compat 7->9/10 (responses/usage present, models SDK-shape, full error-envelope), closed stale gaps AB2 (embeddings/responses/usage exist) & AB5 (IDOR fixed PR#0); verified vs code; PR#46 merged fd9655a",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:8",
+    "pillar:A",
+    "status:done",
+    "pr:46",
+    "kind:doc-sync",
+    "ref:fd9655a"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T08:10:15+00:00"
+}

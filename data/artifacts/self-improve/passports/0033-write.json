@@ -1,0 +1,17 @@
+{
+  "i": 33,
+  "kind": "write",
+  "summary": "Iter7: /v1/models objects gain required 'created' int (static+ollama) — closes openai-SDK client.models.list() pydantic-validation gap; _MODEL_CREATED stable epoch; +SDK-compliance test; PR#45 merged 7c4d193",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:7",
+    "pillar:A",
+    "status:done",
+    "pr:45",
+    "kind:bugfix",
+    "ref:7c4d193"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T08:04:50+00:00"
+}

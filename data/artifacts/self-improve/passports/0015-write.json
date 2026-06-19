@@ -1,0 +1,16 @@
+{
+  "i": 15,
+  "kind": "write",
+  "summary": "Iter6: redactor masks Google API keys (AIza) + standalone JWTs (eyJ.x.y) — completes canonical secret-scan set; 3 tests; additive",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-18-2",
+    "iter:6",
+    "pillar:foundation",
+    "status:done",
+    "pr:35",
+    "kind:security"
+  ],
+  "ref": "216404c",
+  "ts": "2026-06-18T18:33:02+00:00"
+}

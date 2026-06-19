@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
-  "cycle": 4,
+  "cycle": 9,
   "admin_context": "Фокус кварталу: дозріти нативний coding-агент і замкнути autopilot-петлю. Не чіпати multi-tenant/Stripe без явного дозволу.",
-  "progress": 0.5944,
+  "progress": 0.7056,
   "objectives": [
     {
       "id": "CA",
       "title": "Зрілий нативний coding-агент",
       "roadmap": "docs/CODING_AGENT_ROADMAP.md",
       "priority": 1,
-      "status": "active",
-      "progress": 0.8333,
+      "status": "done",
+      "progress": 1.0,
       "key_results": [
         {
           "id": "CA-edit",
           "text": "edit/repo-context maturity ≥ 8/10",
           "target": 1.0,
-          "progress": 0.95,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "CA-exec",
           "text": "run/test exec maturity ≥ 9/10",
           "target": 1.0,
-          "progress": 0.8,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "CA-fixloop",
           "text": "no-progress детектор + live-fix eval (CA-3.4/3.5)",
           "target": 1.0,
-          "progress": 0.75,
+          "progress": 1.0,
           "metric": "ratio"
         }
       ]
@@ -41,13 +41,13 @@
       "roadmap": "docs/AUTO_CODE_COROUTINE_ROADMAP.md",
       "priority": 2,
       "status": "active",
-      "progress": 0.4,
+      "progress": 0.5667,
       "key_results": [
         {
           "id": "AP-loop",
           "text": "6-фазний цикл крутиться зелено в проді",
           "target": 1.0,
-          "progress": 0.3,
+          "progress": 0.55,
           "metric": "ratio"
         },
         {
@@ -61,7 +61,7 @@
           "id": "AP-mutate",
           "text": "OKR мутує за адмін-контекстом без ручного JSON",
           "target": 1.0,
-          "progress": 0.4,
+          "progress": 0.65,
           "metric": "ratio"
         }
       ]

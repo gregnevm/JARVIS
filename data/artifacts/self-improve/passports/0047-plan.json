@@ -1,0 +1,15 @@
+{
+  "i": 47,
+  "kind": "plan",
+  "summary": "Iter1 PLAN window-4: ultracode judge-panel (4 scouts A/B/C/foundation -> 12 candidates -> judge). WINNER 9x9x9=729: fix inline tool-call parser nested-args data-loss in tools/app/agent.py (qwen2.5 fallback). Beat strong runners (RequestContext.from_headers 720, mode-validation 648, proactive S4 gate 567) as the only LIVE-REPRODUCED actively-firing bug. Offline, pure, allow-paths only.",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-4",
+    "iter:1",
+    "pillar:B",
+    "task:inline-parser-bugfix",
+    "status:done"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T20:48:08+00:00"
+}

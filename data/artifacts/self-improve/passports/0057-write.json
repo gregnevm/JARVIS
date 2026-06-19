@@ -1,0 +1,15 @@
+{
+  "i": 57,
+  "kind": "write",
+  "summary": "Iter3 WRITE: added AGENT_MODES_AUTO SSOT in _helpers; chat.py+developer.py validate via require_mode(...,AGENT_MODES_AUTO); code.py validates target via require_mode(...,{local,claude},field=target). +3 tests. Ran affected files locally (gateway full-suite hangs locally - known gotcha).",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-4",
+    "iter:3",
+    "pillar:C",
+    "kind:bugfix",
+    "status:done"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T21:37:13+00:00"
+}

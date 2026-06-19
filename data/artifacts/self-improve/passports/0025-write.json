@@ -1,0 +1,17 @@
+{
+  "i": 25,
+  "kind": "write",
+  "summary": "Iter3: plan_limits.public_limits() + /api/v1/whoami exposes plan 'limits' (UNLIMITED->null) — makes AP-4.3 policy a live consumer (dev-console/Billing AP-6.4); studio->all null (S2); +2 core tests +whoami assertion; gateway CI full-suite green 2m49s; PR#41 merged 9cca765",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "iter:3",
+    "pillar:A",
+    "status:done",
+    "pr:41",
+    "kind:feature",
+    "ref:9cca765"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T07:24:57+00:00"
+}

@@ -1,0 +1,15 @@
+{
+  "i": 38,
+  "kind": "plan",
+  "summary": "Iter1 PLAN: AP-4.5 soft/hard+grace SSOT — leverage: completes documented gap in plan_limits, pure/offline/zero-risk, one-iter; AP/coding roadmaps else need services/secrets/migrations",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-2",
+    "iter:1",
+    "pillar:A",
+    "task:AP-4.5",
+    "status:done"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T15:07:00+00:00"
+}

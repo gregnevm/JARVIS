@@ -1,0 +1,15 @@
+{
+  "i": 37,
+  "kind": "loop",
+  "summary": "FINISH window 2026-06-19-1: 8/8 PRs merged green (PR#38,39,41,42,43,44,45,46), main green throughout, 0 reverts; veins=plan-limits(A)+full /v1 OpenAI-SDK-compat; +15 tests; stop=backlog_dry (safe offline veins exhausted; enforcement=YAGNI till multi-tenant, rest needs services/secrets/SPA/GPU); ~110/300 window min; kaizen-score 90 (+4). meta-OKR: felt=yes, green_streak=8, drift=0",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-1",
+    "kind:loop",
+    "status:done",
+    "stop:backlog_dry",
+    "ci:green"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T08:12:00+00:00"
+}

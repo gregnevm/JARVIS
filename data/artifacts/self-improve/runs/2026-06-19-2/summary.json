@@ -1,0 +1,40 @@
+{
+  "run_id": "2026-06-19-2",
+  "day": 9,
+  "iters": 1,
+  "duration_min": 36.0,
+  "ci": "green",
+  "kaizen_score": 88,
+  "score_delta": -2,
+  "score_history": [
+    78,
+    86,
+    90,
+    88
+  ],
+  "shipped": [
+    {
+      "title": "AP-4.5 soft/hard + grace policy SSOT (PR#48)",
+      "before": "plan_limits had only a single hard boundary (exceeds at the cap); no grace band, no ops/billing fail-policy",
+      "after": "classify()->ok|grace|blocked + hard_cap() (ops=soft+10% grace, billing=hard==soft) + fail_open() encoding fail-open-ops/fail-closed-billing; +14 tests",
+      "pillar": "A"
+    }
+  ],
+  "tests_delta": "+14",
+  "tokens": {
+    "total": 0,
+    "note": "local-first; form rendered token-free"
+  },
+  "reverted": [],
+  "risks": [
+    {
+      "note": "HTTP-402 request-path wiring deferred — needs key->plan via tenant ctx (not yet built)"
+    }
+  ],
+  "meta_kr": {
+    "felt": true,
+    "green_streak": 1,
+    "eco_no_local_violation": false,
+    "drift": 0
+  }
+}

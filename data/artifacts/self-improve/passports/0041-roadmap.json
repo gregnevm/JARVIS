@@ -1,0 +1,12 @@
+{
+  "i": 41,
+  "kind": "roadmap",
+  "summary": "Iter1 ROADMAP D1: AP-4.5 [ ]->[~] (SSOT done, request-path 402 wiring pending key->plan tenant ctx). No new env flag (grace=code default arg)",
+  "tags": [
+    "routine:kaizen",
+    "iter:1",
+    "status:done"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T15:07:01+00:00"
+}

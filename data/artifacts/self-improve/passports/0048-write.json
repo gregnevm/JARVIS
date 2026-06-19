@@ -1,0 +1,16 @@
+{
+  "i": 48,
+  "kind": "write",
+  "summary": "Iter1 WRITE: replaced fragile non-greedy regex (\\{.*?\\}) with string-aware balanced-brace scanner _scan_balanced_json + opener-only regex in tools/app/agent.py::_parse_inline_tool_calls. Nested arguments (mcp_call/code_edit_batch) now preserved instead of silently -> {}. +5 initial tests (nested/list/braces-in-string/multi). pytest 31/31, mypy 91 clean.",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-19-4",
+    "iter:1",
+    "pillar:B",
+    "kind:bugfix",
+    "files:tools-app-agent",
+    "status:done"
+  ],
+  "ref": "",
+  "ts": "2026-06-19T20:48:19+00:00"
+}

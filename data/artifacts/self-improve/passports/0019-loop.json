@@ -1,0 +1,15 @@
+{
+  "i": 19,
+  "kind": "loop",
+  "summary": "Window 2026-06-18-kaizen-2 FINISH: 7/7 PRs merged green (PR#30-36), main green throughout; stop=backlog_dry (safe offline 1-iter tasks exhausted; remainder needs services/secrets/GPU/human-review); kaizen-score 86; 50.8/300 window min used",
+  "tags": [
+    "routine:kaizen",
+    "window:2026-06-18-2",
+    "kind:loop",
+    "status:done",
+    "stop:backlog_dry",
+    "ci:green"
+  ],
+  "ref": "7d0946d",
+  "ts": "2026-06-18T18:39:53+00:00"
+}
