@@ -3,7 +3,7 @@
 > Генерується/оновлюється циклом `/loop покращуй всі фічі згідно roadmap…`.
 > Кожен прохід: перевірка (mypy/tests) → архітектурний огляд → нові пропозиції → позначення закритих.
 
-**Останній прохід:** 2026-06-20 (window-4 iter4)
+**Останній прохід:** 2026-06-20 (window-4 iter5)
 
 ---
 
@@ -221,6 +221,25 @@ R5 (транспорт↔логіка в gateway-router). Усе без змін
   DI-підміну (що правильно для ІЗОЛЯЦІЇ їхньої логіки від Redis), нічого
   не лишає прямого тесту для самого хелпера. Варто прямо запитати:
   "чи хтось взагалі тестує ЦЮ функцію, а не підміняє її?"
+
+### Прохід 2026-06-20 (kaizen window-4, iter5) — process engine: draft-процес завершується одним переходом (фундамент)
+- **Знайдено logic-bug** (свіжий bug-hunt judge-panel, не з roadmap): `process/engine.py::_sync_status`
+  робив ранній `return` для `draft` ПІСЛЯ bump-у в `running`, ДО перевірки `is_complete`. Тож
+  draft-процес, що завершується ОДНИМ `advance` (процес з одного кроку, або останній pending-крок
+  прямо з draft), **залипав у `running` назавжди** і ніколи не ставав `done`. Відтворено наживо;
+  існуючий тест completion (3 кроки) ніколи не торкався single-transition-шляху. Наслідок:
+  `proactive/watchers` бачить завершений процес як активний → спам overdue-нотифікаціями.
+- **Фікс:** перевпорядковано `_sync_status` — `cancelled/paused` липкі (ранній return), незайманий
+  draft лишається draft, інакше єдине рішення `done if is_complete else running`. Поведінка-зберігаюче
+  для всіх 8 наявних тестів.
+- **Адверсарний рев'ю (ultracode, 12 агентів, APPROVE) → 4 знахідки:** (LOW info) рев'ю підтвердив,
+  що жоден споживач не залежав від старого stuck-running (фікс прибирає notify-спам); (MED, **pre-existing**,
+  поза scope) `done` не термінальний — advance кроку на done-процесі воскрешає його в running →
+  винесено в окремий follow-up task (потребує продуктового рішення про reopen-семантику); (LOW×2)
+  додано тести: single-advance через `skipped`, порожній процес (захист `bool(steps)` у is_complete).
+- **Тести:** +5 (`test_process.py`: single-step draft→done через done/skipped; last-pending-skipped;
+  paused-sticky; empty-process guard). **Верифікація:** повний `pytest jarvis_core/tests` ✅ 242/242;
+  `mypy jarvis_core` ✅ 45 файлів. Лише allow-paths (`jarvis_core/**`).
 
 ### Прохід 2026-06-20 (kaizen window-4, iter4) — /v1 429 rate-limit заголовки (AP-4, Стовп A)
 - **Знайдено функціональний gap:** per-key 429 (`openai_api._check_rate_limit`) піднімався

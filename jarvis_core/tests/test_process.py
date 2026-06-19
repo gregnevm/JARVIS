@@ -57,11 +57,60 @@ def test_process_completes_when_all_terminal() -> None:
     assert p.status == "done"
 
 
+def test_single_step_draft_completes_in_one_advance() -> None:
+    # Регресія: draft-процес з одного кроку, завершений ОДНИМ advance, має стати
+    # "done", а не залипнути в "running" (старий ранній return до is_complete).
+    p = Process(
+        id="p1", org_id="o", owner_user_id="A", title="Quick",
+        steps=[ProcessStep(id="s1", title="only", assignee_user_id="A", kind="human_task")],
+    )
+    assert advance(p, "s1", "done") is True
+    assert is_complete(p) is True
+    assert p.status == "done"
+
+
+def test_single_step_draft_completes_via_skipped_in_one_advance() -> None:
+    # Симетрія до done: draft з одного кроку, завершений ОДНИМ advance у "skipped"
+    # (термінальний), теж має стати "done", а не залипнути в "running".
+    p = Process(
+        id="p1", org_id="o", owner_user_id="A", title="Quick",
+        steps=[ProcessStep(id="s1", title="only", assignee_user_id="A", kind="human_task")],
+    )
+    assert advance(p, "s1", "skipped") is True
+    assert is_complete(p) is True
+    assert p.status == "done"
+
+
+def test_draft_completes_when_last_pending_skipped_directly() -> None:
+    # draft → останній pending-крок skipped напряму → процес "done" за один перехід.
+    p = _proc()
+    advance(p, "s1", "skipped")  # draft → running
+    advance(p, "s2", "skipped")
+    advance(p, "s3", "skipped")
+    assert p.status == "done"
+
+
+def test_empty_step_process_never_complete_and_stays_draft() -> None:
+    # Захищає терм `bool(steps)` у is_complete: all([]) == True інакше зробив би
+    # 0-кроковий процес "done". advance не спрацьовує (немає кроку) → лишається draft.
+    p = Process(id="p1", org_id="o", owner_user_id="A", title="Empty", steps=[])
+    assert is_complete(p) is False
+    assert advance(p, "s1", "done") is False
+    assert p.status == "draft"
+
+
 def test_cancelled_status_sticky() -> None:
     p = _proc()
     p.status = "cancelled"
     advance(p, "s1", "done")
     assert p.status == "cancelled"  # не воскресає в running
+
+
+def test_paused_status_sticky() -> None:
+    p = _proc()
+    p.status = "paused"
+    advance(p, "s1", "done")
+    assert p.status == "paused"  # пауза не воскресає переходом кроку
 
 
 def test_escalation_target() -> None:
