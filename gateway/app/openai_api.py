@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine
@@ -15,6 +16,8 @@ from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
 from .config import settings
+
+logger = logging.getLogger("jarvis.gateway.openai")
 
 # AP-2.6: статус → OpenAI error.type
 _ERR_TYPE = {
@@ -308,7 +311,10 @@ async def chat_completions(
                 yield _chunk(cid, model, "", finish=True)
                 yield "data: [DONE]\n\n"
             except Exception as exc:  # noqa: BLE001
-                yield _chunk(cid, model, f"\n[error: {exc}]")
+                # Не світимо сирий exc клієнту (внутрішні шляхи/деталі) — логуємо на
+                # сервері, у потік віддаємо узагальнене. Публічний /v1 = no info-leak.
+                logger.warning("chat stream failed for uid=%s: %s", uid, exc)
+                yield _chunk(cid, model, "\n[stream error]")
                 yield _chunk(cid, model, "", finish=True)
                 yield "data: [DONE]\n\n"
 
