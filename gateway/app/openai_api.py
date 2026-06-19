@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
@@ -22,6 +23,15 @@ _ERR_TYPE = {
     402: "insufficient_quota",
     429: "rate_limit_error",
 }
+
+
+def _validation_message(exc: RequestValidationError) -> str:
+    """Стислий рядок із pydantic-помилок (`loc: msg`), без дампу складних `ctx`-обʼєктів."""
+    parts = [
+        f"{'.'.join(str(p) for p in err.get('loc', ()))}: {err.get('msg', 'invalid')}".lstrip(": ")
+        for err in exc.errors()
+    ]
+    return "; ".join(parts) or "invalid request"
 
 
 def _openai_error_body(status: int, detail: Any) -> dict[str, Any]:
@@ -48,6 +58,14 @@ class _OpenAIErrorRoute(APIRoute):
                 resp = await original(request)
                 status = resp.status_code
                 return resp
+            except RequestValidationError as exc:
+                # Pydantic body/query валідація (422) — теж у OpenAI-конверті, інакше
+                # офіційний openai SDK не розпарсить помилку (шукає ключ `error`).
+                status = 422
+                return JSONResponse(
+                    status_code=422,
+                    content=_openai_error_body(422, _validation_message(exc)),
+                )
             except HTTPException as exc:
                 status = exc.status_code
                 return JSONResponse(
