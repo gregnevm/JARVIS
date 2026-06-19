@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from jarvis_core.context import RequestContext
 
-from .._helpers import require_text
+from .._helpers import AGENT_MODES_AUTO, require_mode, require_text
 from ..agent_payload import build_agent_payload
 from .deps import resolve_client_context
 
@@ -47,7 +47,10 @@ def register(router: APIRouter) -> None:
         """Один хід агента для будь-якого клієнта (JWT/initData/Basic) → JSON-відповідь."""
         text = require_text(body.text)
         uid = _resolve_uid(ctx)
-        mode = (body.mode or "auto").strip().lower() or "auto"
+        # Fail-fast (P2): валідуємо mode на вході, як кожен сусідній agent-entry
+        # (workbench/admin_panel/settings_api/webapp через require_mode SSOT),
+        # а не передаємо «сире» значення downstream у tools.process.
+        mode = require_mode(body.mode or "auto", AGENT_MODES_AUTO)
         payload = build_agent_payload(user_id=uid, chat_id=uid, text=text, source="api", mode=mode)
         reply = await request.app.state.tools.process(payload)
         return {"reply": reply, "mode": mode, "via": ctx.via}

@@ -3,7 +3,7 @@
 > Генерується/оновлюється циклом `/loop покращуй всі фічі згідно roadmap…`.
 > Кожен прохід: перевірка (mypy/tests) → архітектурний огляд → нові пропозиції → позначення закритих.
 
-**Останній прохід:** 2026-06-20
+**Останній прохід:** 2026-06-20 (window-4 iter3)
 
 ---
 
@@ -221,6 +221,25 @@ R5 (транспорт↔логіка в gateway-router). Усе без змін
   DI-підміну (що правильно для ІЗОЛЯЦІЇ їхньої логіки від Redis), нічого
   не лишає прямого тесту для самого хелпера. Варто прямо запитати:
   "чи хтось взагалі тестує ЦЮ функцію, а не підміняє її?"
+
+### Прохід 2026-06-19 (kaizen window-4, iter3) — client-API: fail-fast валідація mode/target (parity, Стовп C)
+- **Знайдено guard-parity gap (P2 fail-fast):** `/api/v1/chat` (`client_api/chat.py`),
+  `/api/v1/code/task` (target, `client_api/code.py`) і developer playground
+  (`platform/developer.py`) передавали `mode`/`target` у `tools.process` **без валідації**,
+  тоді як усі сусідні agent-entry (workbench/admin_panel/settings_api/webapp) валідують через
+  SSOT `require_mode`. Невідомий `target` (напр. `cursor`) тихо падав у local-гілку замість 400.
+- **Фікс:** chat+playground → `require_mode(body.mode or "auto", AGENT_MODES_AUTO)`; code →
+  `require_mode(body.target or "local", {"local","claude"}, field="target")`. Додано канонічну
+  `AGENT_MODES_AUTO = AGENT_MODES | {"auto"}` у `_helpers` (SSOT).
+- **Адверсарний рев'ю (ultracode, 12 агентів, APPROVE) → 3 completeness-знахідки, усі закрито:**
+  (MED) `/code/modes` рекламував cursor/continue як bridges, що `/code/task` тепер 400-ить →
+  позначено `via:telegram, rest_target:false` + docstring; (LOW) `workbench.py` досі дублював
+  `_MODES` → перевів на `AGENT_MODES_AUTO` (справжній SSOT, прибрано дублікат); (LOW) додано
+  parity-тест нормалізації target (` CLAUDE ` → 503-гейт, не 400).
+- **Тести:** +6 (chat bad/normalized mode; code unknown/normalized target; playground bad mode).
+- **Верифікація:** афектед-файли `pytest` ✅ 65/65 (chat/dvc/developer/platform/computer_resume);
+  `mypy gateway/app` ✅ 110 файлів. Повний gateway-сьют — на CI (локально TestClient-lifespan висне).
+  Лише allow-paths (`gateway/**`).
 
 ### Прохід 2026-06-19 (kaizen window-4, iter2) — S4-гейт: fail-closed для невідомих дій + дрейф notify (фундамент)
 - **Знайдено fail-open у S4-гейті** (`jarvis_core/proactive/gate.py::requires_confirmation`):

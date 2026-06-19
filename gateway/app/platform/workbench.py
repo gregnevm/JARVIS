@@ -12,12 +12,10 @@ from pydantic import BaseModel
 
 from ..auth import computer_denied_message
 from ..computer_resume import resume_text
-from .._helpers import require_mode, require_text
+from .._helpers import AGENT_MODES_AUTO, require_mode, require_text
 from .auth import PlatformAuth, require_platform_auth
 
 logger = logging.getLogger("jarvis.gateway.platform.workbench")
-
-_MODES = {"auto", "chat", "agent", "hybrid", "computer"}
 
 
 class AskBody(BaseModel):
@@ -53,7 +51,7 @@ def register(router: APIRouter) -> None:
         auth: PlatformAuth = Depends(require_platform_auth),
     ) -> StreamingResponse:
         text = require_text(body.text)
-        mode = require_mode(body.mode or "auto", _MODES)
+        mode = require_mode(body.mode or "auto", AGENT_MODES_AUTO)
         if mode == "computer":
             _check_computer(auth.user_id)
         tools = request.app.state.tools
@@ -111,7 +109,7 @@ def register(router: APIRouter) -> None:
     ) -> StreamingResponse:
         _check_computer(auth.user_id)
         result = require_text(body.result, field="result")
-        mode = require_mode(body.mode or "computer", _MODES)
+        mode = require_mode(body.mode or "computer", AGENT_MODES_AUTO)
         tools = request.app.state.tools
         prompt = resume_text(body.origin, result)
 

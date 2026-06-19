@@ -115,6 +115,19 @@ def test_code_claude_disabled_503(client):
     assert r.status_code == 503
 
 
+def test_code_rejects_unknown_target(client):
+    # fail-fast (P2): невідомий target раніше тихо падав у local; тепер 400
+    r = client.post("/api/v1/code/task", auth=AUTH, json={"text": "x", "target": "cursor"})
+    assert r.status_code == 400
+
+
+def test_code_normalizes_valid_target(client):
+    # parity з test_chat_normalizes_valid_mode: require_mode lower+strip нормалізує
+    # " CLAUDE " -> "claude" і доходить до 503-гейта (bridge off), а не 400.
+    r = client.post("/api/v1/code/task", auth=AUTH, json={"text": "x", "target": " CLAUDE "})
+    assert r.status_code == 503
+
+
 def test_dvc_requires_auth(client):
     assert client.post("/api/v1/driver/exec", json={"text": "x"}).status_code == 401
     assert client.get("/api/v1/chrome/poll").status_code == 401

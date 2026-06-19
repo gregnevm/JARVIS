@@ -162,3 +162,18 @@ def test_chat_requires_auth(client_jwt):
 def test_chat_empty_text_400(client_jwt):
     client_jwt.app.state.tools.process = AsyncMock(return_value="x")
     assert client_jwt.post("/api/v1/chat", auth=AUTH, json={"text": "  "}).status_code == 400
+
+
+def test_chat_rejects_unknown_mode(client_jwt):
+    # fail-fast (P2): невалідний mode → 400 на вході, як у сусідніх agent-entry
+    client_jwt.app.state.tools.process = AsyncMock(return_value="x")
+    r = client_jwt.post("/api/v1/chat", auth=AUTH, json={"text": "hi", "mode": "garbage"})
+    assert r.status_code == 400
+
+
+def test_chat_normalizes_valid_mode(client_jwt):
+    client_jwt.app.state.tools.process = AsyncMock(return_value="ok")
+    r = client_jwt.post("/api/v1/chat", auth=AUTH, json={"text": "hi", "mode": "AGENT"})
+    assert r.status_code == 200
+    assert r.json()["mode"] == "agent"  # lower+strip нормалізація через require_mode
+    assert client_jwt.app.state.tools.process.await_args.args[0]["mode"] == "agent"

@@ -18,7 +18,7 @@ from fastapi import HTTPException
 
 from jarvis_core.http_helpers import require_found, require_text
 
-__all__ = ["require_text", "require_found", "require_mode", "AGENT_MODES"]
+__all__ = ["require_text", "require_found", "require_mode", "AGENT_MODES", "AGENT_MODES_AUTO"]
 
 
 AGENT_MODES = frozenset({"chat", "agent", "hybrid", "computer"})
@@ -26,6 +26,12 @@ AGENT_MODES = frozenset({"chat", "agent", "hybrid", "computer"})
 (`if m not in ("chat", "agent", "hybrid", "computer")`). Той самий літерал раніше
 дублювався у 4 місцях (`admin_panel.py`, `platform/settings_api.py::_MODES`,
 `webapp.py`, рядок-перевірка у `bot/admin.py`) — тепер єдине джерело істини."""
+
+
+AGENT_MODES_AUTO = AGENT_MODES | frozenset({"auto"})
+"""`AGENT_MODES` + `"auto"` (авто-вибір режиму запиту) — єдине джерело для entry-точок,
+що приймають `"auto"` як дефолт: client_api `/chat`, developer playground, workbench
+(ask/resume). Раніше цей літерал дублювався у `workbench.py::_MODES` — тепер SSOT."""
 
 
 def require_mode(value: str | None, valid: AbstractSet[str], *, field: str = "mode") -> str:
