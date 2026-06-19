@@ -27,6 +27,10 @@ _ERR_TYPE = {
     429: "rate_limit_error",
 }
 
+# OpenAI Model.created — обовʼязкове int-поле в SDK (інакше `client.models.list()`
+# падає на валідації). Статичний epoch: моделі не «створюються» per-request (AP-2.3).
+_MODEL_CREATED = 1700000000
+
 
 def _validation_message(exc: RequestValidationError) -> str:
     """Стислий рядок із pydantic-помилок (`loc: msg`), без дампу складних `ctx`-обʼєктів."""
@@ -527,7 +531,7 @@ async def _ollama_catalog(request: Request) -> list[dict[str, Any]]:
         for m in await _ollama_tags(host):
             name = m.get("name")
             if name:
-                out.append({"id": str(name), "object": "model", "owned_by": "ollama"})
+                out.append({"id": str(name), "object": "model", "created": _MODEL_CREATED, "owned_by": "ollama"})
         return out
     except Exception:  # noqa: BLE001 — каталог не має ламати ендпоінт
         return []
@@ -536,9 +540,9 @@ async def _ollama_catalog(request: Request) -> list[dict[str, Any]]:
 @router.get("/models")
 async def list_models(request: Request, _: None = Depends(_auth_bearer)) -> dict[str, Any]:
     data: list[dict[str, Any]] = [
-        {"id": "jarvis", "object": "model", "owned_by": "jarvis"},
-        {"id": "jarvis-agent", "object": "model", "owned_by": "jarvis"},
-        {"id": "nomic-embed-text", "object": "model", "owned_by": "jarvis"},
+        {"id": "jarvis", "object": "model", "created": _MODEL_CREATED, "owned_by": "jarvis"},
+        {"id": "jarvis-agent", "object": "model", "created": _MODEL_CREATED, "owned_by": "jarvis"},
+        {"id": "nomic-embed-text", "object": "model", "created": _MODEL_CREATED, "owned_by": "jarvis"},
     ]
     seen = {m["id"] for m in data}
     for m in await _ollama_catalog(request):  # AP-2.3: реальний каталог
