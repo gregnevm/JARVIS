@@ -77,11 +77,17 @@ AUTO_COROUTINE_BYPASS_PERMISSIONS=false   # 🔓 auto-apply без підтве�
 Дзеркало режиму **«Bypass permissions»** у Claude Code — повний цикл «ось так
 автоматично», без жодних підтверджень. Вмикається свідомо на **двох** сервісах:
 
-| Сервіс | Прапор | Роль |
-|--------|--------|------|
-| gateway | `AUTO_COROUTINE_ENABLED=true` | запускає фоновий loop |
-| gateway | `AUTO_COROUTINE_BYPASS_PERMISSIONS=true` | індикатор+намір; показує `mode=bypass` у status/дашборді |
-| tools | `CODING_HEADLESS_APPLY=true` | **реальний** auto-apply правок (session-trust на прогін) |
+| Прапор (один `.env`) | Роль |
+|--------|------|
+| `COMPUTER_REQUIRE_CONFIRM=false` | **головне** — прибирає ✅/❌ на КОЖНУ мутуючу дію (fs/CLI/PS/code_edit) |
+| `CODING_HEADLESS_APPLY=true` | headless apply правок coding-агента (без confirm) |
+| `AUTO_COROUTINE_ENABLED=true` | запускає фоновий loop |
+| `AUTO_COROUTINE_BYPASS_PERMISSIONS=true` | індикатор+намір; `status` → `mode=bypass`, дашборд → 🔓 |
+
+> ⚠️ `COMPUTER_REQUIRE_CONFIRM=false` знімає підтвердження і в **інтерактиві** (не лише
+> для autopilot). Альтернатива без глобального зняття — видати full session-trust власнику
+> (`COMPUTER_SESSION_TRUST_MINUTES` / кнопка «Full trust» у Mini App): мутуючі дії в
+> trust-вікні застосовуються без ✅.
 
 Status (`GET /platform/api/autopilot/status`) повертає `mode: bypass|supervised`;
 дашборд має рядок **Режим:** 🔓/🔒. Локально перевірити: `python scripts/autopilot_run.py --bypass`.
