@@ -24,6 +24,11 @@ class RateLimiter:
         self._redis = redis
         self._limit = limit_per_min
 
+    @property
+    def limit(self) -> int:
+        """Налаштований дефолтний cap/хв (для rate-limit заголовків на 429)."""
+        return self._limit
+
     async def allow(
         self, user_id: int, *, limit: int | None = None, org_id: str | None = None
     ) -> bool:

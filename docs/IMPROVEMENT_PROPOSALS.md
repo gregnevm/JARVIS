@@ -3,7 +3,7 @@
 > Генерується/оновлюється циклом `/loop покращуй всі фічі згідно roadmap…`.
 > Кожен прохід: перевірка (mypy/tests) → архітектурний огляд → нові пропозиції → позначення закритих.
 
-**Останній прохід:** 2026-06-20 (window-4 iter3)
+**Останній прохід:** 2026-06-20 (window-4 iter4)
 
 ---
 
@@ -221,6 +221,24 @@ R5 (транспорт↔логіка в gateway-router). Усе без змін
   DI-підміну (що правильно для ІЗОЛЯЦІЇ їхньої логіки від Redis), нічого
   не лишає прямого тесту для самого хелпера. Варто прямо запитати:
   "чи хтось взагалі тестує ЦЮ функцію, а не підміняє її?"
+
+### Прохід 2026-06-20 (kaizen window-4, iter4) — /v1 429 rate-limit заголовки (AP-4, Стовп A)
+- **Знайдено функціональний gap:** per-key 429 (`openai_api._check_rate_limit`) піднімався
+  **без** `Retry-After`/`X-RateLimit-*`. Офіційний openai SDK читає `retry-after` для
+  експоненційного backoff — без нього клієнт ретраїть наосліп, і per-key ліміт не виконує
+  своєї DoS/cost-функції (AP-4 «rate-limit на ключ»). Error-route вже форвардить `exc.headers`.
+- **Фікс:** додано стандартні заголовки на 429 (`Retry-After`, `X-RateLimit-Limit/Remaining/Reset`;
+  reset = секунди до наступного хвилинного вікна, 1..60).
+- **Адверсарний рев'ю (ultracode, 15 агентів, APPROVE) → 4 LOW-знахідки:**
+  (1) тест флакав на межі хвилини (3 виклики в різних вікнах) → запінив годинник
+  (`monkeypatch openai_api.time.time`), заголовки тепер детерміновані; (2,4) **сусідній per-uid
+  429** (`chat_completions`, limiter) лишався без заголовків — той самий /v1 ендпоінт →
+  винесено спільний хелпер `_rate_limit_headers(now, limit)` і застосовано до **обох** 429,
+  + публічна `RateLimiter.limit` property; (3) `X-RateLimit-*` на 2xx (proactive self-throttle)
+  потребує middleware/stamping — винесено в окремий follow-up task (поза scope).
+- **Тести:** +per-key (точні заголовки) + per-uid (Retry-After+Limit) асерти.
+- **Верифікація:** `pytest` ✅ 36/36 (api_key_routes/openai_api/ratelimit); `mypy gateway/app`
+  ✅ 110 файлів. Лише allow-paths (`gateway/**`).
 
 ### Прохід 2026-06-19 (kaizen window-4, iter3) — client-API: fail-fast валідація mode/target (parity, Стовп C)
 - **Знайдено guard-parity gap (P2 fail-fast):** `/api/v1/chat` (`client_api/chat.py`),

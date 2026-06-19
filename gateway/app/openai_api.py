@@ -180,13 +180,29 @@ async def _authenticate(request: Request) -> dict[str, Any]:
     return ctx
 
 
+def _rate_limit_headers(now: int, limit: int | None = None) -> dict[str, str]:
+    """Стандартні rate-limit заголовки для 429 (фіксоване хвилинне вікно `now//60`).
+
+    Офіційний openai SDK читає `Retry-After` для експоненційного backoff — без нього
+    клієнт ретраїть наосліп і per-key/per-uid ліміт не виконує DoS/cost-функції (AP-4).
+    `reset` = секунди до наступного вікна (1..60). `X-RateLimit-Limit/Remaining`
+    додаються лише коли cap відомий (>0).
+    """
+    reset_epoch = (now // 60 + 1) * 60
+    headers = {"Retry-After": str(reset_epoch - now), "X-RateLimit-Reset": str(reset_epoch)}
+    if limit is not None and limit > 0:
+        headers["X-RateLimit-Limit"] = str(limit)
+        headers["X-RateLimit-Remaining"] = "0"
+    return headers
+
+
 async def _check_rate_limit(request: Request, key_id: str) -> None:
     """Per-key ліміт запитів/хв (AP-4). 0 = вимкнено. Best-effort: збій Redis → пропускаємо."""
     limit = settings.openai_key_rate_limit_per_min
     if limit <= 0:
         return
-    window = int(time.time() // 60)
-    k = f"jarvis:ratelimit:{key_id}:{window}"
+    now = int(time.time())
+    k = f"jarvis:ratelimit:{key_id}:{now // 60}"
     try:
         n = int(await request.app.state.redis.incr(k))
         if n == 1:
@@ -194,7 +210,11 @@ async def _check_rate_limit(request: Request, key_id: str) -> None:
     except Exception:  # noqa: BLE001 — ліміт не має ламати запит при збої сховища
         return
     if n > limit:
-        raise HTTPException(status_code=429, detail="rate limit exceeded for this api key")
+        raise HTTPException(
+            status_code=429,
+            detail="rate limit exceeded for this api key",
+            headers=_rate_limit_headers(now, limit),
+        )
 
 
 def require_scope(scope: str) -> Callable[[Request], Coroutine[object, object, None]]:
@@ -300,7 +320,13 @@ async def chat_completions(
     # й Telegram-канал (DoS/cost-захист; AGENTS §A «rate-limit на ключ»).
     limiter = getattr(request.app.state, "limiter", None)
     if limiter is not None and not await limiter.allow(uid):
-        raise HTTPException(status_code=429, detail="rate limit exceeded")
+        # Той самий контракт backoff-заголовків, що й per-key 429 (AP-4): кожен /v1
+        # 429 несе Retry-After, інакше SDK ретраїть наосліп.
+        raise HTTPException(
+            status_code=429,
+            detail="rate limit exceeded",
+            headers=_rate_limit_headers(int(time.time()), getattr(limiter, "limit", None)),
+        )
     tools = request.app.state.tools
     cid = _completion_id()
     model = body.model or "jarvis"

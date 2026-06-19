@@ -107,6 +107,8 @@ def test_impersonation_uid_ignored(client):
 def test_rate_limit_429(client, monkeypatch):
     """P0-5: /v1 застосовує rate-limit (DoS/cost-захист)."""
     class _Block:
+        limit = 5
+
         async def allow(self, *a, **k):
             return False
 
@@ -117,6 +119,9 @@ def test_rate_limit_429(client, monkeypatch):
         headers={"Authorization": "Bearer sk-test"},
     )
     assert r.status_code == 429
+    # per-uid 429 несе той самий backoff-контракт, що й per-key 429 (AP-4)
+    assert r.headers["x-ratelimit-limit"] == "5"
+    assert 1 <= int(r.headers["retry-after"]) <= 60
 
 
 # --- /v1/embeddings (AP-2.1) -------------------------------------------------
