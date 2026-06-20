@@ -225,3 +225,16 @@ SSOT-шар, який модуль сам анонсує («enforcement підк
 kaizen-score 86 (-2: низький власний throughput через колізію, але якість висока й main зелений
 усе вікно; D1-дрейф закрито). Артефакти: `data/artifacts/self-improve/` (паспорти 0043–0046,
 `window.json`, `runs/2026-06-19-3/{summary.json,digest.md}`).
+
+## Kaizen iteration 2026-06-20-verify (single-iter, end-to-end verification)
+
+Прогін routine `kaizen-loop` (profile:jarvis) як функціональна перевірка скіла.
+
+- **Task (leverage):** закрити mypy-gap сервісу `tts` — `mypy tts/app` падав на
+  `torch` (немає стабів, не в `ignore_missing_imports`), тож сервіс не можна додати
+  в CI-матрицю чесно. **Fix:** додано `torch.*` в `pyproject.toml` mypy-override
+  (той самий патерн, що `TTS.*`/`playwright.*`).
+- **CI-gate (scoped):** `mypy tts/app` 🟢 (4 файли), `pytest tts/tests` 🟢 (3),
+  без регресій (`jarvis_core` 45 + `tools/app` 91 mypy 🟢). Local commit, no push.
+- **Follow-up (drift):** `tts` ще НЕ в `.github/workflows/ci.yml` матриці — додавання
+  тягне важкі deps (TTS/torch) → рішення про CI-час за людиною. mypy-блокер знято.
