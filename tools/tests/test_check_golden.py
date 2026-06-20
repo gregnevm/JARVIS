@@ -25,3 +25,5 @@ def test_check_output_golden(case: dict) -> None:
         out = _summarize_lint(case["framework"], case["stdout"], "", case["code"])
     for sub in case["expect_substrings"]:
         assert sub in out, f"{case['id']}: missing {sub!r} in:\n{out}"
+    for sub in case.get("expect_absent", []):
+        assert sub not in out, f"{case['id']}: unexpected {sub!r} in:\n{out}"

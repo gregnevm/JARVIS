@@ -55,17 +55,59 @@ def _tail(text: str, n: int = 25) -> str:
 
 # --- parsers -----------------------------------------------------------------
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+# КОЖЕН підсумок pytest несе таймінг-хвіст ` in <duration>s` (і дефолтний
+# `==== N passed in 0.3s ====`, і тихий `-q` `N passed in 0.3s` без рамки `=`),
+# плюс tally-слово. Captured-вивід тесту цих двох інваріантів разом не має.
+_TALLY_RE = re.compile(
+    r"\b(?:\d+\s+(?:passed|failed|errors?|skipped|xfailed|xpassed|deselected)"
+    r"|no tests ran)\b"
+)
+_DURATION_RE = re.compile(r"\bin\s+\d+(?:\.\d+)?\s*s\b")
+
+
+def _pytest_summary_line(blob: str) -> str | None:
+    """Канонічний підсумковий рядок pytest, очищений від рамки `=` та ANSI-кольорів.
+
+    Лічильники беремо саме з нього, а не з усього блобу: інакше tally-слово на
+    кшталт `1 error` у захопленому виводі тесту (`Captured log`, тест error-шляху)
+    накручує лічильник і перевертає зелений прогін у ❌ FAIL — після чого fix-loop
+    починає «лагодити» вже зелений код. Розпізнаємо рядок за двома інваріантами,
+    які несе кожен підсумок pytest (і дефолтний, і `-q`) і яких нема в
+    captured-виводі: tally-слово + таймінг-хвіст ` in <duration>s`. Скануємо знизу
+    — справжній підсумок завжди останній, тож рамка `=`/ANSI-кольори/трейлінг-банер
+    плагіна нас не збивають (рамка-якір `^=+` був крихким: `-q`-зелений прогін рамки
+    не друкує, а ANSI-кольори зміщують `=` з початку рядка).
+    """
+    for raw in reversed(_ANSI_RE.sub("", blob).splitlines()):
+        line = raw.strip().strip("=").strip()
+        if _DURATION_RE.search(line) and _TALLY_RE.search(line):
+            return line
+    return None
+
+
 def _summarize_pytest(stdout: str, stderr: str, code: int) -> str:
     blob = stdout + "\n" + stderr
+    # Лічимо зі summary-рядка (fallback на весь блоб лише якщо його зовсім нема —
+    # напр. процес убито до того, як pytest надрукував підсумок; там code != 0 і
+    # так дає FAIL).
+    scope = _pytest_summary_line(blob) or blob
 
     def _count(word: str) -> int:
-        m = re.search(rf"(\d+)\s+{word}", blob)
+        m = re.search(rf"(\d+)\s+{word}", scope)
         return int(m.group(1)) if m else 0
 
     passed, failed = _count("passed"), _count("failed")
     errors, skipped = _count("error"), _count("skipped")
-    failed_names = re.findall(r"^FAILED\s+(\S+)", blob, re.MULTILINE)[:20]
     verdict = "✅ PASS" if (code == 0 and failed == 0 and errors == 0) else "❌ FAIL"
+    # Список FAILED-імен показуємо лише на ЧЕРВОНОМУ прогоні: на зеленому рядок
+    # `FAILED …` у captured-виводі — не справжній провал (verdict уже PASS), тож
+    # не плутаємо модель примарним `failed:`-блоком.
+    failed_names = (
+        re.findall(r"^FAILED\s+(\S+)", blob, re.MULTILINE)[:20]
+        if verdict == "❌ FAIL"
+        else []
+    )
     head = (
         f"pytest {verdict} — passed={passed} failed={failed} "
         f"errors={errors} skipped={skipped} (exit {code})"

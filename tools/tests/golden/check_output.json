@@ -16,6 +16,55 @@
     "expect_substrings": ["❌ FAIL", "failed=1", "passed=4", "pkg/test_x.py::test_a"]
   },
   {
+    "id": "pytest_pass_with_error_in_captured_log",
+    "kind": "tests",
+    "framework": "pytest",
+    "stdout": "tests/test_log.py::test_error_path PASSED\n----- Captured log call -----\nERROR app: 1 error while retrying (expected, handled)\n=== 5 passed in 0.30s ===\n",
+    "code": 0,
+    "expect_substrings": ["✅ PASS", "passed=5", "errors=0"]
+  },
+  {
+    "id": "pytest_errors_only_still_fail",
+    "kind": "tests",
+    "framework": "pytest",
+    "stdout": "E   ImportError: boom\n=== 2 errors in 0.10s ===\n",
+    "code": 1,
+    "expect_substrings": ["❌ FAIL", "errors=2"]
+  },
+  {
+    "id": "pytest_quiet_pass_bare_summary_tally_in_log",
+    "kind": "tests",
+    "framework": "pytest",
+    "stdout": "WARN retried 3 failed attempts then recovered\n5 passed in 0.10s\n",
+    "code": 0,
+    "expect_substrings": ["✅ PASS", "passed=5", "failed=0"]
+  },
+  {
+    "id": "pytest_colored_summary_pass_with_error_in_log",
+    "kind": "tests",
+    "framework": "pytest",
+    "stdout": "ERROR app: 1 error while retrying\n\u001b[32m============ 2 passed in 0.61s ============\u001b[0m\n",
+    "code": 0,
+    "expect_substrings": ["✅ PASS", "passed=2", "errors=0"]
+  },
+  {
+    "id": "pytest_trailing_banner_after_summary",
+    "kind": "tests",
+    "framework": "pytest",
+    "stdout": "=== 3 passed in 0.20s ===\n===== teardown: 2 errors flushed =====\n",
+    "code": 0,
+    "expect_substrings": ["✅ PASS", "passed=3", "errors=0"]
+  },
+  {
+    "id": "pytest_green_failed_in_captured_no_block",
+    "kind": "tests",
+    "framework": "pytest",
+    "stdout": "tests/test_p.py::t PASSED\n----- Captured stdout call -----\nFAILED pkg/test_a.py::t_one - AssertionError\n=== 6 passed in 0.20s ===\n",
+    "code": 0,
+    "expect_substrings": ["✅ PASS", "passed=6"],
+    "expect_absent": ["failed:\n"]
+  },
+  {
     "id": "mypy_success",
     "kind": "lint",
     "framework": "mypy",
