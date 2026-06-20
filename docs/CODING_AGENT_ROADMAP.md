@@ -267,6 +267,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-20 | 1.18 | CA-3.1 hardening: `_summarize_pytest` рахує лічильники з канонічного summary-рядка (інваріант tally-слово + таймінг-хвіст ` in <dur>s`, ANSI-strip, скан знизу), а не з усього блоба. Закриває false-FAIL коли tally-слово (`1 error`) у captured-виводі перевертало зелений прогін → fix-loop «лагодив» вже зелений код. Покриває `-q` голий підсумок (без рамки `=`), ANSI-кольори, трейлінг-банери; `failed:`-блок приховано на зеленому прогоні (+5 unit + 5 golden, ultracode-verified) |
 | 2026-06-16 | 1.17 | **CA-5/6 фінал**: CA-5.1 review-after-fix gate (`fix_tests(review=True)`), CA-5.3 gateway-воркер dispatch для `coding_task`, CA-6.5 Platform Coding tab (закриває CB6), CA-6.3 VS Code extension + `POST /agent/code/edit` + `jarvis code edit` (закриває CB7). **Фази CA-5/CA-6 повністю закрито** |
 | 2026-06-16 | 1.16 | follow-ups: CA-3.5 live-fix golden, CA-5.5 turnkey pre-commit lint gate, CA-4.2 session-trust auto-approve планів, CA-6.4 headless `--no-confirm` за policy-gate |
 | 2026-06-16 | 1.15 | CA-6.1/6.2 `jarvis code` CLI (`app/cli.py`: run/plan/review/fix + key/base auth); CA-5.3 (часткою) coding_task job type + `/agent/code/fix`; CA-5.4 ✅ (spawn_subagent) |

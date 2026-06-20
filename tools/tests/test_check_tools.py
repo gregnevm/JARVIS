@@ -68,6 +68,69 @@ async def test_run_tests_pytest_pass(coding_enabled: FakeRedis) -> None:
     assert "✅ PASS" in out and "passed=12" in out
 
 
+async def test_run_tests_pass_with_error_in_captured_log(coding_enabled: FakeRedis) -> None:
+    # Регресія: 'N error' у захопленому виводі тесту НЕ має перевертати зелений прогін
+    # у FAIL (лічильники беремо зі summary-рядка pytest, не з усього блобу).
+    stdout = (
+        "tests/test_log.py::test_error_path PASSED\n"
+        "----- Captured log call -----\n"
+        "ERROR app: 1 error while retrying (expected, handled)\n"
+        "=== 5 passed in 0.30s ===\n"
+    )
+    with _patch_cli({"stdout": stdout, "code": 0}):
+        out = await check_tools.run_tests("pytest", args=["-q"], path="O:/repo", user_id=1)
+    assert "✅ PASS" in out and "passed=5" in out and "errors=0" in out
+
+
+async def test_run_tests_quiet_pass_bare_summary_no_frame(coding_enabled: FakeRedis) -> None:
+    # Регресія (найважливіший шлях): `pytest -q` на зеленому прогоні друкує ГОЛИЙ
+    # підсумок `N passed in Xs` БЕЗ рамки `=`. Tally-слово в captured-виводі
+    # (`3 failed attempts`) не має перевертати його у FAIL — ловимо summary за
+    # таймінг-хвостом `in <dur>s`, а не за рамкою `=`.
+    stdout = "WARN retried 3 failed attempts then recovered\n5 passed in 0.10s\n"
+    with _patch_cli({"stdout": stdout, "code": 0}):
+        out = await check_tools.run_tests("pytest", args=["-q"], path="O:/repo", user_id=1)
+    assert "✅ PASS" in out and "passed=5" in out and "failed=0" in out
+
+
+async def test_run_tests_ansi_colored_summary_pass(coding_enabled: FakeRedis) -> None:
+    # ANSI-кольоровий підсумок (`--color=yes`) не має ламати розпізнавання: рядок
+    # обчищається від escape-кодів перед матчем, тож `1 error` у логах не дає FAIL.
+    stdout = (
+        "ERROR app: 1 error while retrying\n"
+        "\x1b[32m============ 2 passed in 0.61s ============\x1b[0m\n"
+    )
+    with _patch_cli({"stdout": stdout, "code": 0}):
+        out = await check_tools.run_tests("pytest", user_id=1)
+    assert "✅ PASS" in out and "passed=2" in out and "errors=0" in out
+
+
+async def test_run_tests_trailing_banner_after_summary(coding_enabled: FakeRedis) -> None:
+    # Трейлінг-банер ПІСЛЯ справжнього підсумку (teardown/плагін) не має перебивати
+    # лічильники: скануємо знизу, але банер без `in <dur>s` ігнорується.
+    stdout = "=== 3 passed in 0.20s ===\n===== teardown: 2 errors flushed =====\n"
+    with _patch_cli({"stdout": stdout, "code": 0}):
+        out = await check_tools.run_tests("pytest", user_id=1)
+    assert "✅ PASS" in out and "passed=3" in out and "errors=0" in out
+
+
+async def test_run_tests_green_run_hides_captured_failed_line(coding_enabled: FakeRedis) -> None:
+    # На зеленому прогоні рядок `FAILED …` у captured-виводі — не справжній провал;
+    # `failed:`-блок не показуємо, щоб не плутати модель примарним списком.
+    stdout = (
+        "tests/test_p.py::t PASSED\n"
+        "----- Captured stdout call -----\n"
+        "FAILED pkg/test_a.py::t_one - AssertionError\n"
+        "=== 6 passed in 0.20s ===\n"
+    )
+    with _patch_cli({"stdout": stdout, "code": 0}):
+        out = await check_tools.run_tests("pytest", user_id=1)
+    # raw-хвіст (`---`) і далі ехом містить captured-рядок — це сирий вивід для
+    # моделі; пригнічуємо лише СТРУКТУРОВАНИЙ `failed:`-блок над ним.
+    assert "✅ PASS" in out and "passed=6" in out
+    assert "failed:\n" not in out
+
+
 async def test_run_tests_rejects_non_runner_exe(coding_enabled: FakeRedis) -> None:
     out = await check_tools.run_tests("rm", args=["-rf", "/"], user_id=1)
     assert "не дозволений" in out
