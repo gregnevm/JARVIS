@@ -235,41 +235,20 @@ async def _auth_bearer(request: Request) -> None:
     await _authenticate(request)
 
 
-def _requested_uid(request: Request, body: ChatCompletionRequest) -> int | None:
-    """uid, який попросив caller (header має пріоритет над body.user). None якщо немає."""
+def _requested_uid(request: Request, user: str | None) -> int | None:
+    """uid, який попросив caller (header має пріоритет над `user` із body/query). None якщо немає."""
     hdr = request.headers.get("x-jarvis-user-id")  # Starlette headers — case-insensitive
     if hdr:
         try:
             return int(hdr.strip())
         except ValueError:
             pass
-    if body.user:
+    if user:
         try:
-            return int(body.user)
+            return int(user)
         except ValueError:
             pass
     return None
-
-
-def _resolve_user_id(request: Request, body: ChatCompletionRequest) -> int:
-    """uid для прогону агента під одним глобальним `/v1`-ключем.
-
-    P0-4 (anti-impersonation): caller-supplied uid (header/body) приймаємо ЛИШЕ якщо
-    він у `allowed_ids`. Інакше тримач єдиного OPENAI_API_KEY міг би передати
-    `X-JARVIS-User-Id: <будь-хто>` і читати чужу памʼять/контекст. Невідомий uid →
-    ігноруємо й падаємо на OPENAI_DEFAULT_USER_ID."""
-    allowed = settings.allowed_ids
-    requested = _requested_uid(request, body)
-    if requested is not None and requested in allowed:
-        return requested
-    default = settings.openai_default_user_id
-    if default:
-        return int(default)
-    if allowed:
-        return next(iter(allowed))
-    raise HTTPException(
-        status_code=400, detail="user_id not resolvable (configure OPENAI_DEFAULT_USER_ID)"
-    )
 
 
 def _extract_text(messages: list[ChatMessage]) -> str:
@@ -315,7 +294,7 @@ async def chat_completions(
     text = _extract_text(body.messages)
     if not text:
         raise HTTPException(status_code=400, detail="messages required")
-    uid = _resolve_user_id(request, body)
+    uid = _resolve_uid(request, body.user)  # P0-4: gated SSOT resolver (anti-impersonation)
     # P0-5: кожен виклик — дорогий agent-turn. Rate-limit на той самий лічильник, що
     # й Telegram-канал (DoS/cost-захист; AGENTS §A «rate-limit на ключ»).
     limiter = getattr(request.app.state, "limiter", None)
@@ -413,25 +392,25 @@ async def embeddings(
 
 
 def _resolve_uid(request: Request, user: str | None = None) -> int:
-    """Generic user-id resolver (header → body.user → default → перший allowed)."""
-    hdr = request.headers.get("x-jarvis-user-id") or request.headers.get("X-JARVIS-User-Id")
-    if hdr:
-        try:
-            return int(hdr.strip())
-        except ValueError:
-            pass
-    if user:
-        try:
-            return int(user)
-        except ValueError:
-            pass
+    """Gated user-id resolver для всього `/v1`-surface (SSOT; AP-1.5).
+
+    P0-4 (anti-impersonation): caller-supplied uid (header → `user`) приймаємо ЛИШЕ
+    якщо він у `allowed_ids`. Без цього gate тримач єдиного OPENAI_API_KEY міг би
+    передати `X-JARVIS-User-Id: <будь-хто>` і прогнати агент-луп / прочитати чужі
+    `/v1/jobs` під чужим uid (impersonation + job IDOR). Невідомий/недозволений uid →
+    fallback на OPENAI_DEFAULT_USER_ID, потім перший allowed."""
+    allowed = settings.allowed_ids
+    requested = _requested_uid(request, user)
+    if requested is not None and requested in allowed:
+        return requested
     default = settings.openai_default_user_id
     if default:
         return int(default)
-    ids = settings.allowed_ids
-    if ids:
-        return next(iter(ids))
-    raise HTTPException(status_code=400, detail="user_id required (X-JARVIS-User-Id header)")
+    if allowed:
+        return next(iter(allowed))
+    raise HTTPException(
+        status_code=400, detail="user_id not resolvable (configure OPENAI_DEFAULT_USER_ID)"
+    )
 
 
 def _job_view(rec: dict[str, Any]) -> dict[str, Any]:

@@ -65,7 +65,7 @@ tenant-фундаменті з SAAS_DEEP_DIVE.
 | `GET /v1/models` | ✅ | `gateway/app/openai_api.py` |
 | Bearer auth | ✅ один глобальний `OPENAI_API_KEY` | `_auth_bearer()` |
 | SSE stream | ✅ | `StreamingResponse` |
-| user-id resolution | ✅ header/body/default | `_resolve_user_id()` |
+| user-id resolution | ✅ header/body/default + **anti-impersonation gate** (P0-4: caller-uid лише якщо в `allowed_ids`; весь `/v1`-surface) | `_resolve_uid()` (gated SSOT) |
 | Async-агент (jobs/teams/research) | ✅ внутрішньо, не як `/v1` | `tools/app/bg_jobs.py` |
 
 ### 2.2 Оцінка зрілості (чесно)
@@ -259,6 +259,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-06-23 | 1.16 | **P0-4 hardening:** anti-impersonation gate поширено на весь `/v1`-surface — `/responses`, `POST /jobs`, `GET /jobs/{id}` ішли через ungated `_resolve_uid` (impersonation + job IDOR); тепер один gated SSOT-резолвер (`allowed_ids`-gate), `_resolve_user_id` інлайнено |
 | 2026-06-16 | 1.15 | AP-5.3 Node/openai-node quickstart (§2b) |
 | 2026-06-16 | 1.14 | AP-5.5 Postman collection (`sdk/`) |
 | 2026-06-16 | 1.13 | AP-3.4 API-Logs (request log + console tab) — AP-3 console повний |

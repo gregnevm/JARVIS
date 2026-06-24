@@ -292,3 +292,112 @@ def test_get_job_not_found_404(client):
 def test_jobs_require_auth(client):
     r = client.post("/v1/jobs", json={"input": "x"}, headers={"Authorization": "Bearer wrong"})
     assert r.status_code == 401
+
+
+# --- P0-4 anti-impersonation on the whole /v1 surface ------------------------
+# Раніше gate стояв лише на /chat/completions; /responses та /jobs ішли через
+# ungated _resolve_uid → тримач OPENAI_API_KEY міг прогнати агент-луп / прочитати
+# чужі jobs під будь-яким uid. Тепер увесь /v1-surface іде через один gated
+# _resolve_uid (SSOT).
+
+def test_responses_impersonation_uid_ignored(client):
+    """P0-4: /v1/responses не довіряє caller-uid поза allowed_ids — падає на дефолт 42."""
+    captured = {}
+
+    async def _capture(payload):
+        captured.update(payload)
+        return "ok"
+
+    client.app.state.tools.process = _capture
+    r = client.post(
+        "/v1/responses",
+        json={"input": "hi", "user": "999"},
+        headers={"Authorization": "Bearer sk-test", "X-JARVIS-User-Id": "999"},
+    )
+    assert r.status_code == 200
+    assert captured["user_id"] == 42  # 999 проігноровано (не в allowed_ids)
+
+
+def test_create_job_impersonation_uid_ignored(client):
+    """P0-4: POST /v1/jobs не запускає bg-job під чужим uid поза allowed_ids."""
+    client.app.state.tools.create_bg_job = AsyncMock(
+        return_value={"id": "job1", "status": "queued", "created_at": 1}
+    )
+    r = client.post(
+        "/v1/jobs",
+        json={"input": "research X", "user": "999"},
+        headers={"Authorization": "Bearer sk-test", "X-JARVIS-User-Id": "999"},
+    )
+    assert r.status_code == 200
+    uid_arg = client.app.state.tools.create_bg_job.await_args.args[0]
+    assert uid_arg == 42  # 999 проігноровано
+
+
+def test_get_job_impersonation_uid_ignored(client):
+    """P0-4: GET /v1/jobs/{id} читає під дозволеним uid (anti job-IDOR)."""
+    client.app.state.tools.get_bg_job = AsyncMock(
+        return_value={"id": "job1", "status": "done", "result": "ok", "created_at": 1}
+    )
+    r = client.get(
+        "/v1/jobs/job1",
+        headers={"Authorization": "Bearer sk-test", "X-JARVIS-User-Id": "999"},
+    )
+    assert r.status_code == 200
+    uid_arg = client.app.state.tools.get_bg_job.await_args.args[1]
+    assert uid_arg == 42  # 999 проігноровано — не читаємо чужий job
+
+
+def test_allowed_uid_is_honored(client, monkeypatch):
+    """Регресія-захист: легітимний uid у allowed_ids ПРОХОДИТЬ (gate ≠ pin-to-default)."""
+    monkeypatch.setattr(settings, "allowed_user_ids", "42,7")
+    captured = {}
+
+    async def _capture(payload):
+        captured.update(payload)
+        return "ok"
+
+    client.app.state.tools.process = _capture
+    r = client.post(
+        "/v1/responses",
+        json={"input": "hi"},
+        headers={"Authorization": "Bearer sk-test", "X-JARVIS-User-Id": "7"},
+    )
+    assert r.status_code == 200
+    assert captured["user_id"] == 7  # 7 у allowed_ids → шанований, не замінений дефолтом
+
+
+def test_header_takes_precedence_over_body_user(client, monkeypatch):
+    """_resolve_uid: header має пріоритет над body `user` (обидва — gated)."""
+    monkeypatch.setattr(settings, "allowed_user_ids", "42,7,9")
+    captured = {}
+
+    async def _capture(payload):
+        captured.update(payload)
+        return "ok"
+
+    client.app.state.tools.process = _capture
+    r = client.post(
+        "/v1/responses",
+        json={"input": "hi", "user": "9"},  # body хоче 9
+        headers={"Authorization": "Bearer sk-test", "X-JARVIS-User-Id": "7"},  # header хоче 7
+    )
+    assert r.status_code == 200
+    assert captured["user_id"] == 7  # header виграє (обидва allow-listed)
+
+
+def test_invalid_header_value_falls_back_to_default(client):
+    """_resolve_uid: нечисловий X-JARVIS-User-Id ігнорується → дефолт 42 (no 500)."""
+    captured = {}
+
+    async def _capture(payload):
+        captured.update(payload)
+        return "ok"
+
+    client.app.state.tools.process = _capture
+    r = client.post(
+        "/v1/responses",
+        json={"input": "hi"},
+        headers={"Authorization": "Bearer sk-test", "X-JARVIS-User-Id": "not-an-int"},
+    )
+    assert r.status_code == 200
+    assert captured["user_id"] == 42  # сміттєвий header не валить запит
