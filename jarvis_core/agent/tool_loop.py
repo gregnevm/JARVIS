@@ -76,15 +76,38 @@ def assistant_message(msg: MessageDict) -> MessageDict:
     return out
 
 
-def extract_tool_calls(msg: MessageDict, inline_parser: InlineParser) -> list[ToolCall]:
-    """tool_calls з відповіді або inline-фолбек, якщо модель віддала виклик текстом."""
-    raw = msg.get("tool_calls") or []
-    if not raw:
-        raw = inline_parser(msg.get("content") or "")
+def _valid_calls(raw: list[MessageDict]) -> list[ToolCall]:
+    """Фільтр-нормалізатор сирих викликів: лишає тільки валідні імена.
+
+    Валідне імʼя — непорожній `str` після зняття пробільної обвʼязки
+    (`"  calc  "` → `"calc"` — свідома лояльність до моделей, що паддять імʼя).
+    Нестрокове (`None`/число/bool) або порожнє/пробільне → виклик відкидається.
+    """
     calls: list[ToolCall] = []
     for call in raw:
         fn = call.get("function") or {}
-        calls.append(ToolCall(name=str(fn.get("name", "")), args=fn.get("arguments")))
+        raw_name = fn.get("name")
+        name = raw_name.strip() if isinstance(raw_name, str) else ""
+        if not name:
+            continue
+        calls.append(ToolCall(name=name, args=fn.get("arguments")))
+    return calls
+
+
+def extract_tool_calls(msg: MessageDict, inline_parser: InlineParser) -> list[ToolCall]:
+    """tool_calls з відповіді або inline-фолбек, якщо модель віддала виклик текстом.
+
+    Fail-fast (P2): виклики з порожнім/пробільним/нестроковим іменем відкидаються
+    тут, на вході, а не «протікають» у петлю як `execute("")` (мовчазний degrade у
+    'unknown tool'). Якщо структуровані tool_calls були, але ВСІ невалідні —
+    консультуємо inline-фолбек: інакше сирий `<tool_call>`-JSON із content витік би
+    користувачу як фінал. Усе невалідне → `[]`, і петля завершується фіналом
+    (свідомий tradeoff: без ретраю через 'unknown tool'-фідбек — прибираємо саме
+    цей мовчазний degrade).
+    """
+    calls = _valid_calls(msg.get("tool_calls") or [])
+    if not calls:
+        calls = _valid_calls(inline_parser(msg.get("content") or ""))
     return calls
 
 
