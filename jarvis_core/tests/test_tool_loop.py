@@ -72,6 +72,99 @@ def test_extract_falls_back_to_inline() -> None:
     assert calls == [ToolCall(name="recall", args={})]
 
 
+# --- fail-fast: невалідні імена tool-call відкидаються на вході (P2) ---
+def test_extract_skips_missing_name_key() -> None:
+    msg = {"role": "assistant", "content": "", "tool_calls": [{"function": {"arguments": {}}}]}
+    assert extract_tool_calls(msg, _no_inline) == []
+
+
+def test_extract_skips_empty_name() -> None:
+    msg = {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "", "arguments": {}}}]}
+    assert extract_tool_calls(msg, _no_inline) == []
+
+
+def test_extract_skips_whitespace_name() -> None:
+    msg = {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "  ", "arguments": {}}}]}
+    assert extract_tool_calls(msg, _no_inline) == []
+
+
+def test_extract_skips_null_name() -> None:
+    """Явний null не має коерситись у імʼя 'None' (str(None) — truthy!)."""
+    msg = {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": None, "arguments": {}}}]}
+    assert extract_tool_calls(msg, _no_inline) == []
+
+
+def test_extract_skips_non_string_name() -> None:
+    """Число/bool замість імені відкидаються, не коерсяться у '123'/'False'."""
+    for bad in (123, 0, True, False, ["calc"]):
+        msg = {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": bad, "arguments": {}}}]}
+        assert extract_tool_calls(msg, _no_inline) == [], f"name={bad!r} мав бути відкинутий"
+
+
+def test_extract_trims_padded_valid_name() -> None:
+    """Пін наміру: пробільна обвʼязка валідного імені знімається й тул диспатчиться.
+
+    До патча '  calc  ' летів у execute('  calc  ') → 'unknown tool'; тепер це
+    свідома лояльна нормалізація до валідного імені.
+    """
+    msg = {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "  calc  ", "arguments": {"expression": "2+2"}}}]}
+    assert extract_tool_calls(msg, _no_inline) == [ToolCall(name="calc", args={"expression": "2+2"})]
+
+
+def test_extract_falls_back_to_inline_when_all_structured_invalid() -> None:
+    """Анти-виток: якщо структуровані tool_calls є, але ВСІ невалідні, inline-фолбек
+    ТАКИ консультується — інакше сирий <tool_call>-JSON з content пішов би
+    користувачу як фінальна відповідь."""
+
+    def parser(content: str) -> list[dict[str, Any]]:
+        assert content == '<tool_call>{"name": "calc"}</tool_call>'
+        return [{"function": {"name": "calc", "arguments": {"expression": "2+2"}}}]
+
+    msg = {
+        "role": "assistant",
+        "content": '<tool_call>{"name": "calc"}</tool_call>',
+        "tool_calls": [{"function": {"name": "", "arguments": {}}}],
+    }
+    assert extract_tool_calls(msg, parser) == [ToolCall(name="calc", args={"expression": "2+2"})]
+
+
+def test_extract_filters_mixed_keeping_valid_in_order() -> None:
+    msg = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {"function": {"name": "", "arguments": {}}},
+            {"function": {"name": "calc", "arguments": {"expression": "2+2"}}},
+            {"function": {"name": "recall", "arguments": {"q": "x"}}},
+        ],
+    }
+    # невалідний відкинуто, два валідні збережені в порядку появи.
+    assert extract_tool_calls(msg, _no_inline) == [
+        ToolCall(name="calc", args={"expression": "2+2"}),
+        ToolCall(name="recall", args={"q": "x"}),
+    ]
+
+
+def test_extract_filters_empty_name_on_inline_path() -> None:
+    """Симетрія: фільтр діє і на inline-фолбек, не лише на tool_calls."""
+
+    def parser(_content: str) -> list[dict[str, Any]]:
+        return [
+            {"function": {"name": "  ", "arguments": {}}},
+            {"function": {"name": "calc", "arguments": {"expression": "2+2"}}},
+        ]
+
+    calls = extract_tool_calls({"content": "raw"}, parser)
+    assert calls == [ToolCall(name="calc", args={"expression": "2+2"})]
+
+
+def test_extract_preserves_valid_with_nested_args() -> None:
+    """Регресія: валідне імʼя з вкладеними arguments проходить незмінно."""
+    nested = {"path": "a", "opts": {"deep": [1, 2]}}
+    msg = {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "fs_write", "arguments": nested}}]}
+    assert extract_tool_calls(msg, _no_inline) == [ToolCall(name="fs_write", args=nested)]
+
+
 # --- петля ---
 async def _drain(gen: Any) -> list[dict[str, Any]]:
     return [ev async for ev in gen]
@@ -114,6 +207,28 @@ async def test_single_tool_then_final() -> None:
     assert events[-1] == {"final": "4", "iters": 2}
     assert coerced_seen == [{"expression": "2+2"}]  # execute отримав coerced args
     assert {"role": "tool", "content": "[calc] [calc] 4"} in messages
+
+
+async def test_empty_named_call_finishes_naturally() -> None:
+    """Виклик лише з порожнім імʼям → петля бачить [] і завершується фіналом,
+    без tool_start/execute для невалідного імені (fail-fast, не degrade у execute('')).
+    """
+    messages: list[dict[str, Any]] = [{"role": "user", "content": "hi"}]
+    chat = _ScriptedChat(
+        [{"role": "assistant", "content": "  готово  ", "tool_calls": [{"function": {"name": "", "arguments": {}}}]}]
+    )
+
+    async def _exec(name: str, args: Any) -> ToolStepResult:  # pragma: no cover
+        raise AssertionError("execute не має викликатись для порожнього імені")
+
+    events = await _drain(
+        run_tool_loop(
+            messages=messages, limit=5, chat=chat, coerce=_coerce, execute=_exec,
+            inline_parser=_no_inline, tool_message=_tool_message,
+        )
+    )
+    assert events == [{"final": "готово", "iters": 1}]
+    assert not any("tool_start" in e for e in events)
 
 
 async def test_status_emitted_when_requested() -> None:
