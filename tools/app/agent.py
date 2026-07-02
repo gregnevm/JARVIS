@@ -21,6 +21,7 @@ from .memory_client import MemoryClient
 from .thread_context import build_thread_context
 from .user_profile import profile_prompt_block
 from jarvis_core.agent.tool_loop import ToolStepResult, run_tool_loop
+from jarvis_core.agent.trace import tool_trace_entry
 from jarvis_core.llm.chat import ChatBackend
 from jarvis_core.llm.parsers import extract_json_object
 from .toolkit import agent_tool_schemas, coerce_args, dispatch, image_gen_enabled
@@ -386,6 +387,7 @@ class AgentRunner:
         mode: str,
         iters: int,
         project_id: int | None = None,
+        trace: list[dict[str, Any]] | None = None,
     ) -> None:
         await self._mem.store(user_id, text, role="user", project_id=project_id)
         if answer:
@@ -398,6 +400,8 @@ class AgentRunner:
             assistant_text=answer,
             mode=mode,
             iters=iters,
+            model=settings.ollama_model_chat if mode == "chat" else settings.ollama_model_agent,
+            trace=trace,
         )
 
     async def _resolve_project(self, user_id: int) -> tuple[int | None, str]:
@@ -472,6 +476,7 @@ class AgentRunner:
             text, get_agent_mode(), mode_hint=hint, user_id=user_id
         )
 
+        trace: list[dict[str, Any]] = []
         try:
             if resolved == "chat":
                 answer, iters = await self._chat(text, ctx, prof), 0
@@ -486,9 +491,12 @@ class AgentRunner:
                     allow_computer=can_use_computer(user_id),
                     profile=prof,
                     max_iters_override=max_iters_override,
+                    trace=trace,
                 )
 
-            await self._persist_turn(user_id, text, answer or "", resolved, iters, project_id)
+            await self._persist_turn(
+                user_id, text, answer or "", resolved, iters, project_id, trace=trace
+            )
             return {"text": answer or FALLBACK, "mode": resolved, "iters": iters}
         except Exception as exc:  # noqa: BLE001
             await agent_hooks.run_on_error(
@@ -533,6 +541,7 @@ class AgentRunner:
         )
 
         parts: list[str] = []
+        trace: list[dict[str, Any]] = []
         try:
             if resolved == "chat":
                 async for delta in self._chat_stream(text, ctx, prof):
@@ -548,6 +557,7 @@ class AgentRunner:
                     computer=(resolved == "computer"),
                     allow_computer=can_use_computer(user_id),
                     profile=prof,
+                    trace=trace,
                 ):
                     if "iters" in ev:
                         iters = int(ev["iters"])
@@ -557,7 +567,9 @@ class AgentRunner:
                     yield ev
 
             answer = "".join(parts).strip()
-            await self._persist_turn(user_id, text, answer or "", resolved, iters, project_id)
+            await self._persist_turn(
+                user_id, text, answer or "", resolved, iters, project_id, trace=trace
+            )
             yield {
                 "done": True,
                 "mode": resolved,
@@ -588,11 +600,18 @@ class AgentRunner:
         return chat
 
     def _make_executor(
-        self, user_id: int, origin_text: str, *, allow_computer: bool, streaming: bool
+        self,
+        user_id: int,
+        origin_text: str,
+        *,
+        allow_computer: bool,
+        streaming: bool,
+        trace: list[dict[str, Any]] | None = None,
     ) -> "Callable[[str, Any], Awaitable[ToolStepResult]]":
         """Сервіс-специфічне виконання інструмента (dispatch + post_tool hook +
         confirm-рендеринг + лог) — інжектується у run_tool_loop. Confirm рендериться
-        по-різному для sync (inline-маркер) і stream (окрема подія + людський текст)."""
+        по-різному для sync (inline-маркер) і stream (окрема подія + людський текст).
+        `trace` (AO-5.1a) — акумулятор хеш-записів кожного виклику для session-логу."""
 
         async def execute(name: str, args: Any) -> ToolStepResult:
             result = await dispatch(name, args, user_id, allow_computer=allow_computer)
@@ -603,6 +622,10 @@ class AgentRunner:
             )
             result = str(hook_out.get("result") or result)
             done_text = result
+            if trace is not None:
+                # Хешується сирий результат інструмента (до confirm-рендера з
+                # випадковим кодом) — інакше хеш нестабільний між replay-ранами.
+                trace.append(tool_trace_entry(name, args, result))
             event: dict[str, Any] | None = None
             confirm = _parse_confirm(result)
             if confirm:
@@ -635,6 +658,7 @@ class AgentRunner:
         allow_computer: bool = True,
         profile: str = "",
         max_iters_override: int | None = None,
+        trace: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Тул-луп зі стрімом: статус на кожен виклик інструмента + фінальний текст.
 
@@ -654,7 +678,9 @@ class AgentRunner:
             limit=limit,
             chat=self._agent_chat(tools),
             coerce=coerce_args,
-            execute=self._make_executor(user_id, text, allow_computer=allow_computer, streaming=True),
+            execute=self._make_executor(
+                user_id, text, allow_computer=allow_computer, streaming=True, trace=trace
+            ),
             inline_parser=_parse_inline_tool_calls,
             tool_message=_tool_message,
             emit_status=lambda name: {"status": _tool_status(name)},
@@ -695,6 +721,7 @@ class AgentRunner:
         allow_computer: bool = True,
         profile: str = "",
         max_iters_override: int | None = None,
+        trace: list[dict[str, Any]] | None = None,
     ) -> tuple[str, int]:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": _agent_system(ctx, computer=computer, profile=profile)},
@@ -707,7 +734,9 @@ class AgentRunner:
             limit=limit,
             chat=self._agent_chat(tools),
             coerce=coerce_args,
-            execute=self._make_executor(user_id, text, allow_computer=allow_computer, streaming=False),
+            execute=self._make_executor(
+                user_id, text, allow_computer=allow_computer, streaming=False, trace=trace
+            ),
             inline_parser=_parse_inline_tool_calls,
             tool_message=_tool_message,
         ):
