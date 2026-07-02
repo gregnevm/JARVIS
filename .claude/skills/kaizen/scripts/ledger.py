@@ -24,7 +24,16 @@ def _now() -> datetime:
 
 
 def _parse(ts: str) -> datetime:
-    return datetime.strptime(ts.split("+")[0].split(".")[0], _FMT).replace(tzinfo=timezone.utc)
+    # Parse ISO-8601 stamps at second granularity, honoring any UTC offset.
+    # The kaizen routine writes window_start bare (_FMT) or with a Zulu 'Z'
+    # suffix; 3.10's fromisoformat doesn't accept 'Z', so normalize it first.
+    # A bare 'Z' previously crashed the wind-down math (ValueError), and manual
+    # split()-stripping silently mis-read non-zero offsets as UTC — real
+    # parsing fixes both. Naive stamps are treated as UTC (what _now() writes).
+    dt = datetime.fromisoformat(ts.strip().replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).replace(microsecond=0)
 
 
 def _read(path: str) -> dict[str, Any]:
@@ -114,6 +123,15 @@ def _selfcheck() -> None:
     with tempfile.TemporaryDirectory() as d:
         led = Ledger(d, window_hours=5.0)
         start = _parse("2026-06-18T09:00:00")
+        # regression: _parse must accept the Zulu 'Z' suffix the routine writes for
+        # window_start (was ValueError -> wind-down crash), plus fractional secs / '+HH:MM'.
+        assert _parse("2026-06-18T09:00:00Z") == start
+        assert _parse("2026-06-18T09:00:00.123456Z") == start
+        assert _parse("2026-06-18T09:00:00+00:00") == start
+        assert _parse("  2026-06-18T09:00:00Z  ") == start  # stray whitespace tolerated
+        # non-zero offsets are honored, not silently mis-read as UTC (was a 5h skew)
+        assert _parse("2026-06-18T04:00:00-05:00") == start
+        assert _parse("2026-06-18T04:00:00.500-05:00") == start
         led.open_window(now=start)
         led.record_iteration(1, start, _parse("2026-06-18T09:18:00"), ok=True, note="blast-radius")
         w = _read(led.window_path)
