@@ -178,6 +178,51 @@ async def test_run_agent_mode_tool_loop(monkeypatch):
     assert ollama.calls[0]["tools"] is not None  # інструменти передані моделі
 
 
+async def test_run_agent_mode_persists_trace(monkeypatch):
+    """AO-5.1a: кожен виклик інструмента лишає хеш-запис у session-логу."""
+    monkeypatch.setattr(settings, "agent_mode", "agent")
+    captured: dict[str, Any] = {}
+
+    def fake_append_turn(user_id: int, **kw: Any) -> None:
+        captured.update(kw)
+
+    from app import session_ingest
+
+    monkeypatch.setattr(session_ingest, "append_turn", fake_append_turn)
+    ollama = FakeOllama(
+        [
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"function": {"name": "calc", "arguments": {"expression": "2+2"}}}],
+            },
+            {"role": "assistant", "content": "Відповідь: 4"},
+        ]
+    )
+    await AgentRunner(ollama, FakeMemory()).run(1, "скільки буде 2+2")
+    assert captured["model"] == settings.ollama_model_agent
+    trace = captured["trace"]
+    assert len(trace) == 1 and trace[0]["tool"] == "calc"
+    assert len(trace[0]["args_hash"]) == 16 and len(trace[0]["result_hash"]) == 16
+
+
+async def test_run_chat_mode_trace_empty(monkeypatch):
+    """У режимі chat тулів нема — trace порожній, model = chat-модель."""
+    monkeypatch.setattr(settings, "agent_mode", "chat")
+    captured: dict[str, Any] = {}
+
+    def fake_append_turn(user_id: int, **kw: Any) -> None:
+        captured.update(kw)
+
+    from app import session_ingest
+
+    monkeypatch.setattr(session_ingest, "append_turn", fake_append_turn)
+    ollama = FakeOllama([{"role": "assistant", "content": "Привіт!"}])
+    await AgentRunner(ollama, FakeMemory()).run(1, "привіт")
+    assert captured["model"] == settings.ollama_model_chat
+    assert captured["trace"] == []
+
+
 async def test_run_stream_chat_mode(monkeypatch):
     monkeypatch.setattr(settings, "agent_mode", "chat")
     ollama = FakeOllama([], stream_tokens=["При", "віт", "!"])

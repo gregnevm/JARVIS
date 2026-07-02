@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from jarvis_core.agent.trace import short_hash
 from jarvis_core.llm.jsonl_log import JsonlLog
 
 from .config import settings
@@ -29,9 +30,14 @@ def append_turn(
     assistant_text: str,
     mode: str,
     iters: int = 0,
+    model: str = "",
+    trace: list[dict[str, Any]] | None = None,
 ) -> None:
     if int(user_id) <= 0:
         return
+    # AO-5.1a: input_hash — по повному тексту (не по обрізаному [:4000] "user"),
+    # бо replay порівнює те, що реально пішло в модель. model/trace — опційні,
+    # щоб не роздувати записи режиму chat (там тулів нема).
     record: dict[str, Any] = {
         "ts": int(time.time()),
         "user_id": int(user_id),
@@ -39,7 +45,12 @@ def append_turn(
         "iters": int(iters),
         "user": (user_text or "")[:4000],
         "assistant": (assistant_text or "")[:8000],
+        "input_hash": short_hash(user_text or ""),
     }
+    if model:
+        record["model"] = model
+    if trace:
+        record["trace"] = trace
     try:
         JsonlLog(_log_path(user_id)).append(record)
     except OSError as exc:

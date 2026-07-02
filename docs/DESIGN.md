@@ -1283,42 +1283,49 @@ Rollback procedure:
 **Decision:** KoboldCPP — один бінарник, GGUF формат, вбудований Web UI
 **Alternatives:** Ollama (daemon, складніше для USB), llama.cpp (без UI)
 **Consequences:** +нульова інсталяція, +SSE streaming; -обмежений GPU offload на деяких платформах
+**Constraint (живе, поки):** пріоритет Edge — нульова інсталяція з USB, і НЕ потрібен персист KV-кешу на диск (перевіряється спайком AO-3, ARCHITECTURE_OPTIMIZATION_PLAN). *Датовано аудитом 2026-07-02.*
 ---
 ### ADR-002: LoRA замість Full Fine-Tuning
 **Context:** адаптація моделі під персональний профіль
 **Decision:** QLoRA (r=16) через Unsloth
 **Alternatives:** Full FT (потребує 80+ GB VRAM), Prefix Tuning (нижча якість)
 **Consequences:** +споживчий CUDA-GPU справляється, +адаптер 80-200 MB, +модульність; -не змінює глибинні знання
+**Constraint (живе, поки):** нема постійного доступу до 80+ GB VRAM, і персональна адаптація не вимагає зміни глибинних знань у вагах. *Датовано аудитом 2026-07-02.*
 ---
 ### ADR-003: SQLite-vec для Edge RAG
 **Context:** семантичний пошук офлайн без залежностей
 **Decision:** SQLite-vec — розширення SQLite, нульовий overhead
 **Alternatives:** Chroma (потребує Python env), FAISS (складніша інтеграція)
 **Consequences:** +нульові залежності, +один файл БД; -менша продуктивність на великих корпусах
+**Constraint (живе, поки):** корпус Edge малий (одиниці-десятки тисяч записів). **Аудит 2026-07-02: реалізація розійшлася з рішенням** — `edge/rag.py` фактично робить in-Python cosine поверх звичайного SQLite, без розширення sqlite-vec (так і зафіксовано в мапі AGENTS.md §4). Працює і задовольняє констрейнт, але цей ADR де-факто superseded практикою; формалізувати при наступному дотику до Edge RAG.
 ---
 ### ADR-004: Modular Monolith для Twin
 **Context:** вибір між Microservices і Monolith для домашнього сервера
 **Decision:** Modular Monolith (один FastAPI процес, чіткі internal boundaries)
 **Alternatives:** Microservices (overkill для одного розробника)
 **Consequences:** +простий deployment, +нульовий network overhead; -вертикальне масштабування
+**Constraint (живе, поки):** Twin обслуговує одного власника на одному домашньому сервері (немає горизонтального масштабу). *Датовано аудитом 2026-07-02.*
 ---
 ### ADR-005: Event Bus для внутрішньої координації
 **Context:** компоненти Twin мають реагувати на події без tight coupling
 **Decision:** Internal Event Bus (dict of callbacks, asyncio.create_task)
 **Alternatives:** Redis Pub/Sub (external dependency), direct method calls (tight coupling)
 **Consequences:** +додавання підписника без зміни publisher; -складніше trace event flow
+**Constraint (живе, поки):** уся координація — в межах одного процесу Twin (ADR-004 живий); потреби у крос-процесних подіях нема. *Датовано аудитом 2026-07-02.*
 ---
 ### ADR-006: Blue-Green для LoRA deployment
 **Context:** оновлення LoRA без ризику для активних сесій
 **Decision:** Blue-Green через symlinks + Shadow validation 48h
 **Alternatives:** Rolling update (немає сенсу для single instance), Feature flags
 **Consequences:** +instant rollback, +zero downtime; +shadow validation знижує ризик деградації
+**Constraint (живе, поки):** LoRA деплоїться на single-instance inference (немає паралельних інстансів, де symlink-своп не атомарний). *Датовано аудитом 2026-07-02.*
 ---
 ### ADR-007: Training — cloud-burst (RunPod), не локально
 **Context:** Unsloth/QLoRA потребує CUDA; локальний інференс — на AMD GPU (Windows), де ROCm для Unsloth недоступний
 **Decision:** training виконується на ephemeral RunPod-інстансі; результат (LoRA .gguf) тягнеться назад і реєструється у ModelRegistry
 **Alternatives:** окрема NVIDIA-машина (капітальні витрати), AMD ROCm + кастомний стек (нестабільно)
 **Consequences:** +inference лишається суверенним і локальним; -датасет тимчасово залишає машину під час training (звузити тезу «privacy абсолютна» до inference); -потрібен RunPod-акаунт і трансфер даних
+**Constraint (живе, поки):** локальний GPU — AMD/Windows без робочого ROCm-стеку для Unsloth, і немає окремої NVIDIA-машини. *Датовано аудитом 2026-07-02.*
 ---
 ### ADR-008: Self-improve scan — навмисно ручний тригер (human-in-the-loop)
 **Context:** `tools/app/routes/improve.py` (фіча 7.2) має judge, що відбирає кандидатів
@@ -1334,6 +1341,7 @@ Improve tab); жодного `JOB_TYPES`/cron/scheduler-запису немає 
 не два); -потребує дисципліни користувача регулярно тригерити scan вручну; -не
 масштабується на "фоновий self-improvement" без додаткової роботи, якщо колись
 знадобиться повна автономність
+**Constraint (живе, поки):** якість judge-відбору не доведена метриками на реальних кандидатах — людина лишається гейтом якості датасету. *Датовано аудитом 2026-07-02.*
 ---
 ## 12. Roadmap
 ### Phase 1 — Edge MVP (Week 1-2)
