@@ -47,6 +47,43 @@ def test_deny_matches_basename_at_any_depth(br: BlastRadius) -> None:
     assert br.allows("gateway/config/.env") is False
 
 
+@pytest.mark.parametrize("path", [
+    "migrations/001_init.py",          # кореневий (depth-0) — раніше мовчки проходив
+    "memory/migrations/001_init.py",   # вкладений
+    "a/b/migrations/c/d.sql",          # глибоко вкладений
+])
+def test_deny_dir_glob_matches_repo_root_and_nested(br: BlastRadius, path: str) -> None:
+    # `**/migrations/**` — globstar-префікс зіставляє НУЛЬ-або-більше провідних сегментів,
+    # тож кореневий `migrations/...` так само deny, як і вкладений (інакше пробій deny-wins).
+    # Пін через reason: голий `allows is False` маскується allowlist-промахом (migrations
+    # поза ALLOW), тож асертимо саме deny-хіт — інакше тест зелений і на старому коді.
+    assert br.decide(path) == (False, "deny:**/migrations/**")
+
+
+@pytest.mark.parametrize("path", [
+    "__pycache__/x.pyc",               # кореневий (depth-0)
+    "tools/__pycache__/x.pyc",         # вкладений
+])
+def test_leading_globstar_zero_or_more_segments(path: str) -> None:
+    # Та сама depth-0-семантика для будь-якого `**/X/**` deny-патерна (напр. tripwire-кеш).
+    assert path_allowed(path, allow=("**",), deny=("**/__pycache__/**",)) is False
+    # Контроль: не-deny-шлях лишається дозволеним під тим самим широким allow.
+    assert path_allowed("tools/app/agent.py", allow=("**",), deny=("**/__pycache__/**",)) is True
+
+
+def test_leading_globstar_file_shaped_deny_at_root() -> None:
+    """`**/x` БЕЗ хвостового `/**` — друга форма пробою: basename-фолбек пропускає
+    кореневий файл (base == path), тож рятує саме globstar-гілка `_matches`."""
+    assert path_allowed("secrets.txt", allow=("**",), deny=("**/secrets.txt",)) is False
+    assert path_allowed("a/b/secrets.txt", allow=("**",), deny=("**/secrets.txt",)) is False
+
+
+def test_leading_globstar_in_allow_matches_root() -> None:
+    """Globstar-семантика діє і на ALLOW-боці (движок profile-pluggable): провідний
+    `**/` в allow-глобі впускає depth-0 шлях. Пін проти deny-only-рефактора."""
+    assert path_allowed("tests/x.py", allow=("**/tests/**",), deny=()) is True
+
+
 def test_deny_wins_over_allow() -> None:
     # навіть найширший allowlist не перебиває deny.
     allowed, blocked = BlastRadius.from_globs(("**",), (".env*",)).partition(

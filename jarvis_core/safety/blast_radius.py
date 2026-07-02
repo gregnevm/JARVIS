@@ -9,8 +9,11 @@
 завжди перемагає `allow`. Глоби постачає профіль (kaizen `profiles/jarvis` — SSOT), тут
 лише чиста, framework-нейтральна логіка зіставлення (імпортовна будь-де, включно з Edge).
 
-Глоб-семантика: `*` зіставляє через `/` (як fnmatch); `**` нормалізується в `*`. Для
-`deny` додатково зіставляється basename — щоб `.env*` ловив і `config/.env` (захист
+Глоб-семантика: `*` зіставляє через `/` (як fnmatch); `**` нормалізується в `*`.
+Провідний `**/`-сегмент (gitignore-семантика) зіставляє НУЛЬ-або-більше провідних
+сегментів — тож `**/migrations/**` ловить і кореневий `migrations/...`, не лише вкладений
+(інакше deny-listed тека в корені репо мовчки проходила б, порушуючи deny-завжди-перемагає).
+Для `deny` додатково зіставляється basename — щоб `.env*` ловив і `config/.env` (захист
 секретів за будь-якої глибини). Абсолютні/поза-репо шляхи провалюються у fail-closed deny.
 """
 from __future__ import annotations
@@ -30,8 +33,14 @@ def _normalize(path: str) -> str:
 
 
 def _matches(path: str, pattern: str) -> bool:
-    pat = pattern.replace("\\", "/").replace("**", "*")
-    return fnmatchcase(path, pat)
+    pat = pattern.replace("\\", "/")
+    # Провідний `**/` — globstar-сегмент: зіставляє нуль-або-більше провідних сегментів
+    # (gitignore-семантика). Без цього `*/migrations/*` вимагав непорожнього батьк-сегмента
+    # і пропускав кореневий `migrations/...`. Решта `**` → `*` (уже зіставляє через `/`).
+    if pat.startswith("**/"):
+        rest = pat[3:].replace("**", "*")
+        return fnmatchcase(path, rest) or fnmatchcase(path, "*/" + rest)
+    return fnmatchcase(path, pat.replace("**", "*"))
 
 
 def _deny_matches(path: str, pattern: str) -> bool:

@@ -82,7 +82,8 @@ no LangGraph/Celery/CrewAI/FastStream/n8n orchestrator (P6).
   docker-compose.yml, **/migrations/**, mobile/**, db/**]`. **Enforced by real code:**
   [`jarvis_core/safety/blast_radius.py`](../../../../../jarvis_core/safety/blast_radius.py) —
   `BlastRadius.from_globs(allow, deny).partition(diff)` → `(allowed, blocked)`; pure, mypy-strict,
-  fail-closed, deny-wins, basename-deny for secrets at any depth (24 tests
+  fail-closed, deny-wins, basename-deny for secrets at any depth, leading-`**/` globstar =
+  zero-or-more segments (root-level deny works; 31 tests
   [`test_blast_radius.py`](../../../../../jarvis_core/tests/test_blast_radius.py)). Blocked paths → human-gate.
 - **synthetic-UID discipline:** every Redis key via `redis_key(org_id, *parts)`
   ([`jarvis_core/context.py:84`](../../../../../jarvis_core/context.py)) with `org_id=org_kaizen_loop` —
