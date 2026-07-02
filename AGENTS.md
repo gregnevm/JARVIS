@@ -209,6 +209,7 @@ CI (`.github/workflows/ci.yml`) — matrix по `jarvis_core/gateway/memory/tool
 | [`docs/PLATFORM_ROADMAP.md`](docs/PLATFORM_ROADMAP.md) | Web-консоль `/platform` P0–P12 (done) + Phase 7 | Трек |
 | [`docs/AGENT_MODE_ROADMAP.md`](docs/AGENT_MODE_ROADMAP.md) | Computer Use / desktop-керування AM-0…AM-4 | Трек |
 | [`docs/SAAS_DEEP_DIVE.md`](docs/SAAS_DEEP_DIVE.md) | Мультитенант impl-blueprint (PR#0…#7) | Трек (enabler) |
+| [`docs/ARCHITECTURE_OPTIMIZATION_PLAN.md`](docs/ARCHITECTURE_OPTIMIZATION_PLAN.md) | Оптимізація рантайму/вартості (AO-1…AO-7: Reflex, Context GC, KV-картриджі, мовний арбітраж, trace/replay, MCP-сервер) | Трек (enabler) |
 | [`ROADMAP.md`](ROADMAP.md) | Короткий ops-backlog (M/N/E/S) | Ops |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Архітектура PortableAI (Edge+Twin+LoRA), ADR | Архітектура |
 | [`docs/GAP_ANALYSIS.md`](docs/GAP_ANALYSIS.md) | PortableAI vs поточний стек | Аналіз |

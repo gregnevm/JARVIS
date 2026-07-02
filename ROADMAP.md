@@ -8,7 +8,8 @@
 **Треки стовпів:** API [`docs/API_PLATFORM_ROADMAP.md`](docs/API_PLATFORM_ROADMAP.md) · Coding [`docs/CODING_AGENT_ROADMAP.md`](docs/CODING_AGENT_ROADMAP.md) · Clients [`docs/CLIENTS_ROADMAP.md`](docs/CLIENTS_ROADMAP.md).  
 **Platform (консоль `/platform`, Memory, Projects, MCP…):** [`docs/PLATFORM_ROADMAP.md`](docs/PLATFORM_ROADMAP.md).  
 **Agent Mode / Computer Use (повний план AM-0…AM-4):** [`docs/AGENT_MODE_ROADMAP.md`](docs/AGENT_MODE_ROADMAP.md).  
-**Мультитенант / SaaS (enabler для API + Clients):** [`docs/SAAS_DEEP_DIVE.md`](docs/SAAS_DEEP_DIVE.md).
+**Мультитенант / SaaS (enabler для API + Clients):** [`docs/SAAS_DEEP_DIVE.md`](docs/SAAS_DEEP_DIVE.md).  
+**Оптимізація рантайму/вартості (Reflex · Context GC · KV · replay · MCP-сервер):** [`docs/ARCHITECTURE_OPTIMIZATION_PLAN.md`](docs/ARCHITECTURE_OPTIMIZATION_PLAN.md).
 
 Цей файл — **короткий ops-backlog** (must / nice / explore), а не повний product roadmap.
 Історія зробленого — у `README.md` + `memory/`.
