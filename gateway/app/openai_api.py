@@ -548,7 +548,7 @@ async def _ollama_catalog(request: Request) -> list[dict[str, Any]]:
 
 
 @router.get("/models")
-async def list_models(request: Request, _: None = Depends(_auth_bearer)) -> dict[str, Any]:
+async def list_models(request: Request, _: None = Depends(require_scope("models"))) -> dict[str, Any]:
     data: list[dict[str, Any]] = [
         {"id": "jarvis", "object": "model", "created": _MODEL_CREATED, "owned_by": "jarvis"},
         {"id": "jarvis-agent", "object": "model", "created": _MODEL_CREATED, "owned_by": "jarvis"},

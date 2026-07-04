@@ -109,12 +109,13 @@ def test_revoke_missing_404(client: TestClient) -> None:
 
 
 def test_managed_key_scope_enforced(client: TestClient) -> None:
-    # key without 'chat' scope → chat is 403
+    # key with 'models' but not 'chat' → chat is 403, /v1/models works (has the 'models' scope)
     key = client.post("/saas/api/keys", json={"scopes": ["models"]}, headers=_root()).json()["key"]
-    r = _chat(client, _bearer(key))
-    assert r.status_code == 403
-    # but /models (any valid key) works
+    assert _chat(client, _bearer(key)).status_code == 403
     assert client.get("/v1/models", headers=_bearer(key)).status_code == 200
+    # key with 'chat' but NOT 'models' → /v1/models is now 403 (models scope enforced, AP-1.5)
+    key2 = client.post("/saas/api/keys", json={"scopes": ["chat"]}, headers=_root()).json()["key"]
+    assert client.get("/v1/models", headers=_bearer(key2)).status_code == 403
 
 
 def test_root_key_bypasses_scopes(client: TestClient) -> None:

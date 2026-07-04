@@ -248,9 +248,35 @@ def test_embeddings_backend_error_502(client, monkeypatch):
 
 
 def test_models_lists_embed_model(client):
+    # root key (scopes=None) bypasses scope checks and still lists models
     r = client.get("/v1/models", headers={"Authorization": "Bearer sk-test"})
     ids = [m["id"] for m in r.json()["data"]]
     assert "nomic-embed-text" in ids
+
+
+def test_models_enforces_models_scope(client, monkeypatch):
+    """AP-1.5: GET /v1/models requires the 'models' scope (previously any valid key passed).
+
+    A managed key scoped without 'models' must be rejected; the dead scope is now enforced."""
+    from app import openai_api
+
+    class _FakeKeyStore:
+        def __init__(self, scopes: list[str]) -> None:
+            self._scopes = scopes
+
+        async def verify(self, token: str):
+            return {"id": "k1", "scopes": self._scopes} if token == "sk-managed" else None
+
+    # managed key WITHOUT 'models' → 403 (was a silent 200 before the fix)
+    monkeypatch.setattr(openai_api, "_key_store", lambda request: _FakeKeyStore(["chat"]))
+    denied = client.get("/v1/models", headers={"Authorization": "Bearer sk-managed"})
+    assert denied.status_code == 403
+
+    # managed key WITH 'models' (the default-scope set includes it) → 200
+    monkeypatch.setattr(openai_api, "_key_store", lambda request: _FakeKeyStore(["chat", "models"]))
+    allowed = client.get("/v1/models", headers={"Authorization": "Bearer sk-managed"})
+    assert allowed.status_code == 200
+    assert "nomic-embed-text" in [m["id"] for m in allowed.json()["data"]]
 
 
 # --- OpenAI-compatible error envelope (AP-2.6) -------------------------------
