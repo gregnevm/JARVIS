@@ -375,9 +375,14 @@ async def embeddings(
 ) -> dict[str, Any]:
     """OpenAI-сумісний `/v1/embeddings` → memory `nomic-embed-text` (AP-2.1)."""
     items = [body.input] if isinstance(body.input, str) else list(body.input)
-    items = [s for s in items if isinstance(s, str) and s.strip()]
     if not items:
         raise HTTPException(status_code=400, detail="input required")
+    # Drop-in OpenAI: НЕ фільтруємо мовчки порожні елементи — це зсувало data[i].index
+    # відносно input[i] (клієнт, що зіставляє за index, діставав пару не з тим рядком).
+    # Порожній/whitespace-елемент → 400 (без мовчазного дропу); не-рядкові елементи
+    # масиву відсікає Pydantic (422) ще до хендлера — isinstance тут суто захисний.
+    if any(not isinstance(s, str) or not s.strip() for s in items):
+        raise HTTPException(status_code=400, detail="input must be non-empty string(s)")
     data: list[dict[str, Any]] = []
     for i, text in enumerate(items):
         vec = await _memory_embed(text)

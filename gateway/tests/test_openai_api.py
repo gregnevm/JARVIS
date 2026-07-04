@@ -184,6 +184,46 @@ def test_embeddings_empty_input_400(client):
     assert r.status_code == 400
 
 
+def test_embeddings_batch_with_empty_item_400_no_silent_drop(client, monkeypatch):
+    """Drop-in OpenAI: порожній елемент у батчі → 400, а НЕ мовчазний дроп зі
+    зсувом index (регресія: раніше ['a','','b'] повертав 2 ембединги з index 0,1,
+    тож клієнт зіставляв input[1]='' з ембедингом 'b')."""
+    async def _fake_embed(text):
+        return [float(len(text))]
+
+    monkeypatch.setattr("app.openai_api._memory_embed", _fake_embed)
+    r = client.post(
+        "/v1/embeddings",
+        json={"input": ["a", "", "b"]},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 400
+    # whitespace-only елемент — так само 400
+    r2 = client.post(
+        "/v1/embeddings",
+        json={"input": ["a", "   ", "b"]},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r2.status_code == 400
+
+
+def test_embeddings_batch_index_aligns_with_input(client, monkeypatch):
+    """data[i].index зберігає 1:1 відповідність з input[i] для валідного батчу."""
+    async def _fake_embed(text):
+        return [float(len(text))]
+
+    monkeypatch.setattr("app.openai_api._memory_embed", _fake_embed)
+    r = client.post(
+        "/v1/embeddings",
+        json={"input": ["a", "bb", "ccc"]},
+        headers={"Authorization": "Bearer sk-test"},
+    )
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert [d["index"] for d in data] == [0, 1, 2]
+    assert [d["embedding"][0] for d in data] == [1.0, 2.0, 3.0]
+
+
 def test_embeddings_requires_auth(client):
     r = client.post(
         "/v1/embeddings",
