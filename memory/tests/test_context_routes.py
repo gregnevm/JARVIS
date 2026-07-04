@@ -263,6 +263,30 @@ async def test_update_reembeds_and_normalizes_tags(client):
     app.state.db.update_context_event.assert_awaited_once()
 
 
+async def test_update_redacts_secrets_in_summary(client):
+    """C1 backstop: context_summarize-generated summary must not land secrets cleartext.
+
+    context_update drives on every raw passport via the summarize job; without this the
+    /ingest redaction was bypassed on the update path (sibling of the /ingest backstop)."""
+    secret = "sk-jarvis-ABCDEF0123456789ABCDEF0123456789"
+    async with client as c:
+        r = await c.post(
+            "/context/update",
+            json={
+                "id": 5,
+                "user_id": 1,
+                "summary": f"підсумок: токен {secret} і картка 4111 1111 1111 1111",
+            },
+        )
+    assert r.status_code == 200
+    call = app.state.db.update_context_event.await_args
+    assert secret not in call.kwargs["summary"]
+    assert "[REDACTED:card]" in call.kwargs["summary"]
+    # redact BEFORE embed: the vector is computed on the redacted text, not the raw secret
+    emb_arg = app.state.embedder.embed.await_args.args[0]
+    assert secret not in emb_arg and "[REDACTED:card]" in emb_arg
+
+
 async def test_update_404_when_not_found(client):
     app.state.db.update_context_event = AsyncMock(return_value=False)
     async with client as c:
