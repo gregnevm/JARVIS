@@ -99,7 +99,7 @@ class Redactor:
 
         clean_summary = self.redact(p.summary)
         if should_store_raw(p.sensitivity):
-            payload = self._redact_payload(p.payload)
+            payload = self.redact_payload(p.payload)
         else:
             payload = {}  # health/finance — сире не зберігаємо взагалі
         return replace(p, summary=clean_summary, payload=payload)
@@ -118,7 +118,12 @@ class Redactor:
             return [self._redact_value(item) for item in v]
         return v
 
-    def _redact_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def redact_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Рекурсивно редагує весь payload (SSOT — реюзається і route-backstop'ом).
+
+        Раніше memory-route робив ПЛОСКИЙ dict-comprehension (тільки top-level
+        рядки), тож секрети у вкладених dict/list протікали в context_events
+        cleartext попри C1-backstop. Тепер одна рекурсивна точка на обидва входи."""
         return {k: self._redact_value(v) for k, v in (payload or {}).items()}
 
 
