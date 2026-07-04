@@ -133,7 +133,14 @@ class _McpSession:
             text = json.dumps(result, ensure_ascii=False)
         if len(text) > settings.fetch_max_chars:
             text = text[: settings.fetch_max_chars] + " …[truncated]"
-        return text or "(empty MCP result)"
+        text = text or "(empty MCP result)"
+        # MCP CallToolResult.isError=true → the tool ran but FAILED, and `content` carries the error
+        # (per spec, tool errors live in the result, not the JSON-RPC error channel, which
+        # _rpc_raw already raises on). Surface it as an error string so the agent loop reads it as a
+        # failure — like dispatch() does for a raised tool — instead of a normal observation.
+        if result.get("isError"):
+            return f"MCP-інструмент {tool} повернув помилку: {text}"
+        return text
 
     async def close(self) -> None:
         if self._proc and self._proc.returncode is None:
