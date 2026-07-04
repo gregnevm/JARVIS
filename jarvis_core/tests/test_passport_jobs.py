@@ -106,6 +106,77 @@ async def test_build_proposals_noop_when_only_proposals_or_daily():
     assert store.ingested == []
 
 
+async def _digit_proposer(text: str) -> str:
+    # Контент, що ЛЕГІТИМНО починається з цифри/маркер-символу — не має корупитися.
+    return "3D print a mount\n2024 tax review\n911 call plumber"
+
+
+async def test_build_proposals_preserves_leading_digit_content():
+    # Регресія на баг lstrip(charset): "3D..."-> "D...", "911..."-> "call..." (втрата даних).
+    store = FakeStore(recent=[{"summary": "щось", "tags": ["kind:note"]}])
+    out = await build_proposals(store, _digit_proposer, 7, max_n=3)
+    assert out == ["3D print a mount", "2024 tax review", "911 call plumber"]
+    assert [g["summary"] for g in store.ingested] == out  # персист теж не зіпсовано
+
+
+async def _mixed_marker_proposer(text: str) -> str:
+    return "1. Book flight\n12. Renew\n3) Pay bill\n- Call mom\n• Reply\n* Todo\n+ Plus item"
+
+
+async def test_build_proposals_strips_only_marker():
+    store = FakeStore(recent=[{"summary": "щось", "tags": ["kind:note"]}])
+    out = await build_proposals(store, _mixed_marker_proposer, 3, max_n=7)
+    assert out == ["Book flight", "Renew", "Pay bill", "Call mom", "Reply", "Todo", "Plus item"]
+
+
+async def _junk_bullet_proposer(text: str) -> str:
+    # Реалістичний LLM-вивід із порожнім/висячим маркером — не має протікати як пропозиція
+    # і не має з'їдати max_n-бюджет (регресія проти старого lstrip, який згортав "-" у "").
+    # Покриваємо ВСІ форми маркера (-, *, •, N)), не лише дефіс.
+    return "- Book flight\n- Call mom\n-\n- \n*\n•\n1)"
+
+
+async def test_build_proposals_drops_marker_only_lines():
+    store = FakeStore(recent=[{"summary": "щось", "tags": ["kind:note"]}])
+    out = await build_proposals(store, _junk_bullet_proposer, 5, max_n=3)
+    assert out == ["Book flight", "Call mom"]           # жодного junk "-"
+    assert [g["summary"] for g in store.ingested] == out  # і в сторі теж чисто
+
+
+async def _overflow_proposer(text: str) -> str:
+    # 5 валідних рядків проти max_n=3 — пін на break-трункацію
+    # і на те, що персист іде по ТРУНКОВАНОМУ списку, а не по всіх рядках.
+    return "1. A\n2. B\n3. C\n4. D\n5. E"
+
+
+async def test_build_proposals_truncates_to_max_n_and_persists_only_kept():
+    store = FakeStore(recent=[{"summary": "щось", "tags": ["kind:note"]}])
+    out = await build_proposals(store, _overflow_proposer, 9, max_n=3)
+    assert out == ["A", "B", "C"]                        # D/E відкинуто
+    assert [g["summary"] for g in store.ingested] == out  # у стор пішли лише збережені 3
+
+
+def test_strip_marker_edge_cases():
+    from jarvis_core.passport.jobs import _strip_marker
+
+    assert _strip_marker("1. Book flight") == "Book flight"
+    assert _strip_marker("12) Renew") == "Renew"
+    assert _strip_marker("  - Call mom  ") == "Call mom"
+    assert _strip_marker("– Call mom") == "Call mom"     # en-dash bullet
+    assert _strip_marker("— Reply") == "Reply"           # em-dash bullet
+    assert _strip_marker("+ Plus item") == "Plus item"   # markdown "+" bullet
+    assert _strip_marker("+5 degrees") == "+5 degrees"   # зліплений плюс цілий
+    assert _strip_marker("999. task") == "task"          # 3-цифровий маркер зрізано
+    assert _strip_marker("3D print a mount") == "3D print a mount"  # цифра-контент цілий
+    assert _strip_marker("1234. deep dive") == "1234. deep dive"    # 4-цифровий → не маркер
+    assert _strip_marker("-5 degrees") == "-5 degrees"   # зліплений дефіс цілий
+    assert _strip_marker("1.Book") == "1.Book"           # маркер, зліплений із текстом — цілий
+    assert _strip_marker("-") == ""                       # рядок-лише-маркер → ""
+    assert _strip_marker("1. ") == ""                     # маркер + хвостовий пробіл → ""
+    assert _strip_marker("") == ""
+    assert _strip_marker("   ") == ""
+
+
 # --- context_retention ---
 
 async def test_run_retention_purges_each_kind_with_cutoff():
