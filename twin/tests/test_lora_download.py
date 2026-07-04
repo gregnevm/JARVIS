@@ -28,3 +28,20 @@ def test_download_active_lora(tmp_path: Path, monkeypatch):
 def test_download_no_active(tmp_path: Path, monkeypatch):
     with _client(tmp_path, monkeypatch) as c:
         assert c.get("/registry/lora/active/download").status_code == 404
+
+
+def test_download_rejects_path_escaping_data_dir(tmp_path: Path, monkeypatch):
+    # End-to-end: клієнт реєструє LoRA з абсолютним шляхом ПОЗА data_dir
+    # (arbitrary-file-read), промоутить → download мусить дати 404, не байти секрету.
+    (tmp_path / "twin" / "lora").mkdir(parents=True)
+    secret = tmp_path.parent / f"leak_{tmp_path.name}.txt"
+    secret.write_text("TOPSECRET")
+    try:
+        with _client(tmp_path, monkeypatch) as c:
+            c.post("/registry/lora", json={"version": "evil", "path": str(secret)})
+            c.post("/registry/lora/evil/promote")
+            r = c.get("/registry/lora/active/download")
+            assert r.status_code == 404
+            assert b"TOPSECRET" not in r.content
+    finally:
+        secret.unlink(missing_ok=True)
