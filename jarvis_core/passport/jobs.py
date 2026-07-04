@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from typing import Any, Protocol
@@ -19,6 +20,22 @@ from typing import Any, Protocol
 from .tags import normalize_tags, split_tag
 
 Summarizer = Callable[[str], Awaitable[str]]
+
+# Зрізає РІВНО один провідний маркер списку (bullet або нумерацію), а не набір символів.
+# `str.lstrip(charset)` жер БУДЬ-ЯКІ провідні символи з набору — тобто корупив контент,
+# що легітимно починається з цифри/крапки ("3D print" -> "D print", "911 call" -> "call").
+# Роздільник `(?:\s+|$)` після маркера обов'язковий, тому:
+#   • "-5 degrees" / "1.Book" (маркер, зліплений із текстом) лишаються ЦІЛИМИ;
+#   • справжні LLM-списки ("1. text", "- text", "• text") нормалізуються;
+#   • рядок-лише-маркер ("-", "1.", "• ") згортається в "" → пропускається в build_proposals
+#     (без цього старий lstrip-контракт ламався: сирий "-" протікав як junk-пропозиція).
+_MARKER_RE = re.compile(r"^(?:[-+•*–—]|\d{1,3}[.)])(?:\s+|$)")
+
+
+def _strip_marker(line: str) -> str:
+    """Прибирає провідний enumeration-маркер (одну штуку); рядок-лише-маркер → ""."""
+    return _MARKER_RE.sub("", line.strip(), count=1).strip()
+
 
 PENDING_SUMMARY_TAG = "pending:summary"
 CONTEXT_JOB_NAMES = frozenset(
@@ -134,7 +151,7 @@ async def build_proposals(
     raw = await proposer(ctx)
     proposals: list[str] = []
     for line in raw.splitlines():
-        text = line.strip().lstrip("-•*0123456789. \t").strip()
+        text = _strip_marker(line)
         if text:
             proposals.append(text)
         if len(proposals) >= max_n:
