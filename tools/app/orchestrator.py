@@ -1,6 +1,7 @@
 """Phase 7.1 — Orchestrator + Critic (DESIGN §4.7 Mediator pattern)."""
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -28,6 +29,14 @@ CRITIC_SYSTEM = (
 )
 
 
+# Prose-fallback approval marker — used ONLY when the Critic did not emit a parseable JSON verdict (a
+# local-first / S1 model sometimes ignores the JSON instruction and answers in prose). Approval needs
+# a standalone `\bAPPROVED\b`: the word boundary means it does NOT match inside DISAPPROVED/UNAPPROVED
+# (the preceding letter blocks the boundary) — that substring match was the original bug. Best-effort,
+# English-only — the JSON path above stays authoritative.
+_CRITIC_APPROVE_RE = re.compile(r"\bAPPROVED\b")
+
+
 def parse_critic_verdict(text: str) -> dict[str, Any]:
     data = extract_json_object(text)
     if data and "approved" in data:
@@ -39,8 +48,12 @@ def parse_critic_verdict(text: str) -> dict[str, Any]:
             "issues": [str(x)[:300] for x in issues[:10]],
             "feedback": str(data.get("feedback") or "")[:1000],
         }
+    # Fallback: no JSON verdict. Approve only on a standalone, non-negated APPROVED token; everything
+    # else — DISAPPROVED/UNAPPROVED (no standalone token), REJECTED/CHANGES REQUESTED (no token at
+    # all), NOT APPROVED, empty or unparseable — fails closed to not-approved, which triggers another
+    # revision round rather than shipping an unreviewed draft.
     upper = (text or "").upper()
-    if "APPROVED" in upper and "NOT APPROVED" not in upper:
+    if "NOT APPROVED" not in upper and _CRITIC_APPROVE_RE.search(upper):
         return {"approved": True, "issues": [], "feedback": text[:500]}
     return {"approved": False, "issues": [text[:300]], "feedback": text[:500]}
 
