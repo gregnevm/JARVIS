@@ -98,6 +98,109 @@ async def test_revoke_missing_returns_false(store: ApiKeyStore) -> None:
     assert await store.revoke("nope") is False
 
 
+async def test_verify_never_writes_record_key() -> None:
+    # Інваріант: read-path (verify) НЕ пише запис ключа — інакше read-modify-write
+    # гоняється з revoke() і воскрешає відкликаний ключ (auth-bypass).
+    fr = FakeRedis()
+    store = ApiKeyStore(fr)
+    created = await store.create()
+    writes: list[str] = []
+    orig_set = fr.set
+
+    async def spy_set(key: str, value: str) -> None:
+        writes.append(key)
+        await orig_set(key, value)
+
+    fr.set = spy_set  # type: ignore[method-assign]
+    assert await store.verify(created["key"]) is not None
+    # whitelist: ЄДИНИЙ запис — side-ключ last_used (жодного rec:/pfx:/index)
+    assert writes == [f"jarvis:apikey:used:{created['id']}"]
+
+
+async def test_failed_verify_writes_nothing() -> None:
+    # Відхилений verify (revoked / tampered) не пише НІЧОГО — інакше майбутній
+    # реордер side-запису вище guard-ів тихо зіпсує аудит-семантику last_used.
+    fr = FakeRedis()
+    store = ApiKeyStore(fr)
+    created = await store.create()
+    await store.revoke(created["id"])
+    writes: list[str] = []
+    orig_set = fr.set
+
+    async def spy_set(key: str, value: str) -> None:
+        writes.append(key)
+        await orig_set(key, value)
+
+    fr.set = spy_set  # type: ignore[method-assign]
+    assert await store.verify(created["key"]) is None  # revoked
+    tampered = created["key"][: len("sk-jarvis-") + 8] + "XXXXXXXXXXXX"
+    assert await store.verify(tampered) is None  # bad hash (інший, не-revoked шлях)
+    assert writes == []
+
+
+async def test_revoke_during_verify_stays_revoked(store: ApiKeyStore) -> None:
+    # Регресія на гонку: revoke() завершується МІЖ _load() усередині verify()
+    # і хвостом verify(). Старий код писав пре-revoke запис назад → ключ
+    # автентифікувався вічно. Тепер revoked має лишитися true, а повторний
+    # verify — відхилити ключ.
+    created = await store.create()
+    real_load = store._load
+    raced = {"done": False}
+
+    async def racing_load(key_id: str) -> dict[str, object] | None:
+        rec = await real_load(key_id)
+        if not raced["done"]:
+            raced["done"] = True  # до revoke(): він сам викликає _load → без рекурсії
+            await store.revoke(created["id"])
+        return rec  # verify отримує СТАРИЙ (пре-revoke) запис — як у реальній гонці
+
+    store._load = racing_load  # type: ignore[method-assign]
+    await store.verify(created["key"])  # in-flight запит; головне — стан ПІСЛЯ нього
+    store._load = real_load  # type: ignore[method-assign]
+
+    pub = await store.get(created["id"])
+    assert pub is not None and pub["revoked"] is True  # відкликання НЕ перезаписано
+    assert await store.verify(created["key"]) is None  # наступний запит відхилено
+
+
+async def test_last_used_surfaces_via_get_and_list(store: ApiKeyStore) -> None:
+    created = await store.create(name="used")
+    assert (await store.get(created["id"]))["last_used_at"] is None  # type: ignore[index]
+    verified = await store.verify(created["key"])
+    assert verified is not None and isinstance(verified["last_used_at"], int)
+    pub = await store.get(created["id"])
+    assert pub is not None and pub["last_used_at"] == verified["last_used_at"]
+    listed = {i["id"]: i for i in await store.list()}
+    assert listed[created["id"]]["last_used_at"] == verified["last_used_at"]
+
+
+async def test_last_used_legacy_record_fallback() -> None:
+    # Записи, створені ДО side-ключа, несуть last_used_at у самому rec —
+    # без side-ключа get()/list() мають віддавати legacy-значення.
+    import json
+
+    fr = FakeRedis()
+    store = ApiKeyStore(fr)
+    created = await store.create()
+    rec_key = f"jarvis:apikey:rec:{created['id']}"
+    legacy = json.loads(fr.kv[rec_key])
+    legacy["last_used_at"] = 1750000000
+    fr.kv[rec_key] = json.dumps(legacy)
+    pub = await store.get(created["id"])
+    assert pub is not None and pub["last_used_at"] == 1750000000
+    # side-ключ має ПРІОРИТЕТ над legacy-полем (стан старого запису після
+    # першого post-deploy verify)
+    verified = await store.verify(created["key"])
+    assert verified is not None
+    pub2 = await store.get(created["id"])
+    assert pub2 is not None and pub2["last_used_at"] == verified["last_used_at"] != 1750000000
+    # зіпсований side-ключ → фолбек на legacy-значення, list() не падає
+    fr.kv[f"jarvis:apikey:used:{created['id']}"] = "garbage"
+    pub3 = await store.get(created["id"])
+    assert pub3 is not None and pub3["last_used_at"] == 1750000000
+    assert any(i["id"] == created["id"] for i in await store.list())
+
+
 async def test_invalid_scopes_fall_back_to_default(store: ApiKeyStore) -> None:
     out = await store.create(scopes=["bogus", "chat"])
     assert out["scopes"] == ["chat"]  # bogus відкинуто
