@@ -123,7 +123,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 | AP-1.2 | Сховище ключів (prefix, hash, scopes, revoked) | show-once | [x] `gateway/app/saas/api_keys.py` `ApiKeyStore` (Redis; sha256+prefix; constant-time verify; per-org — поверх через tenant ctx). Revoke race-safe: verify() write-free по запису ключа — `last_used_at` у side-ключі `jarvis:apikey:used:{id}` (гонка verify↔revoke воскрешала відкликаний ключ) |
 | AP-1.3 | Management endpoints — create / list / revoke | root-gated | [x] `POST/GET/DELETE /saas/api/keys` (`saas/routes.py`, лише root-ключ) |
 | AP-1.4 | `/v1` auth → керований ключ АБО глобальний (self-hosted fallback) | Backward compat | [x] `_authenticate` приймає root АБО `sk-jarvis-…`; revoke → 401 |
-| AP-1.5 | Scopes enforcement (`chat`, `models`, `embeddings`, `jobs`) | 403 поза scope | [x] `require_scope(...)`; root має всі скоупи |
+| AP-1.5 | Scopes enforcement (`chat`, `models`, `embeddings`, `jobs`) | 403 поза scope | [x] `require_scope(...)`; root має всі скоупи. `GET /v1/models` тепер теж під `require_scope('models')` (був `_auth_bearer` — scope `models` був мертвий; `models` є у `_DEFAULT_SCOPES`, тож бек-сумісно) |
 
 **Вихід AP-1:** `POST /saas/api/keys` створює `sk-jarvis-…` (показ один раз); `/v1` приймає його зі scope-перевіркою; revoke миттєво відхиляє. Зберігається лише `sha256(key)` + prefix — сирий ключ ніколи. Per-org розшарування (multi-tenant) додасться зверху через SAAS tenant-context, не змінюючи API.
 

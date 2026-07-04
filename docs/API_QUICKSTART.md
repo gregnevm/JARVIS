@@ -74,7 +74,7 @@ const e = await client.embeddings.create({ model: "nomic-embed-text", input: "he
 | POST | `/v1/jobs` | `jobs` | Async-задача → `id` |
 | GET | `/v1/jobs/{id}` | `jobs` | Статус async-задачі |
 | GET | `/v1/usage?days=N` | будь-який | Лічильники запитів по ключу |
-| GET | `/v1/models` | будь-який | Каталог моделей |
+| GET | `/v1/models` | `models` | Каталог моделей |
 
 Помилки — у форматі OpenAI: `{"error":{"message","type","code"}}`
 (`authentication_error` 401/403, `rate_limit_error` 429, `invalid_request_error`,
