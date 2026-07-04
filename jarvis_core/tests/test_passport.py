@@ -190,6 +190,28 @@ def test_redact_passport_recurses_nested_payload():
     assert key not in str(out.payload)
 
 
+def test_redact_payload_public_recurses():
+    # Публічний SSOT redact_payload (реюзається memory-route backstop'ом) —
+    # рекурсія на будь-якій глибині, ключі й скаляри недоторкані.
+    r = default_redactor()
+    key = "sk-ABCDEF0123456789abcdef"
+    out = r.redact_payload({"a": key, "b": {"c": [key, 5]}, "n": 0})
+    assert out["a"] == "[REDACTED:secret]"
+    assert out["b"]["c"][0] == "[REDACTED:secret]"
+    assert out["b"]["c"][1] == 5 and out["n"] == 0
+    assert key not in str(out)
+    assert r.redact_payload({}) == {}
+
+
+def test_redact_payload_leaves_keys_untouched():
+    # Документована поведінка: ключі — це назви полів (структура), не значення;
+    # редагуємо лише значення. Пін, щоб зміна дизайну була свідомою.
+    r = default_redactor()
+    out = r.redact_payload({"4111 1111 1111 1111": "note"})
+    assert "4111 1111 1111 1111" in out  # ключ не змінено
+    assert out["4111 1111 1111 1111"] == "note"
+
+
 def test_custom_rules_override_defaults():
     import re
 

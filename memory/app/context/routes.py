@@ -121,10 +121,9 @@ async def context_ingest(req: ContextIngestRequest, request: Request) -> dict[st
     payload = req.payload
     if payload:
         if should_store_raw(sensitivity):
-            payload = {
-                k: (redactor.redact(v) if isinstance(v, str) else v)
-                for k, v in payload.items()
-            }
+            # Рекурсивний SSOT: секрети у ВКЛАДЕНИХ dict/list теж редагуються
+            # (плоский comprehension пропускав nested → cleartext-leak).
+            payload = redactor.redact_payload(payload)
         else:
             payload = {}  # health/finance — сире не зберігаємо взагалі
 

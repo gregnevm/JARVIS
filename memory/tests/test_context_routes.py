@@ -107,6 +107,49 @@ async def test_ingest_redacts_secrets_in_summary_and_payload(client):
     assert secret not in call.kwargs["payload"]["raw"]
 
 
+async def test_ingest_redacts_secrets_in_nested_payload(client):
+    """Regression: плоский comprehension пропускав секрети у ВКЛАДЕНИХ dict/list
+    payload → cleartext-leak у context_events попри C1-backstop. Тепер рекурсія."""
+    secret = "sk-jarvis-ABCDEF0123456789ABCDEF0123456789"
+    card = "4111 1111 1111 1111"
+    async with client as c:
+        r = await c.post(
+            "/context/ingest",
+            json={
+                "user_id": 1,
+                "summary": "нотатка",
+                "sensitivity": "personal",
+                "payload": {
+                    "meta": {"token": f"key={secret}", "n": 7},
+                    "cards": [card, {"deep": secret}],
+                },
+            },
+        )
+    assert r.status_code == 200
+    payload = app.state.db.add_context_event.await_args.kwargs["payload"]
+    assert secret not in str(payload)  # ніде на будь-якій глибині
+    assert "[REDACTED:card]" in payload["cards"][0]
+    assert payload["cards"][1]["deep"] == "[REDACTED:secret]"
+    assert payload["meta"]["n"] == 7  # не-рядки недоторкані
+
+
+async def test_ingest_drops_raw_payload_for_health(client):
+    """Route-рівень: health/finance → сирий payload взагалі не персиститься
+    ({}), незалежно від редакції значень (should_store_raw гейт до редакції)."""
+    async with client as c:
+        r = await c.post(
+            "/context/ingest",
+            json={
+                "user_id": 1,
+                "summary": "візит до лікаря",
+                "sensitivity": "health",
+                "payload": {"diagnosis": "секретний діагноз", "n": 3},
+            },
+        )
+    assert r.status_code == 200
+    assert app.state.db.add_context_event.await_args.kwargs["payload"] == {}
+
+
 async def test_ingest_survives_embed_failure(client):
     """P1 offline-first: збір не падає, якщо Ollama недоступний — embedding=None."""
     app.state.embedder.embed = AsyncMock(side_effect=RuntimeError("ollama down"))
