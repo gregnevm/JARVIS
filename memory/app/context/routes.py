@@ -203,10 +203,14 @@ async def context_update(req: ContextUpdateRequest, request: Request) -> dict[st
     summary = req.summary.strip()
     if not summary:
         raise HTTPException(status_code=400, detail="summary required")
+    # Серверний backstop редакції (C1): summary тут генерує job context_summarize (LLM),
+    # який міг відлунити картки/OTP/секрети → не пускаємо у context_events cleartext (як у
+    # /ingest). Редагуємо ДО embed, щоб вектор рахувався з уже відредагованого тексту.
+    summary = default_redactor().redact(summary[:4000])
     tags = normalize_tags(req.tags, req.kind)
-    embedding = await _embed_or_none(request, summary[:4000])
+    embedding = await _embed_or_none(request, summary)
     ok = await request.app.state.db.update_context_event(
-        req.id, req.user_id, summary=summary[:4000], tags=tags, embedding=embedding
+        req.id, req.user_id, summary=summary, tags=tags, embedding=embedding
     )
     if not ok:
         raise HTTPException(status_code=404, detail="event not found")
