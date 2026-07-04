@@ -11,6 +11,7 @@ addressed (реагувати/збирати лише на @mention або reply
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger("jarvis.gateway.group")
@@ -33,8 +34,10 @@ def is_addressed(message: dict[str, Any], bot_username: str, bot_id: int | None 
     handle = bot_username.lstrip("@").lower()
     if not handle:
         return False
-    # перевіряємо entities mention або простий підрядок @handle
-    if f"@{handle}" in text.lower():
+    # @handle як окремий mention, з межею слова: @jarvis_bot НЕ спрацьовує всередині
+    # @jarvis_bot_admin / @jarvis_bot2 (Telegram-юзернейми — [A-Za-z0-9_]), інакше бот
+    # відповідав би на звернення до чужих ніків з тим самим префіксом.
+    if re.search(rf"(?<![a-z0-9_])@{re.escape(handle)}(?![a-z0-9_])", text.lower()):
         return True
     return False
 

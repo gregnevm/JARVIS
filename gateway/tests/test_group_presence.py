@@ -39,6 +39,24 @@ def test_is_addressed_mention_and_reply() -> None:
     assert is_addressed({"reply_to_message": {"from": {"id": 42}}}, "jarvis_bot", bot_id=42) is True
 
 
+def test_is_addressed_mention_word_boundary() -> None:
+    # exact @handle mentions (incl. trailing punctuation / caption / @-prefixed username) match
+    assert is_addressed({"text": "@jarvis_bot"}, "jarvis_bot") is True
+    assert is_addressed({"text": "ok @jarvis_bot, go"}, "jarvis_bot") is True
+    assert is_addressed({"caption": "@jarvis_bot?"}, "jarvis_bot") is True
+    assert is_addressed({"text": "@jarvis_bot help"}, "@jarvis_bot") is True  # handle passed with @
+    # @jarvis_bot must NOT match a different username that merely has it as a prefix
+    assert is_addressed({"text": "ping @jarvis_bot_admin now"}, "jarvis_bot") is False
+    assert is_addressed({"text": "cc @jarvis_bot2 pls"}, "jarvis_bot") is False
+    # and not inside an email-like token (leading boundary)
+    assert is_addressed({"text": "mail bob@jarvis_bot maybe"}, "jarvis_bot") is False
+    # case-insensitive on both the handle arg and the message text (Telegram usernames fold case)
+    assert is_addressed({"text": "hey @JARVIS_BOT help"}, "Jarvis_Bot") is True
+    # empty / all-@ handle disables mention matching (no bare '@' false positive)
+    assert is_addressed({"text": "reach me @ home"}, "") is False
+    assert is_addressed({"text": "@ x"}, "@") is False
+
+
 class _FakeStore:
     def __init__(self, ingest: str) -> None:
         self._ingest = ingest
