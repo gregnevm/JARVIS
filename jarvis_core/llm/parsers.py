@@ -5,23 +5,68 @@ import re
 from typing import Any
 
 
+def scan_balanced_json(s: str, start: int) -> tuple[str | None, int]:
+    """Від `{` у s[start] повертає (підрядок збалансованого об'єкта, індекс після нього).
+
+    Поважає рядкові літерали та екранування, тож дужки всередині рядкових значень
+    (напр. ``"a{b}c"``) не ламають баланс. Якщо об'єкт незакритий → (None, start).
+    SSOT балансованого сканера (реюзається агент-лупом для inline tool-calls).
+    """
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(s)):
+        ch = s[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start : i + 1], i + 1
+    return None, start
+
+
 def extract_json_object(text: str) -> dict[str, Any] | None:
-    """Витягує JSON-об'єкт з відповіді LLM (markdown fence або сирий JSON)."""
+    """Витягує JSON-об'єкт з відповіді LLM (markdown fence або сирий JSON).
+
+    Стійко до прози з дужками до/після JSON: сканує збалансований об'єкт від
+    КОЖНОГО `{` і повертає перший, що парситься в dict. Старий `rfind('}')`
+    хапав дужку з хвостової прози ("{...} note: use } carefully") і мовчки
+    повертав None (тихий degrade плану/рев'ю на 7B-моделі).
+    """
     raw = (text or "").strip()
     if not raw:
         return None
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
-    if fence:
-        raw = fence.group(1)
-    else:
-        start, end = raw.find("{"), raw.rfind("}")
-        if start >= 0 and end > start:
-            raw = raw[start : end + 1]
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
+    fence = re.search(r"```(?:json)?\s*(\{.*\})\s*```", raw, re.DOTALL)
+    candidate = fence.group(1) if fence else raw
+    idx = candidate.find("{")
+    while idx >= 0:
+        obj, end = scan_balanced_json(candidate, idx)
+        if obj is None:
+            # Незакрита дужка від idx: усе далі — на глибині ≥1 цього об'єкта,
+            # тож жоден пізніший старт не дасть top-level об'єкт. Стоп (лінійно).
+            break
+        try:
+            data = json.loads(obj)
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict):
+            return data
+        # Збалансований, але не валідний JSON (напр. хвостова кома чи `{options}`
+        # з прози) → пропускаємо ВЕСЬ об'єкт, не лізем у його нутрощі (інакше
+        # діставали б вкладений під-об'єкт малформед-outer'а й глушили фолбек).
+        idx = candidate.find("{", end)
+    return None
 
 
 def kobold_token(line: str) -> str:

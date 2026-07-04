@@ -23,7 +23,7 @@ from .user_profile import profile_prompt_block
 from jarvis_core.agent.tool_loop import ToolStepResult, run_tool_loop
 from jarvis_core.agent.trace import tool_trace_entry
 from jarvis_core.llm.chat import ChatBackend
-from jarvis_core.llm.parsers import extract_json_object
+from jarvis_core.llm.parsers import extract_json_object, scan_balanced_json
 from .toolkit import agent_tool_schemas, coerce_args, dispatch, image_gen_enabled
 
 logger = logging.getLogger("jarvis.tools.agent")
@@ -252,36 +252,6 @@ def _tool_status(name: str) -> str:
     return _TOOL_STATUS.get(name, f"🔧 {name}…")
 
 
-def _scan_balanced_json(s: str, start: int) -> tuple[str | None, int]:
-    """Від `{` у s[start] повертає (підрядок збалансованого об'єкта, індекс після нього).
-
-    Поважає рядкові літерали та екранування, тож дужки всередині рядкових значень
-    (напр. ``"a{b}c"``) не ламають баланс. Якщо об'єкт незакритий → (None, start).
-    """
-    depth = 0
-    in_str = False
-    escaped = False
-    for i in range(start, len(s)):
-        ch = s[i]
-        if in_str:
-            if escaped:
-                escaped = False
-            elif ch == "\\":
-                escaped = True
-            elif ch == '"':
-                in_str = False
-            continue
-        if ch == '"':
-            in_str = True
-        elif ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return s[start : i + 1], i + 1
-    return None, start
-
-
 def _parse_inline_tool_calls(content: str) -> list[dict[str, Any]]:
     """Витягує tool calls, які модель помилково віддала текстом, а не у tool_calls."""
     out: list[dict[str, Any]] = []
@@ -293,7 +263,7 @@ def _parse_inline_tool_calls(content: str) -> list[dict[str, Any]]:
             break
         name = m.group(1)
         # m.start() вказує на зовнішню `{` всього об'єкта — дочитуємо його цілком.
-        obj_str, end = _scan_balanced_json(text, m.start())
+        obj_str, end = scan_balanced_json(text, m.start())
         if obj_str is None:
             # Незбалансовано: решта буфера — один незакритий об'єкт; жодне пізніше
             # відкриття не дасть валідного верхньорівневого виклику. Емітимо ім'я
