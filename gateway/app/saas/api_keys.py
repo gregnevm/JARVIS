@@ -5,6 +5,10 @@
 - **Показ один раз**: повний ключ повертається тільки при створенні.
 - **Constant-time** порівняння хешу (`hmac.compare_digest`).
 - Revoke — soft (прапор `revoked`), verify відхиляє відкликані.
+- **Verify не пише запис ключа.** `last_used_at` живе в окремому side-ключі:
+  read-modify-write повного запису на кожен запит гонявся з revoke() — verify,
+  що встиг прочитати запис ДО відкликання, записував `revoked: false` назад,
+  назавжди воскрешаючи відкликаний ключ (auth-bypass).
 
 Сховище — Redis (ін'єктується для тестів). Self-hosted: один synthetic org;
 per-org розшарування додасться зверху (SAAS tenant context) без зміни API.
@@ -26,6 +30,7 @@ _PREFIX = "sk-jarvis-"
 _PREFIX_LEN = len(_PREFIX) + 8  # 'sk-jarvis-' + 8 символів для пошуку
 _REC_KEY = "jarvis:apikey:rec:{id}"
 _PFX_KEY = "jarvis:apikey:pfx:{prefix}"
+_USED_KEY = "jarvis:apikey:used:{id}"  # side-ключ: verify пише лише сюди, ніколи в rec
 _INDEX = "jarvis:apikey:ids"
 _DEFAULT_SCOPES = ("chat", "models", "embeddings", "jobs")
 _VALID_SCOPES = frozenset({"chat", "embeddings", "jobs", "models"})
@@ -86,7 +91,7 @@ class ApiKeyStore:
             "scopes": _normalize_scopes(scopes),
             "created_at": int(time.time()),
             "revoked": False,
-            "last_used_at": None,
+            "last_used_at": None,  # legacy-поле: оновлення живуть у side-ключі _USED_KEY
         }
         await self._r.set(_REC_KEY.format(id=key_id), json.dumps(rec))
         await self._r.set(_PFX_KEY.format(prefix=prefix), key_id)
@@ -105,9 +110,20 @@ class ApiKeyStore:
         except (ValueError, TypeError):
             return None
 
+    async def _with_used(self, rec: dict[str, Any]) -> dict[str, Any]:
+        """Публічні метадані + `last_used_at` із side-ключа (fallback — legacy-поле в rec)."""
+        out = _public(rec)
+        used = await self._r.get(_USED_KEY.format(id=rec.get("id")))
+        if used is not None:
+            try:
+                out["last_used_at"] = int(used)
+            except (ValueError, TypeError):
+                pass  # зіпсований side-ключ → лишаємо legacy-значення з rec
+        return out
+
     async def get(self, key_id: str) -> dict[str, Any] | None:
         rec = await self._load(key_id)
-        return _public(rec) if rec else None
+        return await self._with_used(rec) if rec else None
 
     async def list(self) -> list[dict[str, Any]]:
         ids = await self._r.smembers(_INDEX)
@@ -115,7 +131,7 @@ class ApiKeyStore:
         for kid in sorted(str(x) for x in (ids or [])):
             rec = await self._load(kid)
             if rec:
-                out.append(_public(rec))
+                out.append(await self._with_used(rec))
         out.sort(key=lambda r: r.get("created_at") or 0, reverse=True)
         return out
 
@@ -142,6 +158,10 @@ class ApiKeyStore:
             return None
         if not hmac.compare_digest(str(rec.get("hash", "")), _hash_key(key)):
             return None
-        rec["last_used_at"] = int(time.time())
-        await self._r.set(_REC_KEY.format(id=rec["id"]), json.dumps(rec))
-        return _public(rec)
+        # Read-path без запису запису (лише side-ключ): full-record SET тут гонявся
+        # з revoke() і воскрешав відкликаний ключ (revoked:false поверх revoked:true).
+        now = int(time.time())
+        await self._r.set(_USED_KEY.format(id=rec["id"]), str(now))
+        out = _public(rec)
+        out["last_used_at"] = now
+        return out
