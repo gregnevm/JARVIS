@@ -118,6 +118,16 @@ def test_managed_key_scope_enforced(client: TestClient) -> None:
     assert client.get("/v1/models", headers=_bearer(key2)).status_code == 403
 
 
+def test_all_invalid_scopes_key_is_denied_everywhere(client: TestClient) -> None:
+    # a key requested with only invalid scopes (typo) gets NO scopes (least privilege), so it is
+    # denied at every scoped endpoint — never silently granted the default scope set.
+    made = client.post("/saas/api/keys", json={"scopes": ["admin"]}, headers=_root()).json()
+    assert made["scopes"] == []
+    key = made["key"]
+    assert _chat(client, _bearer(key)).status_code == 403
+    assert client.get("/v1/models", headers=_bearer(key)).status_code == 403
+
+
 def test_root_key_bypasses_scopes(client: TestClient) -> None:
     assert _chat(client, _root()).status_code == 200
     assert client.get("/v1/models", headers=_root()).status_code == 200

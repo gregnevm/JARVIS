@@ -56,10 +56,13 @@ def generate_key() -> tuple[str, str, str]:
 
 
 def _normalize_scopes(scopes: list[str] | None) -> list[str]:
+    # Unspecified (None/empty) → the default scope set. A SPECIFIED list is filtered to valid scopes;
+    # invalid tokens are dropped. An all-invalid list (e.g. a typo like ["admin"]) therefore yields
+    # NO scopes — least privilege — never a silent fallback to all defaults (which would broaden,
+    # not narrow, the caller's requested privilege).
     if not scopes:
         return list(_DEFAULT_SCOPES)
-    out = [s for s in scopes if s in _VALID_SCOPES]
-    return out or list(_DEFAULT_SCOPES)
+    return [s for s in scopes if s in _VALID_SCOPES]
 
 
 def _public(rec: dict[str, Any]) -> dict[str, Any]:

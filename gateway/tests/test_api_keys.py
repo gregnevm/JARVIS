@@ -201,8 +201,14 @@ async def test_last_used_legacy_record_fallback() -> None:
     assert any(i["id"] == created["id"] for i in await store.list())
 
 
-async def test_invalid_scopes_fall_back_to_default(store: ApiKeyStore) -> None:
+async def test_scope_normalization_drops_invalid_least_privilege(store: ApiKeyStore) -> None:
+    # partial-invalid: keep the valid scopes, drop the unknown ones
     out = await store.create(scopes=["bogus", "chat"])
     assert out["scopes"] == ["chat"]  # bogus відкинуто
+    # ALL-invalid (e.g. a typo like ["admin"]): NO scopes granted — least privilege. Previously this
+    # silently fell back to ALL default scopes, broadening the caller's requested privilege.
     out2 = await store.create(scopes=["bogus"])
-    assert set(out2["scopes"]) == {"chat", "models", "embeddings", "jobs"}  # невалідні → дефолт
+    assert out2["scopes"] == []
+    # unspecified (None / empty) still means the default scope set
+    assert set((await store.create(scopes=None))["scopes"]) == {"chat", "models", "embeddings", "jobs"}
+    assert set((await store.create(scopes=[]))["scopes"]) == {"chat", "models", "embeddings", "jobs"}
