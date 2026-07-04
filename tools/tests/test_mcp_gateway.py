@@ -68,3 +68,50 @@ async def test_write_message_has_no_content_length_framing():
     assert stdin.buf.endswith(b"\n")
     assert b"Content-Length" not in stdin.buf
     assert b"\n" not in stdin.buf[:-1]
+
+
+def _session_with_rpc_result(result):
+    """A bare session whose `_rpc` (tools/call) returns a canned CallToolResult."""
+    sess = mcp_gateway._McpSession({"name": "fake", "command": "true"})
+
+    async def _fake_rpc(method, params=None):
+        assert method == "tools/call"
+        return result
+
+    sess._rpc = _fake_rpc  # type: ignore[method-assign]
+    return sess
+
+
+async def test_call_tool_returns_text_content_on_success():
+    sess = _session_with_rpc_result({"content": [{"type": "text", "text": "hello"}]})
+    assert await sess.call_tool("greet", {}) == "hello"
+
+
+async def test_call_tool_surfaces_iserror_as_failure():
+    # MCP tool failure (isError=true) must NOT be returned as a plain success observation.
+    sess = _session_with_rpc_result(
+        {"content": [{"type": "text", "text": "boom: bad arg"}], "isError": True}
+    )
+    out = await sess.call_tool("do_thing", {})
+    assert "boom: bad arg" in out
+    assert "do_thing" in out and "помилку" in out  # explicit failure marker for the agent loop
+
+
+async def test_call_tool_iserror_false_is_normal_success():
+    sess = _session_with_rpc_result(
+        {"content": [{"type": "text", "text": "ok"}], "isError": False}
+    )
+    assert await sess.call_tool("do_thing", {}) == "ok"  # no error marker when isError is falsy
+
+
+async def test_call_tool_iserror_with_empty_content_still_marks_failure():
+    # A failing tool that sends no error text must still surface as a failure, not empty success.
+    sess = _session_with_rpc_result({"content": [], "isError": True})
+    out = await sess.call_tool("do_thing", {})
+    assert "do_thing" in out and "помилку" in out
+
+
+async def test_call_tool_non_dict_result_falls_back_to_str():
+    # An off-spec server returning a bare value (not a CallToolResult dict) → str fallback.
+    sess = _session_with_rpc_result("just a string")
+    assert await sess.call_tool("t", {}) == "just a string"
