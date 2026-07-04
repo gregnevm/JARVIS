@@ -224,6 +224,28 @@ async def _handle_project(
 # --------------------------------------------------------------------------- #
 
 
+_TGAUTH_TTL = 300
+
+
+async def bind_tgauth_login(redis: aioredis.Redis, token: str, user_id: int) -> bool:
+    """Прив'язати *pending* токен Telegram-логіну до telegram_id користувача (single-use).
+
+    Армується лише токен, який клієнт створив через ``POST /auth/telegram/start`` (значення
+    ``"pending"``). Це відкидає: токен, якого сервер не мінтив (attacker-chosen deeplink →
+    session-fixation), токен, уже спожитий ``/poll`` (resurrection), і токен, уже прив'язаний до
+    іншого uid (clobber — first-confirm-wins). Перевірка-потім-запис безпечна без транзакції:
+    не-``"pending"`` значення відкидається за будь-якого чергування, тож жоден arm не звертає
+    непричетний токен на нового uid; єдина гонка — між двома одночасними підтвердженнями того
+    самого вже-pending секретного токена, що не є межею привілеїв. (Прив'язку poll-каналу до
+    клієнта, що мінтив, тут не вирішуємо — це окремий шар.)
+    """
+    key = f"tgauth:{token}"
+    if await redis.get(key) != "pending":
+        return False
+    await redis.setex(key, _TGAUTH_TTL, str(user_id))
+    return True
+
+
 @registry.command("/start", description="Головне меню", menu=True)
 async def _cmd_start(ctx: Ctx) -> bool:
     raw_payload = ctx.args
@@ -233,10 +255,15 @@ async def _cmd_start(ctx: Ctx) -> bool:
     # обмінює token на JWT через /api/v1/auth/telegram/poll.
     if payload.startswith("tgauth_") and ctx.redis is not None:
         token = raw_payload[len("tgauth_"):]
-        if token:
-            await ctx.redis.setex(f"tgauth:{token}", 300, str(ctx.user_id))
+        if token and await bind_tgauth_login(ctx.redis, token, ctx.user_id):
             await ctx.tg.send_message(
                 ctx.chat_id, "✅ Вхід у застосунок JARVIS підтверджено — повертайся в додаток."
+            )
+        else:
+            await ctx.tg.send_message(
+                ctx.chat_id,
+                "🔴 Це посилання для входу недійсне або застаріле. "
+                "Відкрий застосунок JARVIS і почни вхід знову.",
             )
         return True
     if payload == "app":
