@@ -45,8 +45,11 @@ def user_id_from_init_data(init_data: str | None) -> int:
     if not token or not valid_signature(pairs, token):
         raise HTTPException(status_code=401, detail="bad signature")
 
+    # Fail closed: без валідного числового auth_date неможливо перевірити свіжість initData,
+    # тож вважаємо його простроченим. Telegram завжди шле auth_date; підпис покриває лише
+    # наявні ключі, тож раніше payload без auth_date проходив із НЕОБМЕЖЕНИМ вікном реплею.
     auth_date = pairs.get("auth_date")
-    if auth_date and auth_date.isdigit() and time.time() - int(auth_date) > _MAX_AUTH_AGE:
+    if not auth_date or not auth_date.isdigit() or time.time() - int(auth_date) > _MAX_AUTH_AGE:
         raise HTTPException(status_code=401, detail="init data expired")
 
     try:
