@@ -135,7 +135,7 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 | # | Задача | DoD | Статус |
 |---|--------|-----|--------|
-| AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [x] memory `/embed`; str\|list[str]; 400 empty / 502 backend; `nomic-embed-text` у `/models`; приймає `encoding_format` (ігнор) |
+| AP-2.1 | `POST /v1/embeddings` (nomic-embed-text) | OpenAI-формат відповіді | [x] memory `/embed`; str\|list[str]; 400 empty / 502 backend; `nomic-embed-text` у `/models`; приймає `encoding_format` (ігнор). `data[i].index` тримає 1:1 з `input[i]` — порожній елемент батчу → 400 (без мовчазного дропу зі зсувом індексів; не-рядкові елементи масиву → 422 Pydantic) |
 | AP-2.2 | `POST /v1/responses` (агентний, tool-use) — мапа на `AgentRunner` | tools[] + tool_calls | [x] мапа на агент-луп (mode=agent); input рядок\|item-список; Responses-формат (`output[]`+`output_text`) |
 | AP-2.3 | `GET /v1/models` із реальним каталогом (CHAT/AGENT/VISION/EMBED/LoRA) | tags із Ollama | [x] merge Ollama-каталогу (`svc.dashboard`+`_ollama_tags`), dedupe, best-effort fallback на статичний список |
 | AP-2.4 | `GET /v1/usage` — токени/запити за період (per-key) | usage_events агрегат | [x] `UsageStore` (Redis hash/день); best-effort запис у `_authenticate`; `GET /v1/usage?days=N` по ключу-викликачу |
