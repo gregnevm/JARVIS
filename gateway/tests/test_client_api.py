@@ -79,6 +79,31 @@ def test_refresh_rejects_access_token(client_jwt):
     assert client_jwt.post("/api/v1/auth/refresh", json={"refresh_token": access}).status_code == 401
 
 
+def test_refresh_does_not_echo_untrusted_org_claim(monkeypatch, tmp_path):
+    """refresh не має «протягувати» org із підписаного, але не авторитетного refresh-токена.
+
+    org трактується як role/plan: канонічний із settings, не з токена. Інакше холдер валідного
+    refresh-токена з підмінним/простроченим `org` отримав би access у чужому тенанті (fail-open).
+    Викликаємо корутину напряму (без TestClient-стартапу — не залежить від redis/поллерів).
+    """
+    import asyncio
+
+    from app.client_api.router import RefreshBody, refresh
+    from app.saas import auth as jwt_auth
+
+    _base(monkeypatch, tmp_path)
+    monkeypatch.setattr(settings, "jwt_secret", "test-secret-key-cl1-min-32-bytes-long-abcd")
+    from jarvis_core.context import DEFAULT_ORG_ID
+
+    # валідно підписаний refresh-токен, що несе ЧУЖИЙ org
+    forged = jwt_auth.issue_refresh(42, org_id="attacker-org-99999")
+    resp = asyncio.run(refresh(RefreshBody(refresh_token=forged)))
+    claims = jwt_auth.decode(resp["access_token"], expect="access")
+    canonical = settings.default_org_id or DEFAULT_ORG_ID
+    assert claims["org"] == canonical
+    assert claims["org"] != "attacker-org-99999"
+
+
 # --- unified resolver (CL-1.4): JWT / Basic / none ---
 
 def test_whoami_via_jwt(client_jwt):
