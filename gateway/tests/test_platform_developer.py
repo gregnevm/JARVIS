@@ -129,3 +129,65 @@ def test_console_key_lifecycle(client: TestClient) -> None:
     # revoke + 404 on missing
     assert client.delete(f"/platform/api/developer/keys/{kid}", auth=AUTH).status_code == 200
     assert client.delete("/platform/api/developer/keys/ghost", auth=AUTH).status_code == 404
+
+
+def _cookie(uid: int) -> dict[str, str]:
+    """Валідний `jarvis_jwt` cookie для uid (як мінтить `/connect` one-tap)."""
+    from app.saas.auth import JWT_COOKIE, issue_access
+
+    return {JWT_COOKIE: issue_access(uid)}
+
+
+def _admin_split(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Розводимо admin ⊊ allowed: 42 = admin+allowed, 99 = allowed-але-не-admin; JWT увімкнено."""
+    monkeypatch.setattr(settings, "admin_user_ids", "42")
+    monkeypatch.setattr(settings, "allowed_user_ids", "42,99")
+    monkeypatch.setattr(settings, "jwt_secret", "test-secret-key-platform-min-32-bytes-aaaa")
+
+
+def test_developer_console_rejects_nonadmin_cookie(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Регресія (broken access control): cookie-канал був НЕ admin-gated, тож друг з
+    ALLOWED_USER_IDS (не в ADMIN_USER_IDS) через one-tap `/connect` отримував повний доступ
+    до developer-консолі. Токен валідний, uid allowed, але НЕ адмін → мусить бути відмова."""
+    _admin_split(monkeypatch)
+    cookies = _cookie(99)  # allowed, але не адмін
+    # читання ключів заблоковано (падає у Basic → 401 без креденшелів)
+    assert client.get("/platform/api/developer/keys", cookies=cookies).status_code == 401
+    # мутація (створення ключа) так само заблокована
+    r = client.post(
+        "/platform/api/developer/keys", json={"name": "x", "scopes": ["chat"]}, cookies=cookies
+    )
+    assert r.status_code == 401
+
+
+def test_developer_console_allows_admin_cookie(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Адмінський cookie лишається валідним каналом (self-hosted one-tap /connect власника)."""
+    _admin_split(monkeypatch)
+    r = client.get("/platform/api/developer/keys", cookies=_cookie(42))
+    assert r.status_code == 200 and "data" in r.json()
+
+
+def test_developer_console_broken_cookie_fails_closed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Битий cookie ловиться except-гілкою і падає у Basic → 401 (не 500, не тихий доступ)."""
+    _admin_split(monkeypatch)
+    r = client.get("/platform/api/developer/keys", cookies={"jarvis_jwt": "not.a.valid.jwt"})
+    assert r.status_code == 401
+
+
+def test_developer_console_admin_ids_unset_falls_back_to_allowed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Фіксуємо семантику fallback: ADMIN_USER_IDS порожній → адміни = ALLOWED_USER_IDS
+    (config.py: is_admin degrades to allowed-membership). У self-hosted без окремих адмінів
+    будь-який allowed uid проходить cookie-каналом; чужий (не allowed) — ні."""
+    monkeypatch.setattr(settings, "admin_user_ids", "")
+    monkeypatch.setattr(settings, "allowed_user_ids", "42,99")
+    monkeypatch.setattr(settings, "jwt_secret", "test-secret-key-platform-min-32-bytes-aaaa")
+    assert client.get("/platform/api/developer/keys", cookies=_cookie(99)).status_code == 200
+    assert client.get("/platform/api/developer/keys", cookies=_cookie(7)).status_code == 401
