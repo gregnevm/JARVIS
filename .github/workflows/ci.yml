@@ -68,6 +68,16 @@ jobs:
           fi
           echo "OK: усі httpx.AsyncClient у allowlist"
 
+      # R4.2: env-інвентар (снапшоти + таблиця ENV_CHECKLIST) генеруються з коду;
+      # drift = червоний CI (D1 машиною). Онови: python scripts/gen_env_docs.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: env drift-гейт (R4)
+        run: |
+          pip install -q -r requirements-dev.txt -r jarvis_core/requirements.txt pydantic-settings
+          python scripts/gen_env_docs.py --check
+
   # Дешева перевірка: docker-compose.yml лишається валідним (синтаксис + інтерполяція .env).
   compose-validate:
     name: docker compose config

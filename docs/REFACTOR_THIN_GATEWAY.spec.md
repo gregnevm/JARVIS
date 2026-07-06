@@ -132,8 +132,8 @@ handler-и напряму). Відкат — revert одного PR, бо міг
 - [x] **R3.2** Gateway-лупер → thin wiring поверх ядра
 - [x] **R3.3** Redaction/store-building → `jarvis_core.passport`; context.py — лише I/O
 - [x] **R3.4** Єдиний auth-резолвер + адаптери client_api/platform; вбити дубль `_uid()`
-- [ ] **R4.1** `jarvis_core/settings/` блоки + міграція gateway/tools config (env-імена незмінні)
-- [ ] **R4.2** `scripts/gen_env_docs.py` + CI drift-гейт; згенерувати .env.example/ENV_CHECKLIST
+- [x] **R4.1** `jarvis_core/settings/` блоки + міграція gateway/tools config (env-імена незмінні)
+- [x] **R4.2** `scripts/gen_env_docs.py` + CI drift-гейт; згенерувати .env.example/ENV_CHECKLIST
 - [ ] **R5.1** Retention паспортів (kaizen-профіль ротує; архів поза git)
 - [ ] **R5.2** ruff + gitleaks у CI (базові профілі)
 - [ ] **R5.3** Extension: jest-smoke на background.js хелпери
@@ -161,6 +161,15 @@ handler-и напряму). Відкат — revert одного PR, бо міг
   `gateway/app/auth_channels.py` (bearer/JWT-декод — SSOT, політики каналів лишились у
   двох адаптерах свідомо: різні контракти 401/503 і admin-gate); `_uid()` — 6 копій → 1
   (`client_api/deps.context_uid`).
+- **2026-07-06 · R4 (R4.1–R4.2)** — гілка `claude/tg-r4-config-ssot`: `jarvis_core/settings/`
+  (RedisCfg, OllamaCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg) — 13 спільних
+  полів оголошені один раз; gateway/tools/memory/twin config.py — композиція блоків.
+  Env-імена й дефолти незмінні: снапшоти знято ДО міграції, по-сервісні
+  `test_config_snapshot.py` — контракт назавжди. `scripts/gen_env_docs.py` генерує
+  снапшоти + повний інвентар (196 env) у ENV_CHECKLIST.md (GEN-секція); CI drift-гейт
+  в `arch-gates`. Відхилення від букви критерію: `.env.example` лишається кураторським
+  (рукописні коментарі цінні), але під stale-гейтом — невідома коду змінна валить CI;
+  перший улов гейта: мертва `GATEWAY_URL` прибрана.
 - **2026-07-06 · R1.4** — критерій < 5 хв перевиконано: повний локальний прогін **~58s**
   (раніше — нескінченний hang). Другий пожирач часу після стартової мережі — Windows
   ретраїть TCP-connect до закритого порту ~2s: docker-хости у фікстурі переведені на

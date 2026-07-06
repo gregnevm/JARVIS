@@ -1,21 +1,22 @@
 """Конфігурація Gateway. Читається з оточення (.env у dev, env_file у Compose)."""
 from __future__ import annotations
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 
 from jarvis_core.auth_ids import parse_comma_separated_ids
+from jarvis_core.settings import AuthIdsCfg, ComputerCfg, CoreServiceUrls, DataDirCfg, RedisCfg
 
 
-class Settings(BaseSettings):
+class Settings(RedisCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg):
+    """Композиція: спільні блоки з jarvis_core.settings (R4 «Тонкий шлюз») +
+    gateway-специфічні поля. Env-імена/дефолти незмінні (test_config_snapshot)."""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 
-    # Telegram
+    # Telegram (whitelist/адміни — спільний блок AuthIdsCfg)
     telegram_bot_token: str = ""
-    allowed_user_ids: str = ""
     # Файл погоджених через бота (/allow). Монтується з ./data у Docker.
     access_store_path: str = "/data/access/users.json"
-    # Адміни: /admin, /allow та небезпечні дії. Порожньо = усі з whitelist (.env + бот).
-    admin_user_ids: str = ""
     telegram_api_base: str = "https://api.telegram.org"
     # Спосіб отримання апдейтів:
     #   polling — gateway сам опитує Telegram (getUpdates). Нуль інфраструктури,
@@ -34,8 +35,6 @@ class Settings(BaseSettings):
 
     # Tools — агент-луп (DESIGN: без n8n-проксі)
     tools_url: str = "http://tools:8200"
-    memory_url: str = "http://memory:8100"
-    twin_url: str = "http://twin:8765"
     whisper_url: str = "http://whisper:9000"
     whisper_language: str = ""  # порожньо = автовизначення мови
     tts_url: str = "http://tts:8300"
@@ -50,7 +49,6 @@ class Settings(BaseSettings):
     # Стрім відповіді в Telegram (editMessageText «друкує» текст наживо). Вимкнеш —
     # бот шле одне фінальне повідомлення (старий шлях). Фолбек на класику авто.
     enable_streaming: bool = True
-    redis_url: str = "redis://redis:6379/0"
     # Агент-луп на CPU повільний (кілька викликів Ollama) — тримаємо запас.
     agent_timeout: float = 300.0
 
@@ -105,17 +103,8 @@ class Settings(BaseSettings):
     default_org_id: str = "00000000-0000-0000-0000-000000000001"
     # Мультитенант-режим (cloud). false = self-hosted, один synthetic org.
     saas_mode: bool = False
-    # Спільний з tools каталог даних (Docker: ./data:/data). Звідки Platform читає
-    # session-логи (logs/sessions/*.jsonl) і профілі (profiles/*.json).
-    data_dir: str = "/data"
     # Публічний URL для webhook (лише TELEGRAM_INGEST_MODE=webhook).
     telegram_webhook_url: str = ""
-    # Telegram ID з доступом до Computer Use. Порожньо → ADMIN_USER_IDS → ALLOWED_USER_IDS (.env).
-    # Друзі з /allow сюди НЕ потрапляють — лише явний whitelist.
-    computer_owner_user_ids: str = ""
-    computer_session_trust_minutes: int = 10
-    # Режим computer лише для ADMIN_USER_IDS (застарілий прапор; краще COMPUTER_OWNER_USER_IDS).
-    computer_mode_admins_only: bool = False
     # Інтервал поллера нагадувань (секунди).
     reminder_poll_seconds: float = 20.0
     # Ігнорувати edited_message (не перезапускати агента).
@@ -123,10 +112,6 @@ class Settings(BaseSettings):
     # Proactive health alerts (host-agent, Ollama, Docker). 0 = вимкнено.
     health_watch_interval: float = 300.0
     health_alert_user_ids: str = ""
-    # Drop Zone: дефолтний каталог на хості для файлів з Telegram (caption «на диск»).
-    hostagent_drop_dir: str = ""
-    # Макс. розмір файлу для /file pull (байти, Telegram cap ~50MB).
-    remote_file_max_bytes: int = 48 * 1024 * 1024
 
     # --- Mobile APK (Стовп C, CL-3) ---
     # Шлях до зібраного MVP APK. Порожньо → {DATA_DIR}/artifacts/jarvis-mvp.apk

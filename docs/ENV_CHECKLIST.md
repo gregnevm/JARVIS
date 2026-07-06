@@ -139,3 +139,215 @@ docker compose up -d --build gateway tools
 ```
 
 Тести: `pytest gateway/tests tools/tests hostagent/tests`
+
+<!-- GEN:ENV-INVENTORY:BEGIN (scripts/gen_env_docs.py — не редагуй руками) -->
+
+## Повний інвентар env-змінних (200 змінних, code-first)
+
+Згенеровано з Settings-класів сервісів. Оновити: `python scripts/gen_env_docs.py`.
+CI (`arch-gates`) падає, якщо таблиця/снапшоти розійшлися з кодом (drift-гейт D1).
+
+| ENV | Сервіси | Дефолт |
+|-----|---------|--------|
+| `ACCESS_STORE_PATH` | gateway | `"/data/access/users.json"` |
+| `ADMIN_PANEL_PASSWORD` | gateway | `""` |
+| `ADMIN_PANEL_USER` | gateway | `"admin"` |
+| `ADMIN_USER_IDS` | gateway, tools | `""` |
+| `AGENT_MODE` | tools | `"hybrid"` |
+| `AGENT_TIMEOUT` | gateway | `300.0` |
+| `ALBUM_COLLECT_SECONDS` | gateway | `2.0` |
+| `ALLOWED_USER_IDS` | gateway, tools | `""` |
+| `APK_ARTIFACT_PATH` | gateway | `""` |
+| `APK_AUTO_DELIVER` | gateway | `false` |
+| `APK_AUTO_DELIVER_INTERVAL` | gateway | `3600` |
+| `APK_RELEASE_APK_URL` | gateway | `"https://github.com/gregnevm/JARVIS/releases/download/apk…` |
+| `APK_RELEASE_META_URL` | gateway | `"https://github.com/gregnevm/JARVIS/releases/download/apk…` |
+| `APK_VERSION` | gateway | `"0.1.0"` |
+| `AUTO_COROUTINE_BYPASS_PERMISSIONS` | gateway | `false` |
+| `AUTO_COROUTINE_ENABLED` | gateway | `false` |
+| `AUTO_COROUTINE_INTERVAL` | gateway | `3600.0` |
+| `AUTO_COROUTINE_REPO_PATH` | gateway | `""` |
+| `AUTO_COROUTINE_ULTRACODE` | gateway | `false` |
+| `AUTO_COROUTINE_USER_ID` | gateway | `0` |
+| `BOT_USERNAME` | gateway | `""` |
+| `BYPASS_CONFIRMATIONS` | tools | `false` |
+| `CALENDAR_ICS_URL` | tools | `""` |
+| `CLI_WHITELIST` | tools | `""` |
+| `CODE_EXEC_TIMEOUT` | tools | `8.0` |
+| `CODING_FIX_MAX_ROUNDS` | tools | `4` |
+| `CODING_GREP_MAX_RESULTS` | tools | `60` |
+| `CODING_HEADLESS_APPLY` | tools | `false` |
+| `CODING_HEADLESS_TRUST_TTL` | tools | `600` |
+| `CODING_PRECOMMIT_GATE` | tools | `false` |
+| `CODING_PRECOMMIT_LINT_ARGS` | tools | `"check"` |
+| `CODING_PRECOMMIT_LINT_EXE` | tools | `"ruff"` |
+| `CODING_PRECOMMIT_PATH` | tools | `""` |
+| `CODING_REVIEW_AFTER_FIX` | tools | `false` |
+| `CODING_TREE_MAX_ENTRIES` | tools | `300` |
+| `COMPUTER_ALLOW_ADMIN` | tools | `false` |
+| `COMPUTER_ALLOW_POWER` | tools | `false` |
+| `COMPUTER_AUTO_LEARN_WHITELIST` | tools | `true` |
+| `COMPUTER_AUTO_TRUST_LEARNED` | tools | `true` |
+| `COMPUTER_AUTO_VISION` | tools | `true` |
+| `COMPUTER_MAX_ITERS` | tools | `12` |
+| `COMPUTER_MODE_ADMINS_ONLY` | gateway, tools | `false` |
+| `COMPUTER_OWNER_USER_IDS` | gateway, tools | `""` |
+| `COMPUTER_PROFILE` | tools | `"safe"` |
+| `COMPUTER_RATE_LIMIT_PER_HOUR` | tools | `120` |
+| `COMPUTER_REQUIRE_CONFIRM` | tools | `true` |
+| `COMPUTER_SESSION_TRUST_MINUTES` | gateway, tools | `10` |
+| `COMPUTER_TIMEOUT` | tools | `30.0` |
+| `CONTEXT_DAILY_HOUR` | gateway | `6` |
+| `CONTEXT_INGEST_MAX_BATCH` | gateway | `500` |
+| `CONTEXT_RETRIEVAL_TOP_K` | tools | `5` |
+| `CONTEXT_SCHEDULER_ENABLED` | gateway | `false` |
+| `CONTEXT_SCHEDULER_INTERVAL` | gateway | `1800.0` |
+| `CONTEXT_SCHEDULER_USER_IDS` | gateway | `""` |
+| `CONTINUE_DEV_TIMEOUT` | tools | `300.0` |
+| `CONTINUE_DEV_URL` | tools | `"http://host.docker.internal:65432"` |
+| `CONTINUE_VSCODE_CLI` | tools | `"code"` |
+| `CURSOR_API_BASE` | tools | `"https://api.cursor.com"` |
+| `CURSOR_API_KEY` | tools | `""` |
+| `CURSOR_AUTO_CREATE_PR` | tools | `false` |
+| `CURSOR_FALLBACK_INBOX` | tools | `true` |
+| `CURSOR_HOST_SCRIPT` | tools | `""` |
+| `CURSOR_HOST_WORKSPACE` | tools | `""` |
+| `CURSOR_MODEL` | tools | `"composer-2.5"` |
+| `CURSOR_PYTHON_EXE` | tools | `"python"` |
+| `CURSOR_REPO_REF` | tools | `"main"` |
+| `CURSOR_REPO_URL` | tools | `""` |
+| `CURSOR_RUNTIME` | tools | `"local"` |
+| `CURSOR_TASKS_ENABLED` | tools | `true` |
+| `CURSOR_TIMEOUT` | tools | `900.0` |
+| `DATA_DIR` | gateway, tools | `"/data"` |
+| `DEFAULT_ORG_ID` | gateway | `"00000000-0000-0000-0000-000000000001"` |
+| `EMBED_CACHE_TTL` | memory | `86400` |
+| `EMBED_DIM` | memory | `768` |
+| `EMBED_MODEL` | memory | `"nomic-embed-text"` |
+| `ENABLE_BROWSER` | tools | `false` |
+| `ENABLE_CLAUDE_CODE_BRIDGE` | gateway | `false` |
+| `ENABLE_CODE_EXEC` | tools | `false` |
+| `ENABLE_CODING_TOOLS` | tools | `false` |
+| `ENABLE_COMPUTER_USE` | tools | `false` |
+| `ENABLE_CONTEXT_API` | gateway | `false` |
+| `ENABLE_CONTEXT_RETRIEVAL` | tools | `false` |
+| `ENABLE_CONTINUE_DEV` | tools | `false` |
+| `ENABLE_OPENAI_API` | gateway | `false` |
+| `ENABLE_REACTION_REPLIES` | gateway | `true` |
+| `ENABLE_STREAMING` | gateway | `true` |
+| `ENABLE_VOICE_REPLY` | gateway | `false` |
+| `FETCH_MAX_CHARS` | tools | `6000` |
+| `GATEWAY_BROWSER_URL` | gateway | `"http://127.0.0.1:8000"` |
+| `GATEWAY_STARTUP_NET` | gateway | `true` |
+| `GUEST_RATE_LIMIT_PER_MIN` | gateway | `12` |
+| `HEALTH_ALERT_USER_IDS` | gateway | `""` |
+| `HEALTH_WATCH_INTERVAL` | gateway | `300.0` |
+| `HOOKS_ENABLED` | tools | `true` |
+| `HORDE_API_KEY` | tools | `"0000000000"` |
+| `HOSTAGENT_ALLOW_ADMIN` | hostagent | `false` |
+| `HOSTAGENT_ALLOW_POWER` | hostagent | `false` |
+| `HOSTAGENT_BIND_HOST` | hostagent | `"127.0.0.1"` |
+| `HOSTAGENT_DROP_DIR` | gateway, hostagent, tools | `""` |
+| `HOSTAGENT_EDIT_BATCH_MAX` | hostagent | `20` |
+| `HOSTAGENT_EDIT_MAX_BYTES` | hostagent | `2097152` |
+| `HOSTAGENT_EXEC_TIMEOUT` | hostagent | `30.0` |
+| `HOSTAGENT_FS_ROOTS` | hostagent | `""` |
+| `HOSTAGENT_MAX_BYTES` | hostagent | `6000` |
+| `HOSTAGENT_MAX_DOWNLOAD_BYTES` | hostagent | `50331648` |
+| `HOSTAGENT_PORT` | hostagent | `8400` |
+| `HOSTAGENT_TOKEN` | hostagent, tools | `""` |
+| `HOSTAGENT_URL` | tools | `"http://host.docker.internal:8400"` |
+| `HTTP_TIMEOUT` | tools | `20.0` |
+| `IGNORE_EDITED_MESSAGES` | gateway | `true` |
+| `IMAGE_GEN_MODEL` | tools | `""` |
+| `IMAGE_GEN_TIMEOUT` | tools | `180.0` |
+| `IMAGE_GEN_URL` | tools | `""` |
+| `INDEX_PROJECT_FILES` | memory | `true` |
+| `JWT_ACCESS_TTL` | gateway | `3600` |
+| `JWT_REFRESH_TTL` | gateway | `604800` |
+| `JWT_SECRET` | gateway | `""` |
+| `KOBOLD_HOST` | tools, twin | `tools: "http://host.docker.internal:5001" / twin: "http:/…` |
+| `LLM_BACKEND` | tools, twin | `"ollama"` |
+| `LLM_LOG_PATH` | twin | `null` |
+| `LLM_TIMEOUT` | twin | `180.0` |
+| `LORA_ACTIVE_DIR` | tools | `""` |
+| `LORA_BASE_MODEL` | tools | `""` |
+| `LORA_DEPLOY_ENABLED` | tools | `true` |
+| `LORA_OLLAMA_MODEL` | tools | `"jarvis-lora"` |
+| `MAX_AGENT_ITERS` | tools | `5` |
+| `MCP_SERVERS_JSON` | tools | `""` |
+| `MEMORY_URL` | gateway, tools | `"http://memory:8100"` |
+| `NOTION_DATABASE_ID` | tools | `""` |
+| `NOTION_TOKEN` | tools | `""` |
+| `NTFY_TOPIC` | tools | `""` |
+| `NTFY_URL` | tools | `"https://ntfy.sh"` |
+| `OLLAMA_COOLDOWN` | tools | `60.0` |
+| `OLLAMA_FAIL_THRESHOLD` | tools | `3` |
+| `OLLAMA_HOST` | memory, tools, twin | `"http://host.docker.internal:11434"` |
+| `OLLAMA_MODEL` | twin | `"qwen2.5:7b-instruct"` |
+| `OLLAMA_MODEL_AGENT` | tools | `"qwen2.5:7b-instruct"` |
+| `OLLAMA_MODEL_CHAT` | tools | `"gemma3:4b"` |
+| `OLLAMA_MODEL_VISION` | tools | `""` |
+| `OLLAMA_TIMEOUT` | tools | `180.0` |
+| `OLLAMA_VISION_ON_DEMAND` | tools | `false` |
+| `OPENAI_API_KEY` | gateway | `""` |
+| `OPENAI_DEFAULT_USER_ID` | gateway | `0` |
+| `OPENAI_KEY_RATE_LIMIT_PER_MIN` | gateway | `0` |
+| `ORCHESTRATOR_ENABLED` | tools | `true` |
+| `ORCHESTRATOR_MAX_REVISIONS` | tools | `1` |
+| `ORCHESTRATOR_WORKER_BUDGET` | tools | `5` |
+| `PLATFORM_PASSWORD` | gateway | `""` |
+| `POSTGRES_DB` | memory | `"jarvis"` |
+| `POSTGRES_HOST` | memory | `"postgres"` |
+| `POSTGRES_PASSWORD` | memory | `"changeme"` |
+| `POSTGRES_PORT` | memory | `5432` |
+| `POSTGRES_USER` | memory | `"jarvis"` |
+| `PROJECT_FILES_MAX_PER_FILE_TOKENS` | memory | `1200` |
+| `PROJECT_FILES_MAX_TOTAL_TOKENS` | memory | `3000` |
+| `PS_WHITELIST` | tools | `""` |
+| `PUBLIC_ADMIN_APP_URL` | gateway | `""` |
+| `PUBLIC_APP_URL` | gateway | `""` |
+| `PUSH_ENABLED` | tools | `false` |
+| `RATE_LIMIT_PER_MIN` | gateway | `20` |
+| `REDIS_URL` | gateway, memory, tools | `"redis://redis:6379/0"` |
+| `REMINDER_POLL_SECONDS` | gateway | `20.0` |
+| `REMOTE_FILE_MAX_BYTES` | gateway, tools | `50331648` |
+| `RESEARCH_MAX_CHARS` | tools | `40000` |
+| `RESEARCH_MAX_HOPS` | tools | `3` |
+| `RESEARCH_MAX_URLS` | tools | `5` |
+| `SAAS_MODE` | gateway | `false` |
+| `SELF_IMPROVE_ENABLED` | tools | `true` |
+| `SELF_IMPROVE_JUDGE_MODEL` | tools | `""` |
+| `SELF_IMPROVE_SCAN_LIMIT` | tools | `50` |
+| `SHORT_TERM_LIMIT` | memory | `10` |
+| `SKILLS_MAX_CHARS` | tools | `4000` |
+| `SLACK_BOT_TOKEN` | tools | `""` |
+| `SLACK_DEFAULT_CHANNEL` | tools | `""` |
+| `SUBAGENT_DEFAULT_BUDGET` | tools | `3` |
+| `SUBAGENT_MAX_BUDGET` | tools | `8` |
+| `TEAM_MODE` | gateway | `false` |
+| `TELEGRAM_API_BASE` | gateway | `"https://api.telegram.org"` |
+| `TELEGRAM_BOT_TOKEN` | gateway | `""` |
+| `TELEGRAM_INGEST_MODE` | gateway | `"polling"` |
+| `TELEGRAM_REPLY_KEYBOARD` | gateway | `true` |
+| `TELEGRAM_WEBHOOK_SECRET` | gateway | `""` |
+| `TELEGRAM_WEBHOOK_URL` | gateway | `""` |
+| `TOOLS_URL` | gateway | `"http://tools:8200"` |
+| `TRAIN_RETRAIN_MIN_CURATED` | tools | `200` |
+| `TTS_DEVICE` | tts | `"cuda"` |
+| `TTS_LANGUAGE` | tts | `"ru"` |
+| `TTS_MAX_CHARS` | tts | `800` |
+| `TTS_MODEL` | tts | `"tts_models/multilingual/multi-dataset/xtts_v2"` |
+| `TTS_SPEAKER_WAV` | tts | `"/app/voices/reference.wav"` |
+| `TTS_SYNTH_TIMEOUT` | tts | `120.0` |
+| `TTS_URL` | gateway | `"http://tts:8300"` |
+| `TWIN_DATA_DIR` | twin | `"/data/twin"` |
+| `TWIN_MIN_EVAL_PROMOTE` | twin | `0.0` |
+| `TWIN_REGISTRY_DB` | twin | `"/data/twin/registry.db"` |
+| `TWIN_URL` | gateway, tools | `"http://twin:8765"` |
+| `UPLOAD_DIR` | gateway | `"/data/uploads"` |
+| `WEBAPP_DEV_OPEN` | gateway | `false` |
+| `WHISPER_LANGUAGE` | gateway | `""` |
+| `WHISPER_URL` | gateway | `"http://whisper:9000"` |
+
+<!-- GEN:ENV-INVENTORY:END -->
