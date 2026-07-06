@@ -191,6 +191,14 @@ class Settings(
     # (анти-leak). Дефолт off (ADR-008).
     enable_friction_telemetry: bool = False
 
+    # Confirm-mesh MVP (SY-5): confirm-запит → ntfy-push із deep-link + паспорти
+    # kind:confirm_request|confirm_decision (аудит S4). Push вимагає PUSH_ENABLED
+    # + NTFY_TOPIC. Дефолт off (ADR-008).
+    enable_confirm_push: bool = False
+    # Deep-link для тапу по push-нотифікації (канал апруву): напр. Mini App
+    # https://<tunnel>/app або ntfy-safe URL. Порожньо = без Click-заголовка.
+    confirm_push_click_url: str = ""
+
     # Push через ntfy (BE3, CL-3.6) — daily-дайджест/пропозиції на телефон.
     # Поля — спільний блок PushCfg (jarvis_core.settings): env-імена/дефолти незмінні.
 

@@ -273,7 +273,7 @@ eval-скор ≥ поточного; ModelRegistry версіонує (P7); met
 **DoD:** неможливо активувати LoRA з нижчим eval-score (гейт-тест); кожен тренувальний ран —
 паспорт `kind:training_run`.
 
-### SY-5 — Confirm-mesh — `S4 × шина × три канали` — 🔴 todo
+### SY-5 — Confirm-mesh — `S4 × шина × три канали` — 🟡 MVP done (2026-07-06)
 
 | Стовп | Принципи | Залежність | ICE |
 |-------|----------|------------|-----|
@@ -283,8 +283,13 @@ eval-скор ≥ поточного; ModelRegistry версіонує (P7); met
 (ntfy), toast у /platform. Перший апрув виграє, решта карток гаситься. Approve/deny — теж
 паспорти → повний аудит-трейл небезпечних дій; «що я дозволив минулого тижня» — ретрив.
 
-- [ ] **SY-5.1** MVP: `confirm_pending` → push-нотифікація (ntfy) з deep-link на канал апруву
-- [ ] **SY-5.2** конверти `kind:confirm_request|confirm_decision` (+ ref на дію)
+- [x] **SY-5.1** MVP: `confirm_pending` → push-нотифікація (ntfy) з deep-link на канал апруву
+      (`tools/app/confirm_events.py`; хук у `wrap_execute`/admin-2nd-confirm; deep-link —
+      `CONFIRM_PUSH_CLICK_URL`, click у спільному `jarvis_core/push.py`; прапор
+      `ENABLE_CONFIRM_PUSH`)
+- [x] **SY-5.2** конверти `kind:confirm_request|confirm_decision` (+ `ref=confirm:<code>`;
+      approve у `execute_confirmed`, cancel у `cancel_pending`; теги `tier:`/`status:` —
+      у KNOWN_NAMESPACES)
 - [ ] **SY-5.3** mesh (після SY-B2): fan-out на канали, first-responder-wins, гасіння карток
 - [ ] **SY-5.4** APK computer-confirm з телефона (CL-роадмап) сідає на цю ж механіку
 

@@ -5,7 +5,7 @@ import importlib
 from typing import Any
 
 import pytest
-from app import friction
+from app import context_emit, friction
 from app.agent import AgentRunner
 from app.config import settings
 
@@ -25,7 +25,7 @@ class _IngestSpy:
 @pytest.fixture
 def spy(monkeypatch):
     s = _IngestSpy()
-    monkeypatch.setattr(friction, "_memory", s)
+    monkeypatch.setattr(context_emit, "_memory", s)
     monkeypatch.setattr(settings, "enable_friction_telemetry", True)
     return s
 
@@ -34,10 +34,10 @@ def spy(monkeypatch):
 
 async def test_flag_off_is_noop(monkeypatch):
     s = _IngestSpy()
-    monkeypatch.setattr(friction, "_memory", s)
+    monkeypatch.setattr(context_emit, "_memory", s)
     monkeypatch.setattr(settings, "enable_friction_telemetry", False)
     friction.record_friction(7, friction.REASON_TOOL_FAIL, summary="x", tool="calc")
-    await friction.drain()
+    await context_emit.drain()
     assert s.stores == []
 
 
@@ -45,7 +45,7 @@ async def test_record_builds_friction_passport(spy):
     friction.record_friction(
         7, friction.REASON_TOOL_FAIL, summary="Інструмент calc впав: ValueError", tool="calc"
     )
-    await friction.drain()
+    await context_emit.drain()
     st = spy.stores[0]
     assert st["kind"] == "friction" and st["user_id"] == 7
     assert st["source"] == "agent_loop" and st["sensitivity"] == "personal"
@@ -54,13 +54,13 @@ async def test_record_builds_friction_passport(spy):
 
 async def test_zero_user_is_skipped(spy):
     friction.record_friction(0, friction.REASON_TOOL_FAIL, summary="x", tool="calc")
-    await friction.drain()
+    await context_emit.drain()
     assert spy.stores == []
 
 
 async def test_summary_truncated(spy):
     friction.record_friction(7, friction.REASON_LOOP_EXHAUSTED, summary="д" * 500)
-    await friction.drain()
+    await context_emit.drain()
     assert len(spy.stores[0]["summary"]) == 300
 
 
@@ -72,7 +72,7 @@ async def test_dispatch_tool_crash_emits_type_only(spy, monkeypatch):
 
     monkeypatch.setitem(dmod._HANDLERS, "calc", boom)
     out = await dmod.dispatch("calc", {"expression": "2+2"}, user_id=7)
-    await friction.drain()
+    await context_emit.drain()
     assert "впав" in out
     st = spy.stores[0]
     # Анти-leak: у паспорті лише ТИП помилки, ані шляхів, ані секретів.
@@ -83,7 +83,7 @@ async def test_dispatch_tool_crash_emits_type_only(spy, monkeypatch):
 
 async def test_dispatch_unknown_tool_emits_friction(spy):
     out = await dmod.dispatch("neexistuje", {}, user_id=7)
-    await friction.drain()
+    await context_emit.drain()
     assert "Невідомий інструмент" in out
     st = spy.stores[0]
     assert "reason:unknown_tool" in st["tags"] and "tool:neexistuje" in st["tags"]
@@ -130,7 +130,7 @@ async def test_loop_exhausted_emits_friction(spy, monkeypatch):
         ]
     )
     out = await AgentRunner(ollama, _FakeMemory()).run(7, "скільки буде 2+2")
-    await friction.drain()
+    await context_emit.drain()
     assert out["text"] == "4"
     reasons = {t for st in spy.stores for t in st["tags"]}
     assert "reason:loop_exhausted" in reasons
