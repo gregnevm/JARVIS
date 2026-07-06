@@ -1,6 +1,6 @@
 # JARVIS — API Platform Roadmap (Стовп A)
 
-> **Версія:** 1.15 (2026-06-16)
+> **Версія:** 1.21 (2026-07-06)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «один глобальний OpenAI-сумісний ключ» до **повноцінної платформи
 > розробника** як OpenAI/Anthropic Platform — per-org ключі, повний `/v1`, usage, console, playground, SDK.
@@ -207,6 +207,31 @@ AP-0 (/v1 baseline ✅) ─► [enabler: SAAS PR#0 IDOR + PR#1 tenant ctx] ─�
 
 ---
 
+## AP-7 — MCP-конектор (JARVIS як вихідний MCP-сервер) · **🟢 усі 7 портів ✅ (12 tool-ів, HTTP-транспорт, MCP-хаб, redaction); лишок — per-org key (блок AP-1)**
+
+**Мета:** як `/v1` робить JARVIS drop-in для OpenAI SDK, MCP-конектор робить його drop-in для
+**MCP-хостів** (Claude Code / Cursor / Claude Desktop). Платформа споживається стандартним протоколом;
+будь-який agent-хост стає новим каналом (перетин зі Стовпом C — див. CLIENTS §2.3 CC7). Реюзить
+`/api/v1/*` (CL-1.3) + `resolve_client_context`; **нуль змін у бекенді** (клієнтський stdio-сайдкар, S2).
+
+> Концепт: [`JARVIS_CONNECTOR_CONCEPT.md`](JARVIS_CONNECTOR_CONCEPT.md) · P1-спека:
+> [`JARVIS_CONNECTOR_P1.spec.md`](JARVIS_CONNECTOR_P1.spec.md) · код: `.claude/skills/jarvis/`
+> (generic ядро `connector/` + `adapters/jarvis/`).
+
+| # | Задача | DoD | Статус |
+|---|--------|-----|--------|
+| AP-7.1 | stdio-MVP: tools `whoami`+`chat`; fail-fast порти endpoint/auth; anti-leak audit (SSOT `JsonlLog`) | mypy-strict + юніт (mocked-httpx) + живий round-trip | [x] `connector/server.py`; 11 тестів зелені; **live whoami** (synthetic studio org, via basic) + **live chat** (→Ollama→`pong`) ✅; `build_server` реєструє `[whoami, chat]` |
+| AP-7.2 | Контекст-tools: `context_search`/`recent`/`ingest` (культура P9/P10) | за `ENABLE_CONTEXT_API` | [x] реюз `/api/v1/context/*` + `/ingest/events`; live search ✅ (hits=0, API on); +мапінг-тести |
+| AP-7.3 | Confirm-gated дії: `code`/`computer` через `confirm_gate` (S4) | ніколи auto-confirm power/admin | [x] `code`→`/code/task`, `computer`→`/driver/exec`, `confirm_*`→`/api/v1/confirm/*`; dispatch≠виконання, апрув окремо; live `confirm_pending` ✅; мутуючі — лише mock-тест (свідомо не ганяв) |
+| AP-7.4 | Керований MCP-хаб: `mcp_list`/`mcp_call` ре-експонують агрегатор (tools `/mcp/*`) | auth перед downstream; за прапором | [x] gateway `client_api/mcp.py` (`/api/v1/mcp/{servers,call}`, `ENABLE_MCP_HUB`, default off — S2) + конектор-тули; `mypy gateway/app` ✅; gateway-тести (4) + конектор-тести зелені; **redaction downstream ✅** (порт #6, нижче) |
+| AP-7.6 | `redaction` port: скраб секретів у вихідних результатах перед хост-AI (S1) | реюз SSOT Redactor; default-on | [x] `JarvisClient._call` → `jarvis_core.passport.Redactor.redact` (реюз) на всіх вихідних рядках; `JARVIS_REDACT=0` opt-out; 2 тести (scrub/passthrough); узгоджено з gateway redact-before-store |
+| AP-7.5 | HTTP/remote транспорт + per-org key (поверх AP-1) | opt-in, S1 redaction | [~] **HTTP-транспорт є** (`JARVIS_MCP_TRANSPORT=stdio\|http\|sse`, FastMCP streamable-http); **per-org key блок на AP-1** (`sk-jarvis` ще нема) |
+
+**Вихід AP-7:** `claude mcp add jarvis` → керування локальною платформою з будь-якого MCP-хоста під
+єдиною auth, з confirm-гейтом і редакцією. S1: endpoint локальний за дефолтом; S2: за прапором, бекенд незмінний.
+
+---
+
 ## 4. `/v1` surface (ціль)
 
 ```
@@ -259,7 +284,11 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
-| 2026-07-06 | 1.17 | **Hardening (broken access control):** cookie-канал `require_platform_auth` (`platform/auth.py`) повертав `PlatformAuth(via="cookie")` для БУДЬ-ЯКОГО валідного `jarvis_jwt` без `is_admin`-звірки, тоді як initData/Basic — admin-only. `/connect` мінтить cookie для будь-кого `allowed`, тож не-адмін-друг через one-tap отримував developer-консоль (мінт/відкликання `sk-jarvis-*`, usage, логи). Фікс: `if is_admin(cookie_uid)` — не-адмін падає у Basic/401. +4 регрес-тести |
+| 2026-07-06 | 1.21 | **Hardening (broken access control):** cookie-канал `require_platform_auth` (`platform/auth.py`) повертав `PlatformAuth(via="cookie")` для БУДЬ-ЯКОГО валідного `jarvis_jwt` без `is_admin`-звірки, тоді як initData/Basic — admin-only. `/connect` мінтить cookie для будь-кого `allowed`, тож не-адмін-друг через one-tap отримував developer-консоль (мінт/відкликання `sk-jarvis-*`, usage, логи). Фікс: `if is_admin(cookie_uid)` — не-адмін падає у Basic/401. +4 регрес-тести |
+| 2026-06-25 | 1.20 | **AP-7.6** redaction port — скраб секретів перед хост-AI (реюз `jarvis_core.Redactor`, default-on); усі 7 портів конектора ✅ |
+| 2026-06-25 | 1.19 | **AP-7.4/7.5a** MCP-хаб (gateway `/api/v1/mcp/*` за `ENABLE_MCP_HUB`, default off — S2) + `mcp_list/mcp_call` тули + HTTP-транспорт (12 tool-ів); per-org key лишається блоком на AP-1 |
+| 2026-06-25 | 1.18 | **AP-7.2/7.3** конектор: context-tools + confirm-gated code/computer (10 tool-ів; live read-only verified; нуль бекенд-дифу) |
+| 2026-06-25 | 1.17 | **AP-7** MCP-конектор (P1 stdio-MVP: `whoami`+`chat`, live-verified; нуль бекенд-дифу) |
 | 2026-06-23 | 1.16 | **P0-4 hardening:** anti-impersonation gate поширено на весь `/v1`-surface — `/responses`, `POST /jobs`, `GET /jobs/{id}` ішли через ungated `_resolve_uid` (impersonation + job IDOR); тепер один gated SSOT-резолвер (`allowed_ids`-gate), `_resolve_user_id` інлайнено |
 | 2026-06-16 | 1.15 | AP-5.3 Node/openai-node quickstart (§2b) |
 | 2026-06-16 | 1.14 | AP-5.5 Postman collection (`sdk/`) |

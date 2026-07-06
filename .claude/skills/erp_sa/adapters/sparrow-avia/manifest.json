@@ -1,0 +1,51 @@
+{
+  "profile": "sparrow-avia",
+  "description": "Adapter ERP Sparrow-Avia для engine erp_sa. Єдине місце ERP-конкретики; engine (../../engine) лишається generic. route_map/field_aliases — SEED: реальні селектори/лейбли знімаються live через erp_sa.inspect_form і фіксуються тут (анти-дрейф, P7/D1).",
+  "base_url": "https://erp.sparrow-avia.tech",
+  "vpn_only": true,
+  "flag": "ENABLE_ERP_SA",
+
+  "allowlist": [
+    "https://erp.sparrow-avia.tech/import/*",
+    "https://erp.sparrow-avia.tech/import/index"
+  ],
+  "allowlist_note": "Порт `fill` звіряє location.href ПЕРЕД кожною дією. Поза цими патернами — відмова (deny-wins, fail-closed). Розширити лише свідомо.",
+
+  "recognize": {
+    "text": "agent-path (chat mode) + structured-output промпт",
+    "digital": "text-extract (pdf/xlsx/csv/docx) → agent-path",
+    "scan": "OLLAMA_MODEL_VISION (llava:7b|qwen2.5vl:7b) / describe_image → agent-path",
+    "note": "Інференс локальний (S1). Vision порожній у дефолті .env — обрати модель у P2."
+  },
+
+  "route_map": {
+    "_seed": true,
+    "_todo": "Підтвердити реальні маршрути import-підсторінок через inspect_form за VPN.",
+    "invoice":             "/import/index",
+    "waybill":             "/import/index",
+    "packing_list":        "/import/index",
+    "customs_declaration": "/import/index",
+    "part_order":          "/import/index"
+  },
+
+  "field_aliases": {
+    "_seed": true,
+    "_todo": "Замінити на реальні name/id/label селектори форми, зняті через inspect_form.",
+    "doc_number":     ["номер", "№", "number", "doc_no", "документ №"],
+    "doc_date":       ["дата", "date", "від", "дата документа"],
+    "counterparty":   ["контрагент", "постачальник", "supplier", "vendor", "відправник"],
+    "edrpou":         ["єдрпоу", "код єдрпоу", "edrpou", "tax id", "іпн"],
+    "item_name":      ["найменування", "товар", "номенклатура", "item", "description", "запчастина"],
+    "part_number":    ["артикул", "part number", "p/n", "код товару", "sku"],
+    "quantity":       ["кількість", "к-сть", "qty", "quantity"],
+    "unit":           ["од", "одиниця", "unit", "uom"],
+    "price":          ["ціна", "price", "unit price", "вартість за од"],
+    "amount":         ["сума", "amount", "total", "всього"],
+    "currency":       ["валюта", "currency", "cur"]
+  },
+
+  "confirm": {
+    "final_submit": "human-only",
+    "note": "Autofill заповнює поля; кнопку «Зберегти»/submit тисне людина або confirm_approve. Ніколи не auto-submit (S4)."
+  }
+}

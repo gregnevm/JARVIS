@@ -161,6 +161,10 @@ class Settings(
     # (ADR-008); off (дефолт) = нуль змін поведінки, полінг-шляхи незмінні.
     enable_passport_bus: bool = False
 
+    # AP-7.4: MCP-хаб — ре-експонує агрегатор MCP-серверів (tools /mcp/*) під client-API auth,
+    # щоб вихідний конектор (/jarvis) був керованим MCP-хабом. За прапором (S2): дефолт off.
+    enable_mcp_hub: bool = False
+
     # Claude-міст для coding (dispatch -> remote code via Claude). Cloud, явний opt-in (S1).
     enable_claude_code_bridge: bool = False
 

@@ -86,6 +86,7 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 |--------|------------|--------|
 | `ENABLE_CONTEXT_API` | `false` | Вмикає `/api/v1/ingest/events` + `/api/v1/context/{search,recent,purge}` (паспорти контексту → memory). Дефолт off (S2) |
 | `CONTEXT_INGEST_MAX_BATCH` | `500` | Стеля подій в одному батчі ingest |
+| `ENABLE_MCP_HUB` | `false` | (gateway, AP-7.4) Вмикає `/api/v1/mcp/{servers,call}` — ре-експонує агрегатор MCP-серверів (tools `/mcp/*`) під client-API auth для конектора `/jarvis`. Дефолт off (S2); вимкнено → 404 |
 | `ENABLE_CONTEXT_RETRIEVAL` | `false` | (tools) Інжект паспортів контексту в промпт агента (memory `/context/search`). Off = нуль додаткового latency |
 | `CONTEXT_RETRIEVAL_TOP_K` | `5` | Скільки паспортів інжектити в контекст агента |
 | `CONTEXT_SCHEDULER_ENABLED` | `false` | (gateway) In-app автозапуск context-jobs. Off = нічого; альтернатива — зовн. cron на `/api/v1/context/jobs/*` (ADR-008) |
