@@ -17,6 +17,7 @@
 | [`docs/AGENT_MODE_ROADMAP.md`](AGENT_MODE_ROADMAP.md) | Computer Use / desktop AM-0…AM-4 |
 | [`docs/SAAS_DEEP_DIVE.md`](SAAS_DEEP_DIVE.md) | Мультитенант enabler (PR#0…#7) |
 | [`docs/TEAM_ECOSYSTEM_ROADMAP.md`](TEAM_ECOSYSTEM_ROADMAP.md) | **Стовп D (пропозиція)** — командна екосистема: граф зв'язків, делегати, групи, BPO (TC-0…TC-6) |
+| [`docs/SYNERGY_ROADMAP.md`](SYNERGY_ROADMAP.md) | **Крос-стовповий трек** — паспортна шина (нервова система) + 10 синергій (SY-B, SY-1…SY-10) |
 | [`ROADMAP.md`](../ROADMAP.md) · [`docs/DESIGN.md`](DESIGN.md) · [`docs/GAP_ANALYSIS.md`](GAP_ANALYSIS.md) | Ops · архітектура · gap |
 
 ---
