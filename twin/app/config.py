@@ -5,12 +5,13 @@ from typing import Literal
 
 import httpx
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 
 from jarvis_core.llm import LLMInterface, build_llm_stack
+from jarvis_core.settings import OllamaCfg
 
 
-class Settings(BaseSettings):
+class Settings(OllamaCfg):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 
     # Twin-специфічні шляхи читаємо під TWIN_-префіксом (validation_alias), щоб не
@@ -22,8 +23,8 @@ class Settings(BaseSettings):
         default="/data/twin/registry.db", validation_alias="TWIN_REGISTRY_DB"
     )
 
+    # ollama_host — спільний блок OllamaCfg (ті самі env, що й tools/memory).
     llm_backend: Literal["ollama", "kobold"] = "ollama"
-    ollama_host: str = "http://host.docker.internal:11434"
     ollama_model: str = "qwen2.5:7b-instruct"
     kobold_host: str = "http://127.0.0.1:5001"
     llm_timeout: float = 180.0

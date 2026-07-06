@@ -1,13 +1,16 @@
 """Конфігурація Memory service."""
 from __future__ import annotations
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
+
+from jarvis_core.settings import OllamaCfg, RedisCfg
 
 
-class Settings(BaseSettings):
+class Settings(RedisCfg, OllamaCfg):
+    """Композиція: спільні блоки (R4 «Тонкий шлюз») + memory-специфічні поля."""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 
-    ollama_host: str = "http://host.docker.internal:11434"
     embed_model: str = "nomic-embed-text"
     embed_dim: int = 768
 
@@ -19,8 +22,7 @@ class Settings(BaseSettings):
 
     short_term_limit: int = 10
 
-    # Redis — кеш ембедингів (необов'язковий; fail-open якщо недоступний).
-    redis_url: str = "redis://redis:6379/0"
+    # Redis (спільний блок RedisCfg) — кеш ембедингів; fail-open якщо недоступний.
     embed_cache_ttl: int = 86400  # 24 год
 
     # Ліміти контексту project files для агента (GET ?include_content=true).

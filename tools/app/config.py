@@ -3,14 +3,25 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
+
+from jarvis_core.settings import (
+    AuthIdsCfg,
+    ComputerCfg,
+    CoreServiceUrls,
+    DataDirCfg,
+    OllamaCfg,
+    RedisCfg,
+)
 
 
-class Settings(BaseSettings):
+class Settings(RedisCfg, OllamaCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg):
+    """Композиція: спільні блоки з jarvis_core.settings (R4 «Тонкий шлюз») +
+    tools-специфічні поля. Env-імена/дефолти незмінні (test_config_snapshot)."""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 
-    # Ollama (на ХОСТІ) + дві моделі
-    ollama_host: str = "http://host.docker.internal:11434"
+    # Ollama-моделі (хост — спільний блок OllamaCfg)
     ollama_model_chat: str = "gemma3:4b"
     ollama_model_agent: str = "qwen2.5:7b-instruct"
     # LLM_BACKEND=kobold — chat через KoboldAdapter (Edge/Twin CPU inference).
@@ -36,23 +47,10 @@ class Settings(BaseSettings):
     # Режим: hybrid (евристика) | chat (завжди CHAT без тулів) | agent (завжди тул-луп)
     agent_mode: str = "hybrid"
 
-    # Сусідні сервіси
-    memory_url: str = "http://memory:8100"
-    twin_url: str = "http://twin:8765"
-    # Redis — спільний із gateway: tool set_reminder пише у ZSET, gateway-поллер шле.
-    redis_url: str = "redis://redis:6379/0"
-
-    # Шлях до даних (персональні нотатки тощо) — том ./data:/data у compose.
-    data_dir: str = "/data"
+    # Сусідні сервіси/Redis/data_dir/whitelist — спільні блоки jarvis_core.settings.
 
     # Безпека / ліміти
     enable_code_exec: bool = False
-    # Telegram ID з доступом до Computer Use (скріншот, PS, FS). Порожньо → ADMIN → ALLOWED (.env).
-    computer_owner_user_ids: str = ""
-    # Режим computer лише для ADMIN_USER_IDS (застарілий прапор; краще COMPUTER_OWNER_USER_IDS).
-    computer_mode_admins_only: bool = False
-    allowed_user_ids: str = ""
-    admin_user_ids: str = ""
     # Computer Use — керування Windows-хостом через host-agent (поза Docker).
     enable_computer_use: bool = False
     computer_allow_admin: bool = False
@@ -75,16 +73,12 @@ class Settings(BaseSettings):
     computer_rate_limit_per_hour: int = 120
     computer_auto_vision: bool = True
     computer_allow_power: bool = False
-    hostagent_drop_dir: str = ""
-    remote_file_max_bytes: int = 48 * 1024 * 1024
     http_timeout: float = 20.0          # web_fetch / web_search
     ollama_timeout: float = 180.0       # CPU-інференс може бути повільним
     max_agent_iters: int = 5            # стеля ітерацій тул-лупа
     computer_max_iters: int = 12        # окремо для AGENT_MODE=computer (багатокрокові задачі)
     # safe | standard | full — які tier computer-tools доступні (див. computer_profile.py).
     computer_profile: str = "safe"
-    # Після ✅ — session trust: без confirm для T0/T1 (хв; 0 = вимкнено). cmp:YT = full trust.
-    computer_session_trust_minutes: int = 10
     fetch_max_chars: int = 6000         # обрізаємо сторінку, щоб не рознести контекст
     code_exec_timeout: float = 8.0
     # Circuit breaker Ollama: N підряд помилок → пауза cooldown секунд (fail-fast).
