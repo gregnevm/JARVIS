@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app import computer_policy
 from app.config import settings
 
