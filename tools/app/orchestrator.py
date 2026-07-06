@@ -159,7 +159,12 @@ async def run_orchestrator_pipeline(
     progress_cb: Any = None,
 ) -> dict[str, Any]:
     """Plan → Worker draft → Critic → optional revision → final."""
-    rec = await get_run(run_id)
+    # Anti-IDOR (AGENTS §5): scope the load to the caller. `POST /orchestrator/run`
+    # forwards a caller-supplied run_id, and the pipeline below mutates the record
+    # (finish_run rewrites result/draft/plan/status). Without the owner filter user A
+    # could run and overwrite user B's run + read back its result. get_run returns None
+    # on owner mismatch (redis_store owner_user_id gate) → fail closed to "run not found".
+    rec = await get_run(run_id, user_id)
     if rec is None:
         return {"error": "run not found"}
     rec["status"] = "running"
