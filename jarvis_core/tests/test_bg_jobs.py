@@ -68,3 +68,50 @@ def test_normalize_coding_task_requires_exe():
 def test_normalize_unknown_type():
     with pytest.raises(ValueError, match="unknown job type"):
         normalize_payload("bogus", {"text": "x"})
+
+
+# --- numeric-field validation: clean ValueError, not leaked int()/TypeError (P2 fail-fast) ---
+
+def test_int_field_defaults_when_missing():
+    # відсутнє числове поле → канонічний дефолт (семантика `or default` збережена)
+    assert normalize_payload("deep_research", {"query": "q"})["max_hops"] == 3
+    assert normalize_payload("subagent", {"task": "t"})["budget_iters"] == 3
+    assert normalize_payload("orchestrator", {"task": "t"}) == {
+        "task": "t", "run_id": "", "worker_budget": 5, "max_revisions": 1,
+    }
+
+
+def test_int_field_coerces_numeric_string():
+    # числовий рядок з JSON коерситься так само, як робив голий int()
+    assert normalize_payload("deep_research", {"query": "q", "max_hops": "7"})["max_hops"] == 7
+
+
+@pytest.mark.parametrize(
+    "job_type,payload,field",
+    [
+        ("deep_research", {"query": "q", "max_hops": "abc"}, "max_hops"),
+        ("subagent", {"task": "t", "budget_iters": "x"}, "budget_iters"),
+        ("agent_team", {"task": "t", "budget_per_role": "n"}, "budget_per_role"),
+        ("orchestrator", {"task": "t", "worker_budget": "z"}, "worker_budget"),
+        ("orchestrator", {"task": "t", "max_revisions": "q"}, "max_revisions"),
+        ("coding_task", {"exe": "pytest", "max_rounds": "y"}, "max_rounds"),
+    ],
+)
+def test_non_numeric_int_field_raises_clean_value_error(job_type, payload, field):
+    # нечисловий рядок → чистий ValueError із назвою поля, не витік `invalid literal for int()`
+    with pytest.raises(ValueError, match=f"{field} must be an integer"):
+        normalize_payload(job_type, payload)
+
+
+@pytest.mark.parametrize(
+    "job_type,payload,field",
+    [
+        ("deep_research", {"query": "q", "max_hops": [1, 2]}, "max_hops"),
+        ("subagent", {"task": "t", "budget_iters": {"n": 1}}, "budget_iters"),
+    ],
+)
+def test_non_int_type_raises_value_error_not_typeerror(job_type, payload, field):
+    # list/dict раніше давали TypeError, що прослизав повз `except ValueError` у роутах → 500.
+    # тепер це чистий ValueError (→ 400) із назвою поля.
+    with pytest.raises(ValueError, match=f"{field} must be an integer"):
+        normalize_payload(job_type, payload)
