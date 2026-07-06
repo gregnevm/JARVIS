@@ -2,7 +2,7 @@
 
 > Цикл: Specify → Plan → Tasks → Implement. Виконується kaizen-лупом як квартальна програма
 > (кандидат на новий OKR після закриття попереднього на 100%, цикл 19).
-> Статус: draft · Дата: 2026-07-06 · Автор: CTO-аудит
+> Статус: **delivered** (R1–R5, PR #86–#94) · Дата: 2026-07-06 · Автор: CTO-аудит
 
 ## 1. Specify
 
@@ -49,21 +49,21 @@
     (правки лише в фікстурах/wiring).
 
 - **Критерії прийняття:**
-  - [ ] `pytest gateway/tests` повністю проходить **локально** (Windows, без мережі) < 5 хв.
-  - [ ] У lifespan немає жодного безумовного мережевого `await` до зовнішніх API; BotFather-UI
+  - [x] `pytest gateway/tests` повністю проходить **локально** (Windows, без мережі) < 5 хв.
+  - [x] У lifespan немає жодного безумовного мережевого `await` до зовнішніх API; BotFather-UI
         реєструється фоновою best-effort таскою з таймаутом (лог warning при фейлі, не падіння).
-  - [ ] `grep httpx.AsyncClient gateway/app` → лише виділені клієнти-адаптери
+  - [x] `grep httpx.AsyncClient gateway/app` → лише виділені клієнти-адаптери
         (telegram/whisper/tts/tools_client_base + ≤2 обґрунтовані винятки); проксі-модулі
         client_api/* і platform/* використовують спільний helper.
-  - [ ] `from jarvis_core.autopilot import plan_cycle, render_dashboard, run_cycle` працює;
+  - [x] `from jarvis_core.autopilot import plan_cycle, render_dashboard, run_cycle` працює;
         `gateway/app/auto_coroutine.py` — лише thin-лупер/wiring (< 80 LOC) або видалений.
-  - [ ] Один auth-резолвер у `jarvis_core` (або спільному модулі gateway) з двома тонкими
+  - [x] Один auth-резолвер у `jarvis_core` (або спільному модулі gateway) з двома тонкими
         адаптерами; функція `_uid()` існує в одному місці.
-  - [ ] `.env.example` + `docs/ENV_CHECKLIST.md` генеруються скриптом з code-first джерела;
+  - [x] `.env.example` + `docs/ENV_CHECKLIST.md` генеруються скриптом з code-first джерела;
         CI падає, якщо згенероване ≠ закомічене (drift-гейт).
-  - [ ] Retention-політика паспортів: у git лишаються останні N=50 + агрегатний summary;
+  - [x] Retention-політика паспортів: у git лишаються останні N=50 + агрегатний summary;
         старші архівуються (`data/artifacts/self-improve/archive/*.tar.gz` поза git або LFS).
-  - [ ] ruff (базовий профіль) + gitleaks у CI-matrix; обидва зелені.
+  - [x] ruff (базовий профіль) + gitleaks у CI-matrix; обидва зелені.
 
 - **Файли/модулі в скоупі:**
   - `gateway/app/main.py` (lifespan → composition root), `gateway/app/bot_ui.py` (реєстрація UI)
