@@ -55,6 +55,10 @@
 - ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
   одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
   невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
+- ✅ **S8 (skill scanner)** pre-activation скан SKILL.md (`jarvis_core/safety/skill_scan.py`,
+  `SKILLS_SCAN_MODE=block|warn|off`, дефолт block): імперативні правила (download-pipe-exec,
+  destructive-fs, secrets/ssh-read, prompt-injection, encoded-exec) без false positive на
+  згадках у guardrail-текстах. Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.2 (QwenPaw).
 - ✅ **S7 (task-success eval)** `training/eval/task_success.py` + 20 read-only сценаріїв
   (`task_scenarios.json`): end-state перевірки live-контрактів (health / tools / security-guard /
   authority / ops) з latency і gate `--min-pass-pct` (Terminal-Bench-паттерн,

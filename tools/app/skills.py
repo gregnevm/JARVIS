@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from jarvis_core.safety import skill_scan
+
 from .config import settings
 from .redis_util import get_redis
 
@@ -80,6 +82,11 @@ def get_skill(skill_id: str) -> dict[str, Any] | None:
         return None
     raw = path.read_text(encoding="utf-8", errors="replace")
     meta, body = _parse_frontmatter(raw)
+    allowed, hits = skill_scan.verdict(body, settings.skills_scan_mode)
+    if hits:
+        logger.warning("skill %s: scan hits %s (mode=%s)", skill_id, hits, settings.skills_scan_mode)
+    if not allowed:
+        return None
     cap = settings.skills_max_chars
     if len(body) > cap:
         body = body[:cap] + "\n…[truncated]"
@@ -89,6 +96,7 @@ def get_skill(skill_id: str) -> dict[str, Any] | None:
         "description": meta.get("description") or "",
         "content": body,
         "meta": meta,
+        "scan_hits": hits,
     }
 
 

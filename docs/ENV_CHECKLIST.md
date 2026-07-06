@@ -351,6 +351,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `SELF_IMPROVE_SCAN_LIMIT` | tools | `50` |
 | `SHORT_TERM_LIMIT` | memory | `10` |
 | `SKILLS_MAX_CHARS` | tools | `4000` |
+| `SKILLS_SCAN_MODE` | tools | `"block"` |
 | `SLACK_BOT_TOKEN` | tools | `""` |
 | `SLACK_DEFAULT_CHANNEL` | tools | `""` |
 | `SUBAGENT_DEFAULT_BUDGET` | tools | `3` |

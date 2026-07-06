@@ -120,6 +120,9 @@ class Settings(
 
     # P7 Skills
     skills_max_chars: int = 4000
+    # Pre-activation скан SKILL.md (jarvis_core/safety/skill_scan.py):
+    # block (дефолт, fail-closed: hit → скіл не активується) | warn (лише лог) | off.
+    skills_scan_mode: str = "block"
 
     # P8 Subagents
     subagent_default_budget: int = 3
