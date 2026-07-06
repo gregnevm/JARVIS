@@ -55,6 +55,10 @@
 - ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
   одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
   невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
+- ✅ **S7 (task-success eval)** `training/eval/task_success.py` + 20 read-only сценаріїв
+  (`task_scenarios.json`): end-state перевірки live-контрактів (health / tools / security-guard /
+  authority / ops) з latency і gate `--min-pass-pct` (Terminal-Bench-паттерн,
+  `docs/COMPETITIVE_ANALYSIS.md` §3.7). Доповнює format-eval; підключений опцією в kaizen ci-gate.
 
 ---
 

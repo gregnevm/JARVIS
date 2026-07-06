@@ -19,6 +19,8 @@ pytest twin/tests        ; mypy twin/app
 pytest hostagent/tests   ; mypy hostagent/app
 # cheap_check (compose stays valid):
 docker compose config --quiet
+# task-success (опційний, ЛИШЕ коли live-стек піднятий; read-only сценарії):
+# python training/eval/task_success.py --min-pass-pct 90
 ```
 
 ## Caveats (from the reuse audit — do not skip)
