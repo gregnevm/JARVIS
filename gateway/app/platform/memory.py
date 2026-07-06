@@ -11,9 +11,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+
+from jarvis_core.service_client import ServiceError, call
 
 from ..config import settings
 from .._helpers import require_text
@@ -40,15 +41,12 @@ def _notes_path(user_id: int) -> Path:
 async def _post_memory(endpoint: str, payload: dict[str, Any]) -> Any:
     """POST `payload` на `{memory_url}/{endpoint}`, повернути розпарсений JSON.
 
-    Узагальнює побайтово ідентичний (з різним лише endpoint/payload) патерн
-    `async with httpx.AsyncClient(timeout=12.0) as cli: r = await cli.post(...);
-    r.raise_for_status(); data = r.json()`, повторений у `memory_search` та
-    `memory_history`. Кидає `httpx.HTTPError` — виклик сам вирішує, як
+    Кидає `ServiceError` (транспорт або не-2xx) — виклик сам вирішує, як
     логувати/якою заглушкою відповідати (формати fallback-відповідей різні)."""
-    async with httpx.AsyncClient(timeout=12.0) as cli:
-        r = await cli.post(f"{settings.memory_url.rstrip('/')}/{endpoint}", json=payload)
-        r.raise_for_status()
-        return r.json()
+    return await call(
+        settings.memory_url, "POST", f"/{endpoint}",
+        json=payload, timeout=12.0, service="memory",
+    )
 
 
 def register(router: APIRouter) -> None:
@@ -64,7 +62,7 @@ def register(router: APIRouter) -> None:
             payload["project_id"] = int(body.project_id)
         try:
             data = await _post_memory("search", payload)
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("memory search failed: %s", exc)
             return {
                 "results": [],
@@ -116,7 +114,7 @@ def register(router: APIRouter) -> None:
         lim = max(1, min(limit, 100))
         try:
             data = await _post_memory("history", {"user_id": uid, "limit": lim})
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("memory history failed: %s", exc)
             return {"messages": [], "user_id": uid, "error": str(exc)}
         return {"messages": data.get("messages") or [], "user_id": uid}
