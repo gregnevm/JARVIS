@@ -19,6 +19,7 @@ from . import (
     mcp,
     orchestrator,
     research,
+    routines,
     scheduler,
     skills,
     subagents,
@@ -49,6 +50,7 @@ _ROUTE_MODULES = (
     cursor,
     context,
     team,
+    routines,
 )
 
 

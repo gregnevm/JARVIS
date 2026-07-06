@@ -19,7 +19,7 @@ def register(router: APIRouter) -> None:
         if name not in CONTEXT_JOB_NAMES:
             raise HTTPException(status_code=404, detail=f"unknown context job: {name}")
         now = datetime.now(timezone.utc)
-        return await run_context_job(
+        result = await run_context_job(
             name,
             request.app.state.memory,
             request.app.state.chat_backend,
@@ -27,3 +27,8 @@ def register(router: APIRouter) -> None:
             day=now.date().isoformat(),
             now=now,
         )
+        # SY-9.3: запуск джоба (ручний, cron чи рутина) — run-паспорт для аудиту.
+        from ..routines import emit_routine_run
+
+        emit_routine_run(user_id, name, result)
+        return result

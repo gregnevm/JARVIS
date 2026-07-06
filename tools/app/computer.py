@@ -89,6 +89,16 @@ async def _request(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         return {"error": f"hostagent недоступний: {exc}"}
 
 
+async def hostagent_cli(exe: str, args: list[str]) -> dict[str, Any]:
+    """Прямий системний виклик exe на хості для ВНУТРІШНІХ фіч (routines SY-9).
+
+    Свідомо повз CLI-whitelist/confirm-цикл: викликач сам відповідає за S4
+    (явний user-initiated API-виклик) і за фіксований exe + валідовані args
+    (жодних сирих рядків користувача). Повертає {stdout, stderr, code} або {error}.
+    """
+    return await _request("POST", "/cli", json={"exe": exe, "args": args})
+
+
 async def _run_powershell_impl(
     script: str, as_admin: bool = False, *, trusted: bool = False
 ) -> str:

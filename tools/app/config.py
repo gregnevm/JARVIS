@@ -199,6 +199,16 @@ class Settings(
     # https://<tunnel>/app або ntfy-safe URL. Порожньо = без Click-заголовка.
     confirm_push_click_url: str = ""
 
+    # Рутини (SY-9): пропозиція → рядок Windows Task Scheduler через host-agent
+    # (schtasks; ADR-008 патерн — task б'є scripts/jarvis_context.py --job).
+    # Потребує ENABLE_COMPUTER_USE + HOSTAGENT_TOKEN (той самий кордон, що autopilot).
+    enable_routines: bool = False
+    # Шлях до репо НА ХОСТІ (де лежить scripts/jarvis_context.py), напр. O:\JARVIS.
+    routines_host_repo: str = ""
+    routines_python_exe: str = "python"
+    # URL gateway, який б'є scheduled task із хоста (auth — env хоста JARVIS_PASSWORD/TOKEN).
+    routines_gateway_url: str = "http://127.0.0.1:8000"
+
     # Push через ntfy (BE3, CL-3.6) — daily-дайджест/пропозиції на телефон.
     # Поля — спільний блок PushCfg (jarvis_core.settings): env-імена/дефолти незмінні.
 
