@@ -1,1 +1,3 @@
 httpx>=0.27
+# pydantic-settings: runtime-залежність jarvis_core.settings (R4 «Тонкий шлюз»).
+pydantic-settings>=2
