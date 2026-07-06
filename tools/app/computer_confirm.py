@@ -10,6 +10,11 @@ from .computer_access import computer_denied_message
 from .computer_audit import log_action
 from .computer_learned import is_cli_trusted, is_ps_trusted, learn_from_action
 from .config import settings
+from .confirm_events import (
+    DECISION_APPROVED,
+    emit_confirm_decision,
+    notify_confirm_request,
+)
 from .ps_whitelist import check_ps_whitelist, extract_ps_cmdlets
 from .redis_util import get_redis
 
@@ -235,6 +240,24 @@ async def clear_pending(user_id: int) -> None:
     await clear_origin(user_id)
 
 
+async def cancel_pending(user_id: int) -> None:
+    """Явна відмова користувача: очистка pending + рішення в аудит-трейл (SY-5.2).
+
+    Читаємо pending ДО очистки — інакше не буде code/tool для паспорта рішення.
+    """
+    from .confirm_events import DECISION_CANCELLED, emit_confirm_decision
+
+    pending = await load_pending_raw(user_id)
+    await clear_pending(user_id)
+    if pending.get("pending"):
+        emit_confirm_decision(
+            user_id,
+            str(pending.get("code") or ""),
+            DECISION_CANCELLED,
+            tool=str(pending.get("tool") or ""),
+        )
+
+
 async def save_origin(user_id: int, text: str) -> None:
     """Зберігає оригінальний user prompt для resume після confirm."""
     t = (text or "").strip()
@@ -348,6 +371,8 @@ async def wrap_execute(
         code = await save_pending(user_id, tool, args)
         desc = describe_action(tool, args)
         log_action(user_id, tool, tier, args, f"pending confirm {code}", confirmed=False)
+        # SY-5 MVP: запит видимий поза чатом — push із deep-link + паспорт.
+        notify_confirm_request(user_id, code, tool=tool, description=desc, tier=tier)
         return CONFIRM_MARKER.format(code=code) + f" {desc}"
     result = await executor()
     if mutating:
@@ -387,6 +412,7 @@ async def execute_confirmed(user_id: int, code: str) -> tuple[str, str]:
             f"pending admin confirm {code2}",
             confirmed=False,
         )
+        notify_confirm_request(user_id, code2, tool=tool, description=desc, tier="admin")
         return (
             ADMIN_CONFIRM_MARKER.format(code=code2)
             + f" ⚠️ Друге підтвердження Admin PowerShell: {desc}",
@@ -401,6 +427,8 @@ async def execute_confirmed(user_id: int, code: str) -> tuple[str, str]:
     await _touch_mutating_quota(user_id, tool, args)
     learn_from_action(tool, args)
     log_action(user_id, tool, tier, args, result, confirmed=True)
+    # SY-5.2: рішення — теж паспорт (аудит-трейл небезпечних дій ретривом).
+    emit_confirm_decision(user_id, code, DECISION_APPROVED, tool=tool)
     from .computer_trust import grant_trust, trust_ttl_seconds
 
     if trust_ttl_seconds() > 0:

@@ -34,9 +34,9 @@ def register(router: APIRouter) -> None:
 
     @router.post("/computer/cancel")
     async def computer_cancel_ep(req: ComputerConfirmRequest) -> dict[str, str]:
-        from ..computer_confirm import clear_pending
+        from ..computer_confirm import cancel_pending
 
-        await clear_pending(req.user_id)
+        await cancel_pending(req.user_id)
         return {"status": "cancelled"}
 
     @router.post("/computer/screenshot")

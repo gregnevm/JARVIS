@@ -106,6 +106,8 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 | `ENABLE_FRICTION_TELEMETRY` | `false` | (tools) SY-1: агент-луп емітить `kind:friction` (tool-fail/unknown-tool/loop-exhausted) → kaizen-backlog з реального болю. Без сирих аргументів (анти-leak) |
 | `ENABLE_USAGE_METERING` | `false` | (tools→gateway) SY-6: kind:usage агрегат-паспорти LLM-викликів — один SSOT для `/v1/usage` (tokens-блок), `/platform/api/usage` і kaizen O3 ECO |
 | `USAGE_METER_USER_ID` | `-770002` | Синтетичний UID-власник usage-паспортів (партиція стору, прецедент kaizen `-770001`) |
+| `ENABLE_CONFIRM_PUSH` | `false` | (tools) SY-5 MVP: confirm-запит → ntfy-push із deep-link + паспорти `kind:confirm_request\|confirm_decision` (аудит S4 ретривом) |
+| `CONFIRM_PUSH_CLICK_URL` | `` | Deep-link тапу по confirm-нотифікації (канал апруву, напр. Mini App `https://<tunnel>/app`) |
 
 ## Gateway: старт і локальні тести (R1 «Тонкий шлюз»)
 
@@ -152,7 +154,7 @@ docker compose up -d --build gateway tools
 
 <!-- GEN:ENV-INVENTORY:BEGIN (scripts/gen_env_docs.py — не редагуй руками) -->
 
-## Повний інвентар env-змінних (204 змінних, code-first)
+## Повний інвентар env-змінних (206 змінних, code-first)
 
 Згенеровано з Settings-класів сервісів. Оновити: `python scripts/gen_env_docs.py`.
 CI (`arch-gates`) падає, якщо таблиця/снапшоти розійшлися з кодом (drift-гейт D1).
@@ -207,6 +209,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `COMPUTER_REQUIRE_CONFIRM` | tools | `true` |
 | `COMPUTER_SESSION_TRUST_MINUTES` | gateway, tools | `10` |
 | `COMPUTER_TIMEOUT` | tools | `30.0` |
+| `CONFIRM_PUSH_CLICK_URL` | tools | `""` |
 | `CONTEXT_DAILY_HOUR` | gateway | `6` |
 | `CONTEXT_INGEST_MAX_BATCH` | gateway | `500` |
 | `CONTEXT_RETRIEVAL_TOP_K` | tools | `5` |
@@ -239,6 +242,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `ENABLE_CODE_EXEC` | tools | `false` |
 | `ENABLE_CODING_TOOLS` | tools | `false` |
 | `ENABLE_COMPUTER_USE` | tools | `false` |
+| `ENABLE_CONFIRM_PUSH` | tools | `false` |
 | `ENABLE_CONTEXT_API` | gateway | `false` |
 | `ENABLE_CONTEXT_RETRIEVAL` | tools | `false` |
 | `ENABLE_CONTINUE_DEV` | tools | `false` |
