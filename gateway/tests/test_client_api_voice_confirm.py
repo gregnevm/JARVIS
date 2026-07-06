@@ -94,10 +94,10 @@ def test_confirm_approve_requires_code(client):
 
 
 def test_confirm_pending_graceful_when_tools_down(client, monkeypatch):
-    import httpx
+    from jarvis_core.service_client import ServiceError
 
     async def boom(path, params):
-        raise httpx.ConnectError("down")
+        raise ServiceError("tools", "GET", path, detail="down")
     monkeypatch.setattr("app.client_api.confirm._tools_get", boom)
     r = client.get("/api/v1/confirm/pending", auth=AUTH)
     assert r.status_code == 200

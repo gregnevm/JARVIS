@@ -9,11 +9,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from jarvis_core.context import RequestContext
+from jarvis_core.service_client import ServiceError, call_dict
 
 from ..config import settings
 from .deps import resolve_client_context
@@ -46,21 +46,17 @@ def _uid(ctx: RequestContext) -> int:
 
 
 async def _mem_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=15.0) as cli:
-        r = await cli.get(f"{settings.memory_url.rstrip('/')}{path}", params=params)
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    return await call_dict(
+        settings.memory_url, "GET", path, params=params, timeout=15.0, service="memory"
+    )
 
 
 async def _mem(method: str, path: str, payload: dict[str, Any] | None = None,
                params: dict[str, Any] | None = None) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=15.0) as cli:
-        r = await cli.request(method, f"{settings.memory_url.rstrip('/')}{path}",
-                              json=payload, params=params)
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    return await call_dict(
+        settings.memory_url, method, path,
+        json=payload, params=params, timeout=15.0, service="memory",
+    )
 
 
 def register(router: APIRouter) -> None:
@@ -69,7 +65,7 @@ def register(router: APIRouter) -> None:
     async def sessions(ctx: RequestContext = Depends(resolve_client_context)) -> dict[str, Any]:
         try:
             return await _mem_get("/sessions", {"user_id": _uid(ctx), "limit": 30})
-        except httpx.HTTPError:
+        except ServiceError:
             return {"sessions": [], "error": "memory_unreachable"}
 
     @router.post("/history")
@@ -77,7 +73,7 @@ def register(router: APIRouter) -> None:
                       ctx: RequestContext = Depends(resolve_client_context)) -> dict[str, Any]:
         try:
             return await _mem("POST", "/history", {"user_id": _uid(ctx), "limit": body.limit})
-        except httpx.HTTPError:
+        except ServiceError:
             return {"messages": [], "error": "memory_unreachable"}
 
     # ---- projects CRUD ----
@@ -85,7 +81,7 @@ def register(router: APIRouter) -> None:
     async def projects_list(ctx: RequestContext = Depends(resolve_client_context)) -> dict[str, Any]:
         try:
             return await _mem_get("/projects", {"user_id": _uid(ctx)})
-        except httpx.HTTPError:
+        except ServiceError:
             return {"projects": [], "error": "memory_unreachable"}
 
     @router.post("/projects")
@@ -95,7 +91,7 @@ def register(router: APIRouter) -> None:
             return await _mem("POST", "/projects",
                               {"user_id": _uid(ctx), "name": body.name,
                                "system_prompt": body.system_prompt})
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             raise HTTPException(status_code=502, detail="memory unreachable") from exc
 
     @router.get("/projects/{project_id}")
@@ -103,7 +99,7 @@ def register(router: APIRouter) -> None:
                            ctx: RequestContext = Depends(resolve_client_context)) -> dict[str, Any]:
         try:
             return await _mem_get(f"/projects/{project_id}", {"user_id": _uid(ctx)})
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             raise HTTPException(status_code=502, detail="memory unreachable") from exc
 
     @router.patch("/projects/{project_id}")
@@ -118,7 +114,7 @@ def register(router: APIRouter) -> None:
             payload["archived"] = body.archived
         try:
             return await _mem("PATCH", f"/projects/{project_id}", payload)
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             raise HTTPException(status_code=502, detail="memory unreachable") from exc
 
     @router.delete("/projects/{project_id}")
@@ -126,5 +122,5 @@ def register(router: APIRouter) -> None:
                               ctx: RequestContext = Depends(resolve_client_context)) -> dict[str, Any]:
         try:
             return await _mem("DELETE", f"/projects/{project_id}", params={"user_id": _uid(ctx)})
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             raise HTTPException(status_code=502, detail="memory unreachable") from exc

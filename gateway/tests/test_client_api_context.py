@@ -5,7 +5,7 @@ TestClient + Basic-auth (як test_client_api.py); memory-виклик (`_post_m
 org-scope (uid=legacy_uid), стелю батчу і graceful-фолбек при недоступному memory."""
 from __future__ import annotations
 
-import httpx
+from jarvis_core.service_client import ServiceError
 import pytest
 from fastapi.testclient import TestClient
 
@@ -42,7 +42,7 @@ class _MemorySpy:
     async def __call__(self, endpoint: str, payload: dict) -> dict:
         self.calls.append((endpoint, payload))
         if endpoint in self.raise_on:
-            raise httpx.ConnectError("memory down")
+            raise ServiceError("memory", "POST", f"/context/{endpoint}", detail="memory down")
         resp = self.responses[endpoint]
         return resp(payload) if callable(resp) else dict(resp)  # type: ignore[operator]
 

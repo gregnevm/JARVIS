@@ -13,11 +13,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from jarvis_core.context import RequestContext
+from jarvis_core.service_client import ServiceError, call_dict
 
 from ..agent_payload import build_agent_payload
 from ..config import settings
@@ -41,12 +41,10 @@ def _uid(ctx: RequestContext) -> int:
 
 async def _tools(method: str, path: str, payload: dict[str, Any] | None = None,
                  params: dict[str, Any] | None = None) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=60.0) as cli:
-        r = await cli.request(method, f"{settings.tools_url.rstrip('/')}{path}",
-                              json=payload, params=params)
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    return await call_dict(
+        settings.tools_url, method, path,
+        json=payload, params=params, timeout=60.0, service="tools",
+    )
 
 
 def register(router: APIRouter) -> None:
@@ -66,14 +64,14 @@ def register(router: APIRouter) -> None:
     async def driver_screenshot(ctx: RequestContext = Depends(resolve_client_context)) -> dict[str, Any]:
         try:
             return await _tools("POST", "/computer/screenshot", {"user_id": _uid(ctx)})
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             raise HTTPException(status_code=502, detail="computer-use unreachable") from exc
 
     @router.get("/driver/status")
     async def driver_status(ctx: RequestContext = Depends(resolve_client_context)) -> dict[str, Any]:
         try:
             st = await _tools("GET", "/computer/trust/status", params={"user_id": _uid(ctx)})
-        except httpx.HTTPError:
+        except ServiceError:
             st = {"error": "computer-use unreachable"}
         return {"enabled": settings.enable_computer_use if hasattr(settings, "enable_computer_use") else None,
                 "trust": st}
