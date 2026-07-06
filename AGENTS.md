@@ -218,6 +218,7 @@ CI (`.github/workflows/ci.yml`) — matrix по `jarvis_core/gateway/memory/tool
 | [`ROADMAP.md`](ROADMAP.md) | Короткий ops-backlog (M/N/E/S) | Ops |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Архітектура PortableAI (Edge+Twin+LoRA), ADR | Архітектура |
 | [`docs/GAP_ANALYSIS.md`](docs/GAP_ANALYSIS.md) | PortableAI vs поточний стек | Аналіз |
+| [`docs/COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) | JARVIS vs відкриті аналоги (07.2026): матриця, best practices по 10 осях, шортлист адаптації | Аналіз |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) · [`docs/ENV_CHECKLIST.md`](docs/ENV_CHECKLIST.md) · [`docs/COMPUTER_USE.md`](docs/COMPUTER_USE.md) | Безпека · env · tier-контракт | Ops |
 | [`docs/IMPROVEMENT_PROPOSALS.md`](docs/IMPROVEMENT_PROPOSALS.md) | Інженерний лог дедуплікації/тестів (не продуктовий) | Інженерний |
 
