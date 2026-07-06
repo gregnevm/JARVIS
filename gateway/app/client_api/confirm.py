@@ -8,11 +8,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from jarvis_core.context import RequestContext
+from jarvis_core.service_client import ServiceError, call_dict
 
 from ..config import settings
 from .deps import resolve_client_context
@@ -34,19 +34,15 @@ def _uid(ctx: RequestContext) -> int:
 
 
 async def _tools_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=15.0) as cli:
-        r = await cli.get(f"{settings.tools_url.rstrip('/')}{path}", params=params)
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    return await call_dict(
+        settings.tools_url, "GET", path, params=params, timeout=15.0, service="tools"
+    )
 
 
 async def _tools_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=60.0) as cli:
-        r = await cli.post(f"{settings.tools_url.rstrip('/')}{path}", json=payload)
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    return await call_dict(
+        settings.tools_url, "POST", path, json=payload, timeout=60.0, service="tools"
+    )
 
 
 def register(router: APIRouter) -> None:
@@ -56,7 +52,7 @@ def register(router: APIRouter) -> None:
     ) -> dict[str, Any]:
         try:
             return await _tools_get("/computer/pending", {"user_id": _uid(ctx)})
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("confirm pending failed: %s", type(exc).__name__)
             return {"pending": False, "error": "tools_unreachable"}
 
@@ -70,7 +66,7 @@ def register(router: APIRouter) -> None:
             return await _tools_post(
                 "/computer/confirm", {"user_id": _uid(ctx), "code": body.code.strip()}
             )
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("confirm approve failed: %s", type(exc).__name__)
             raise HTTPException(status_code=502, detail="tools unreachable") from exc
 
@@ -80,6 +76,6 @@ def register(router: APIRouter) -> None:
     ) -> dict[str, Any]:
         try:
             return await _tools_post("/computer/cancel", {"user_id": _uid(ctx)})
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("confirm cancel failed: %s", type(exc).__name__)
             raise HTTPException(status_code=502, detail="tools unreachable") from exc

@@ -13,11 +13,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from jarvis_core.context import RequestContext
+from jarvis_core.service_client import ServiceError, call_dict
 from jarvis_core.passport import (
     CONTEXT_JOB_NAMES,
     Passport,
@@ -93,23 +93,19 @@ def _uid(ctx: RequestContext) -> int:
 
 
 async def _post_memory(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """POST на memory `/context/{endpoint}` → JSON. Кидає httpx.HTTPError (ловить виклик)."""
-    async with httpx.AsyncClient(timeout=15.0) as cli:
-        r = await cli.post(
-            f"{settings.memory_url.rstrip('/')}/context/{endpoint}", json=payload
-        )
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    """POST на memory `/context/{endpoint}` → JSON. Кидає ServiceError (ловить виклик)."""
+    return await call_dict(
+        settings.memory_url, "POST", f"/context/{endpoint}",
+        json=payload, timeout=15.0, service="memory",
+    )
 
 
 async def _post_tools(path: str, params: dict[str, Any]) -> dict[str, Any]:
     """POST на tools `{path}` (context-job). Довгий таймаут — job кличе Ollama."""
-    async with httpx.AsyncClient(timeout=300.0) as cli:
-        r = await cli.post(f"{settings.tools_url.rstrip('/')}{path}", params=params)
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    return await call_dict(
+        settings.tools_url, "POST", path,
+        params=params, timeout=300.0, service="tools",
+    )
 
 
 def _build_store(ev: ContextEvent, uid: int, org_id: str, redactor: Redactor) -> dict[str, Any]:
@@ -176,7 +172,7 @@ def register(router: APIRouter) -> None:
                 continue
             try:
                 res = await _post_memory("ingest", store)
-            except httpx.HTTPError as exc:
+            except ServiceError as exc:
                 failed += 1
                 # Лише лічильник/тип помилки — НЕ payload (anti token/PII leak).
                 logger.warning("context ingest failed for one event: %s", type(exc).__name__)
@@ -203,7 +199,7 @@ def register(router: APIRouter) -> None:
         }
         try:
             data = await _post_memory("search", payload)
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("context search failed: %s", type(exc).__name__)
             return {"results": [], "error": "memory_unreachable"}
         return {"results": data.get("results") or []}
@@ -221,7 +217,7 @@ def register(router: APIRouter) -> None:
         }
         try:
             data = await _post_memory("recent", payload)
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("context recent failed: %s", type(exc).__name__)
             return {"events": [], "error": "memory_unreachable"}
         return {"events": data.get("events") or []}
@@ -234,7 +230,7 @@ def register(router: APIRouter) -> None:
         payload = {"user_id": _uid(ctx), "before": body.before, "kind": body.kind}
         try:
             data = await _post_memory("purge", payload)
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("context purge failed: %s", type(exc).__name__)
             raise HTTPException(status_code=502, detail="memory unreachable") from exc
         return {"deleted": int(data.get("deleted", 0))}
@@ -249,7 +245,7 @@ def register(router: APIRouter) -> None:
             return await _post_memory(
                 "ledger", {"user_id": _uid(ctx), "recent_limit": body.recent_limit}
             )
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("context ledger failed: %s", type(exc).__name__)
             return {"total": 0, "by_kind": {}, "by_source": {}, "recent": [], "error": "memory_unreachable"}
 
@@ -264,6 +260,6 @@ def register(router: APIRouter) -> None:
             raise HTTPException(status_code=404, detail=f"unknown context job: {name}")
         try:
             return await _post_tools(f"/context/jobs/{name}", {"user_id": _uid(ctx)})
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("context job %s failed: %s", name, type(exc).__name__)
             raise HTTPException(status_code=502, detail="tools unreachable") from exc
