@@ -17,7 +17,7 @@ from jarvis_core.context import RequestContext
 from .._helpers import require_mode
 from ..agent_payload import build_agent_payload
 from ..config import settings
-from .deps import resolve_client_context
+from .deps import context_uid as _uid, resolve_client_context
 
 logger = logging.getLogger("jarvis.gateway.client_api.code")
 
@@ -25,15 +25,6 @@ logger = logging.getLogger("jarvis.gateway.client_api.code")
 class CodeTask(BaseModel):
     text: str
     target: str = "local"  # local (рідний агент) | claude (опційний міст, за прапором)
-
-
-def _uid(ctx: RequestContext) -> int:
-    if ctx.legacy_uid is not None:
-        return int(ctx.legacy_uid)
-    try:
-        return int(ctx.user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="no numeric user id")
 
 
 def register(router: APIRouter) -> None:

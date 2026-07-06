@@ -19,8 +19,8 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from jarvis_core.context import RequestContext, synthetic_context
 
 from ..auth import is_admin
+from ..auth_channels import jwt_uid
 from ..config import settings
-from ..saas import auth as jwt_auth
 from ..telegram_webapp_auth import authorize_admin
 
 _security = HTTPBasic(auto_error=False)
@@ -110,20 +110,16 @@ def require_platform_auth(
         uid = authorize_admin(x_telegram_init_data)
         return PlatformAuth(via="telegram", user_id=uid)
     # JWT-cookie з Telegram one-tap (`/connect`) — браузерна сесія без пароля.
-    if jarvis_jwt and jwt_auth.jwt_enabled():
-        try:
-            claims = jwt_auth.decode(jarvis_jwt)
-            raw_uid = claims.get("legacy_uid")
-            cookie_uid = int(raw_uid) if raw_uid is not None else int(claims["sub"])
-            # Cookie-канал admin-only, як initData (authorize_admin) і Basic (_primary_admin_id):
-            # `/connect` мінтить JWT для БУДЬ-КОГО allowed (друг з ALLOWED_USER_IDS чи /allow),
-            # а не лише admin. Без цієї звірки не-адмін через one-tap отримував повний доступ
-            # до developer-консолі (створення/відкликання sk-jarvis-* ключів, usage, логи).
-            # Не-адмін → не повертаємо: падаємо у Basic/401/503 нижче (як битий cookie).
-            if is_admin(cookie_uid):
-                return PlatformAuth(via="cookie", user_id=cookie_uid)
-        except (jwt_auth.JWTError, KeyError, ValueError, TypeError):
-            pass  # битий/прострочений cookie → пробуємо Basic, інакше 401/503
+    # Декод — спільний примітив (auth_channels.jwt_uid); битий/прострочений → None.
+    cookie_uid = jwt_uid(jarvis_jwt)
+    if cookie_uid is not None:
+        # Cookie-канал admin-only, як initData (authorize_admin) і Basic (_primary_admin_id):
+        # `/connect` мінтить JWT для БУДЬ-КОГО allowed (друг з ALLOWED_USER_IDS чи /allow),
+        # а не лише admin. Без цієї звірки не-адмін через one-tap отримував повний доступ
+        # до developer-консолі (створення/відкликання sk-jarvis-* ключів, usage, логи).
+        # Не-адмін → не повертаємо: падаємо у Basic/401/503 нижче (як битий cookie).
+        if is_admin(cookie_uid):
+            return PlatformAuth(via="cookie", user_id=cookie_uid)
     if platform_enabled():
         if credentials is None:
             raise HTTPException(

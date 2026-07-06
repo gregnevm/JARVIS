@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.auto_coroutine import (
+from jarvis_core.autopilot import (
     STAGE_IDS,
     StageContext,
     StageOutcome,
@@ -145,7 +145,7 @@ def test_render_dashboard_mode_reflects_ultracode_flag():
 
 
 def test_save_dashboard_bypass_persists_mode(tmp_path):
-    from app.auto_coroutine import save_dashboard
+    from jarvis_core.autopilot import save_dashboard
 
     okr = OKR(objectives=(Objective(id="O", title="Obj"),))
     save_dashboard(str(tmp_path), okr, [], bypass=True)

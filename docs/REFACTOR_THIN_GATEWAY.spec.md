@@ -124,14 +124,14 @@ handler-и напряму). Відкат — revert одного PR, бо міг
 - [x] **R1.2** Прапор `GATEWAY_STARTUP_NET` (+ .env.example, ENV_CHECKLIST) — глушить стартову мережу
 - [x] **R1.3** Фікстура тестів: дефолтно `startup_net=false`; прибрати обхідні милиці з conftest
 - [x] **R1.4** Верифікація: повний `pytest gateway/tests` локально < 5 хв (записати в AGENTS.md §5)
-- [ ] **R2.1** `jarvis_core/service_client.py` + юніт-тести (ретраї, таймаути, error-envelope)
-- [ ] **R2.2–R2.6** Міграція: client_api/* → platform/* → services/projects → openai_api/admin_panel
+- [x] **R2.1** `jarvis_core/service_client.py` + юніт-тести (ретраї, таймаути, error-envelope)
+- [x] **R2.2–R2.6** Міграція: client_api/* → platform/* → services/projects → openai_api/admin_panel
       → tools_client_base (по PR на групу)
-- [ ] **R2.7** Гейт: grep-перевірка в CI (список дозволених місць `httpx.AsyncClient`)
-- [ ] **R3.1** `jarvis_core/autopilot/` (перенос stage machine + 21 тест)
-- [ ] **R3.2** Gateway-лупер → thin wiring поверх ядра
-- [ ] **R3.3** Redaction/store-building → `jarvis_core.passport`; context.py — лише I/O
-- [ ] **R3.4** Єдиний auth-резолвер + адаптери client_api/platform; вбити дубль `_uid()`
+- [x] **R2.7** Гейт: grep-перевірка в CI (список дозволених місць `httpx.AsyncClient`)
+- [x] **R3.1** `jarvis_core/autopilot/` (перенос stage machine + 21 тест)
+- [x] **R3.2** Gateway-лупер → thin wiring поверх ядра
+- [x] **R3.3** Redaction/store-building → `jarvis_core.passport`; context.py — лише I/O
+- [x] **R3.4** Єдиний auth-резолвер + адаптери client_api/platform; вбити дубль `_uid()`
 - [ ] **R4.1** `jarvis_core/settings/` блоки + міграція gateway/tools config (env-імена незмінні)
 - [ ] **R4.2** `scripts/gen_env_docs.py` + CI drift-гейт; згенерувати .env.example/ENV_CHECKLIST
 - [ ] **R5.1** Retention паспортів (kaizen-профіль ротує; архів поза git)
@@ -149,6 +149,18 @@ handler-и напряму). Відкат — revert одного PR, бо міг
   `GATEWAY_STARTUP_NET` глушить і поллери (reminders/health-watch/job-runners/autopilot/apk).
   Autouse-фікстура `_no_startup_net` у conftest; милиця `health_watch_interval=0` прибрана.
   Відхилення: `asyncio.wait_for` замість `asyncio.timeout` (локальний dev-Python 3.10).
+- **2026-07-06 · R2 (R2.1–R2.7)** — PR #87/#89/#90: `jarvis_core/service_client.py`
+  (error-envelope ServiceError, per-call таймаути 1:1, ретраї, DI-клієнти) + повна міграція
+  проксі-блоків gateway (client_api, platform, services, projects, openai_api, webapp,
+  context_scheduler). 26 входжень `httpx.AsyncClient(` → 8 (4 адаптери + services-DI +
+  2 задокументовані винятки: admin-probe, GitHub APK). CI job `arch-gates` тримає allowlist.
+- **2026-07-06 · R3 (R3.1–R3.4)** — гілка `claude/tg-r3-autopilot-core`: стейт-машина
+  автопілота → `jarvis_core/autopilot/` (23 тести переїхали в core; gateway-модуль —
+  explicit re-export shim на 1 реліз + shim-тест); store-building → `jarvis_core.passport.
+  build_store_event` (+5 тестів; gateway лише мапить pydantic→виклик); спільні auth-примітиви
+  `gateway/app/auth_channels.py` (bearer/JWT-декод — SSOT, політики каналів лишились у
+  двох адаптерах свідомо: різні контракти 401/503 і admin-gate); `_uid()` — 6 копій → 1
+  (`client_api/deps.context_uid`).
 - **2026-07-06 · R1.4** — критерій < 5 хв перевиконано: повний локальний прогін **~58s**
   (раніше — нескінченний hang). Другий пожирач часу після стартової мережі — Windows
   ретраїть TCP-connect до закритого порту ~2s: docker-хости у фікстурі переведені на
