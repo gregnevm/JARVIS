@@ -11,11 +11,12 @@ from jarvis_core.settings import (
     CoreServiceUrls,
     DataDirCfg,
     OllamaCfg,
+    PushCfg,
     RedisCfg,
 )
 
 
-class Settings(RedisCfg, OllamaCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg):
+class Settings(RedisCfg, OllamaCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg, PushCfg):
     """Композиція: спільні блоки з jarvis_core.settings (R4 «Тонкий шлюз») +
     tools-специфічні поля. Env-імена/дефолти незмінні (test_config_snapshot)."""
 
@@ -180,10 +181,8 @@ class Settings(RedisCfg, OllamaCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, Com
     enable_context_retrieval: bool = False
     context_retrieval_top_k: int = 5
 
-    # Push через ntfy (BE3, CL-3.6) — daily-дайджест/пропозиції на телефон. Дефолт off (S1: ntfy, не FCM).
-    push_enabled: bool = False
-    ntfy_url: str = "https://ntfy.sh"
-    ntfy_topic: str = ""  # унікальний топік користувача; APK підписаний (UnifiedPush)
+    # Push через ntfy (BE3, CL-3.6) — daily-дайджест/пропозиції на телефон.
+    # Поля — спільний блок PushCfg (jarvis_core.settings): env-імена/дефолти незмінні.
 
 
 settings = Settings()

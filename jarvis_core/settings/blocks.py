@@ -45,6 +45,14 @@ class AuthIdsCfg(BaseSettings):
     admin_user_ids: str = ""
 
 
+class PushCfg(BaseSettings):
+    """ntfy push (UnifiedPush, S1 суверенно) — tools (джоби) і gateway (шина SY-B1)."""
+
+    push_enabled: bool = False
+    ntfy_url: str = "https://ntfy.sh"
+    ntfy_topic: str = ""  # унікальний топік користувача; APK підписаний (UnifiedPush)
+
+
 class ComputerCfg(BaseSettings):
     """Computer Use: коло довірених, trust-вікно, drop-zone, ліміт файлів (gateway ↔ tools)."""
 

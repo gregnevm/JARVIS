@@ -16,15 +16,18 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from jarvis_core.bus import BusMeta
 from jarvis_core.context import RequestContext
 from jarvis_core.passport import (
     CONTEXT_JOB_NAMES,
+    Passport,
     Redactor,
     build_store_event,
     default_redactor,
 )
 from jarvis_core.service_client import ServiceError, call_dict
 
+from ..bus import get_passport_bus
 from ..config import settings
 from .deps import context_uid as _uid
 from .deps import resolve_client_context
@@ -92,6 +95,24 @@ async def _post_tools(path: str, params: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+async def _emit_to_bus(
+    store: dict[str, Any], uid: int, org_id: str, store_id: Any
+) -> None:
+    """SY-B1: подія на шину після успішного store. Збій шини/підписника НІКОЛИ
+    не валить ingest (DoD) — emit ізолює помилки, це лише страховка."""
+    try:
+        await get_passport_bus().emit(
+            Passport.from_store(store),
+            BusMeta(
+                user_id=uid,
+                org_id=org_id,
+                store_id=int(store_id) if store_id is not None else None,
+            ),
+        )
+    except Exception:  # noqa: BLE001 — шина не має права ламати збір контексту
+        logger.exception("passport bus emit failed (ingest не зачеплено)")
+
+
 def _build_store(ev: ContextEvent, uid: int, org_id: str, redactor: Redactor) -> dict[str, Any]:
     """Мапить ContextEvent → фінішний store-паспорт. Домен (дві швидкості,
     редакція, нормалізація) — у `jarvis_core.passport.build_store_event` (R3, S3)."""
@@ -143,6 +164,10 @@ def register(router: APIRouter) -> None:
                 continue
             if res.get("inserted"):
                 accepted += 1
+                # SY-B1.2: emit ПІСЛЯ store (durable log = context_events; дублі не
+                # емітяться — ідемпотентність store = ідемпотентність шини).
+                if settings.enable_passport_bus:
+                    await _emit_to_bus(store, uid, ctx.org_id, res.get("id"))
             else:
                 duplicates += 1
             if res.get("id") is not None:

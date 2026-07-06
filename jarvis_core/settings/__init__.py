@@ -5,6 +5,7 @@ from .blocks import (
     CoreServiceUrls,
     DataDirCfg,
     OllamaCfg,
+    PushCfg,
     RedisCfg,
 )
 from .inventory import settings_inventory
@@ -15,6 +16,7 @@ __all__ = [
     "CoreServiceUrls",
     "DataDirCfg",
     "OllamaCfg",
+    "PushCfg",
     "RedisCfg",
     "settings_inventory",
 ]

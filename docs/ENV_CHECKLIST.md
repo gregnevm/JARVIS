@@ -97,6 +97,13 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 > Auth — спільний client-API resolver (JWT/initData/Basic). Колектор без залежностей:
 > `scripts/jarvis_context.py` (нотатка/pipe/hotkey/cron). Дані лише в memory користувача (S1).
 
+## Паспортна шина (SY-B, docs/SYNERGY_ROADMAP.md)
+
+| Змінна | За замовч. | Навіщо |
+|--------|------------|--------|
+| `ENABLE_PASSPORT_BUS` | `false` | (gateway) In-proc Observer: ingest emit ПІСЛЯ store → підписники (перший — push ntfy на `priority:high`). Off = нуль змін поведінки (ADR-008) |
+| `PUSH_ENABLED` + `NTFY_URL`/`NTFY_TOPIC` | `false` | Спільний блок `PushCfg` (gateway шина + tools джоби): ntfy UnifiedPush, S1-суверенно |
+
 ## Gateway: старт і локальні тести (R1 «Тонкий шлюз»)
 
 | Змінна | Приклад | Навіщо |
@@ -142,7 +149,7 @@ docker compose up -d --build gateway tools
 
 <!-- GEN:ENV-INVENTORY:BEGIN (scripts/gen_env_docs.py — не редагуй руками) -->
 
-## Повний інвентар env-змінних (200 змінних, code-first)
+## Повний інвентар env-змінних (201 змінних, code-first)
 
 Згенеровано з Settings-класів сервісів. Оновити: `python scripts/gen_env_docs.py`.
 CI (`arch-gates`) падає, якщо таблиця/снапшоти розійшлися з кодом (drift-гейт D1).
@@ -233,6 +240,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `ENABLE_CONTEXT_RETRIEVAL` | tools | `false` |
 | `ENABLE_CONTINUE_DEV` | tools | `false` |
 | `ENABLE_OPENAI_API` | gateway | `false` |
+| `ENABLE_PASSPORT_BUS` | gateway | `false` |
 | `ENABLE_REACTION_REPLIES` | gateway | `true` |
 | `ENABLE_STREAMING` | gateway | `true` |
 | `ENABLE_VOICE_REPLY` | gateway | `false` |
@@ -279,8 +287,8 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `MEMORY_URL` | gateway, tools | `"http://memory:8100"` |
 | `NOTION_DATABASE_ID` | tools | `""` |
 | `NOTION_TOKEN` | tools | `""` |
-| `NTFY_TOPIC` | tools | `""` |
-| `NTFY_URL` | tools | `"https://ntfy.sh"` |
+| `NTFY_TOPIC` | gateway, tools | `""` |
+| `NTFY_URL` | gateway, tools | `"https://ntfy.sh"` |
 | `OLLAMA_COOLDOWN` | tools | `60.0` |
 | `OLLAMA_FAIL_THRESHOLD` | tools | `3` |
 | `OLLAMA_HOST` | memory, tools, twin | `"http://host.docker.internal:11434"` |
@@ -307,7 +315,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `PS_WHITELIST` | tools | `""` |
 | `PUBLIC_ADMIN_APP_URL` | gateway | `""` |
 | `PUBLIC_APP_URL` | gateway | `""` |
-| `PUSH_ENABLED` | tools | `false` |
+| `PUSH_ENABLED` | gateway, tools | `false` |
 | `RATE_LIMIT_PER_MIN` | gateway | `20` |
 | `REDIS_URL` | gateway, memory, tools | `"redis://redis:6379/0"` |
 | `REMINDER_POLL_SECONDS` | gateway | `20.0` |

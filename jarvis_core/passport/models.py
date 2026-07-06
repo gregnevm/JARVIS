@@ -69,3 +69,25 @@ class Passport:
             "audience": self.audience,
             "group_ref": self.group_ref,
         }
+
+    @classmethod
+    def from_store(cls, store: dict[str, Any]) -> "Passport":
+        """Зворотний до `to_store`: відновлює доменний конверт зі store-dict.
+
+        Owner/org-ключі (`user_id`/`org_id`) ігноруються — вони поза конвертом
+        (для шини їх несе `BusMeta`). Використання: emit ПІСЛЯ store (SY-B1)."""
+        return cls(
+            kind=str(store.get("kind") or DEFAULT_KIND),
+            summary=str(store.get("summary") or ""),
+            tags=list(store.get("tags") or []),
+            sensitivity=normalize_sensitivity(store.get("sensitivity")),
+            source=store.get("source"),
+            ref=store.get("ref"),
+            event_id=store.get("event_id"),
+            event_ts=store.get("event_ts"),
+            payload=dict(store.get("payload") or {}),
+            subjects=list(store.get("subjects") or []),
+            visibility=str(store.get("visibility") or "private"),
+            audience=list(store.get("audience") or []),
+            group_ref=store.get("group_ref"),
+        )
