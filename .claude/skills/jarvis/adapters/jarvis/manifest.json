@@ -1,0 +1,36 @@
+{
+  "profile": "jarvis",
+  "description": "JARVIS-адаптер для вихідного MCP-конектора. Єдине місце JARVIS-конкретики; ядро (connector/server.py) лишається generic. Маршрути дзеркаляться у server._ROUTES (drift під тестом test_manifest_matches_routes).",
+  "transport": "stdio",
+  "base_url_default": "http://localhost:8000",
+  "auth_modes": ["bearer", "basic"],
+  "auth_note": "sk-jarvis-* per-org ще не реалізований (AP-1) → робочий self-hosted шлях = Basic (PLATFORM_PASSWORD/ADMIN_PANEL_PASSWORD, або co-located .env) чи JWT.",
+  "audit_path_default": "data/logs/jarvis_connector.jsonl",
+  "pillars": ["A", "B", "C"],
+  "phase": 4,
+  "transports": ["stdio", "streamable-http", "sse"],
+  "flags": {
+    "context_*": "ENABLE_CONTEXT_API",
+    "computer": "ENABLE_COMPUTER_USE",
+    "code.target=claude": "ENABLE_CLAUDE_CODE_BRIDGE",
+    "mcp_*": "ENABLE_MCP_HUB",
+    "redaction": "JARVIS_REDACT (default on; 0=off) — скраб секретів перед хост-AI (S1)"
+  },
+  "routes": {
+    "whoami": {"method": "GET", "path": "/api/v1/whoami", "pillar": "A"},
+    "chat": {"method": "POST", "path": "/api/v1/chat", "pillar": "C"},
+    "context_search": {"method": "POST", "path": "/api/v1/context/search", "pillar": "A"},
+    "context_recent": {"method": "POST", "path": "/api/v1/context/recent", "pillar": "A"},
+    "context_ingest": {"method": "POST", "path": "/api/v1/ingest/events", "pillar": "A"},
+    "code": {"method": "POST", "path": "/api/v1/code/task", "pillar": "B"},
+    "computer": {"method": "POST", "path": "/api/v1/driver/exec", "pillar": "B"},
+    "confirm_pending": {"method": "GET", "path": "/api/v1/confirm/pending", "pillar": "B"},
+    "confirm_approve": {"method": "POST", "path": "/api/v1/confirm/approve", "pillar": "B"},
+    "confirm_cancel": {"method": "POST", "path": "/api/v1/confirm/cancel", "pillar": "B"},
+    "mcp_list": {"method": "GET", "path": "/api/v1/mcp/servers", "pillar": "A"},
+    "mcp_call": {"method": "POST", "path": "/api/v1/mcp/call", "pillar": "A"}
+  },
+  "deferred": {
+    "per_org_key": "phase-5 (sk-jarvis per-org — enabler-блок на AP-1)"
+  }
+}

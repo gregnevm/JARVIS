@@ -238,3 +238,47 @@ kaizen-score 86 (-2: низький власний throughput через кол�
   без регресій (`jarvis_core` 45 + `tools/app` 91 mypy 🟢). Local commit, no push.
 - **Follow-up (drift):** `tts` ще НЕ в `.github/workflows/ci.yml` матриці — додавання
   тягне важкі deps (TTS/torch) → рішення про CI-час за людиною. mypy-блокер знято.
+
+## Kaizen window 2026-07-04-1203 (ULTRACODE max-utilization, 8 PR змерджено в green `main`)
+
+Свіже 5-годинне вікно (window_start 12:03:48 UTC). Кожен інкремент вироблено й перевірено
+мультиагентним **Workflow**-оркеструванням (ultracode): PLAN judge-panel (4 скаути A/B/C/foundation
+→ 15 кандидатів → leverage-суддя з evidence spot-check) згенерував ранжовану чергу (збережено в
+`plan-queue.json`); кожна ітерація — WRITE → adversarial 2–4-lens REVIEW → незалежний VERIFY кожної
+знахідки → LOCAL CI-gate → commit → PR → watch-green → squash-merge. Ізоляція: усі правки в
+`O:/JARVIS-kaizen` worktree з `origin/main`; жива гілка користувача не торкнута.
+
+Змерджено (усі після 7/7 remote CI green, 0 reverts, main зелений усе вікно):
+
+1. **#73** `fix(orchestrator)` — `parse_critic_verdict` substring→word-boundary `\bAPPROVED\b`:
+   «DISAPPROVED»/«UNAPPROVED» більше не парситься як approved=True (Critic-gate інвертувався на
+   S1 prose-path). Review зрефакторив над-широкий reject-regex до мінімальної форми. Merged `f94cbc8`.
+2. **#74** `fix(bot)` — tgauth arming лише для server-minted `pending` токена (`bind_tgauth_login`,
+   single-use pending→uid): закрито arbitrary-token session-fixation → account-takeover + resurrection +
+   clobber. Residual unauth-mint fixation → spawn-task follow-up. Merged `0f01511`.
+3. **#75** `fix(memory)` — redaction-backstop на `/context/update` (redact-before-embed): summarize-job
+   LLM-summary більше не кладе картки/OTP/секрети cleartext (sibling PR#69). Merged `37a8991`.
+4. **#76** `fix(mcp)` — `call_tool` тепер піднімає `CallToolResult.isError` як failure до агент-лупу
+   (раніше tool-failure повертався як success observation). Merged `44a03ba`.
+5. **#77** `fix(api)` — `GET /v1/models` під `require_scope('models')` (мертвий scope став живим; бек-
+   сумісно бо models у `_DEFAULT_SCOPES`); закрито doc/code-drift AP-1.5 + `API_QUICKSTART`. Merged `a122b86`.
+6. **#78** `fix(bot)` — `is_addressed` @mention word-boundary: `@jarvis_bot` не матчить у
+   `@jarvis_bot_admin`/`@jarvis_bot2` (spurious respond+ambient-ingest чужих повідомлень). Merged `3c15c47`.
+7. **#79** `fix(webapp)` — Telegram initData fail-closed на відсутній/невалідний `auth_date`
+   (раніше fail-open → необмежене вікно реплею). Merged `f7d472a`.
+8. **#80** `fix(saas)` — all-invalid API-key scopes → `[]` (least privilege), не всі defaults (тихе
+   розширення привілеїв); перевернуто+перейменовано тест, що кодував баг, +e2e 403. Merged `2371448`.
+
+Покриття: +17 тест-функцій (~45 кейсів). Doc-sync (D1): iter5 **закрив** AP-1.5/QUICKSTART дрейф
+(0 нового дрейфу введено). Пиляри: 3× security (auth/redaction), 3× correctness, 2× pillar-A scope —
+усі 3 стовпи + foundation.
+
+Стоп: **backlog_dry безпечних високо-цінних задач** (не бюджет — лишалось ~180 хв). Хвіст черги —
+ризиковий/пре-емптивний: #9 inline-toolcall (0.55, для JARVIS майже гіпотетичний — усі імена
+інструментів `\w+`, моделі емітять name-first; фікс переписує DoS-guarded парсер), #10 mcp-rpc
+foreign-request-hang (0.50, concurrency-sensitive, важко верифікувати офлайн), #11 context-events
+org-scope reads (0.34, пре-емптивний, без поточного failure, під майбутній SAAS_MODE). Per ULTRACODE
+quality-over-quantity — wind-down замість форсування маргінальних ітерацій.
+
+kaizen-score **94** (+5). Артефакти: `data/artifacts/self-improve/` (паспорти 0122–0155,
+`window.json` 8 ітерацій, `summary.json`, `plan-queue.json`). Worktree знято; жива гілка чиста.

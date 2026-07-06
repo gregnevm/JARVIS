@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "jarvis": {
+      "command": ".venv/Scripts/python.exe",
+      "args": [".claude/skills/jarvis/connector/server.py"],
+      "env": {
+        "JARVIS_BASE_URL": "http://localhost:8000"
+      }
+    },
+    "erp_sa": {
+      "command": ".venv/Scripts/python.exe",
+      "args": [".claude/skills/erp_sa/engine/server.py"],
+      "env": {
+        "ERP_SA_BASE_URL": "http://localhost:8000"
+      }
+    }
+  }
+}

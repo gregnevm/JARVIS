@@ -25,6 +25,7 @@ from . import code as code_api
 from . import confirm as confirm_api
 from . import context as context_api
 from . import driver as driver_api
+from . import mcp as mcp_api
 from . import routines as routines_api
 from . import workspace as workspace_api
 from .deps import resolve_client_context
@@ -188,3 +189,5 @@ chrome_api.register(router)
 code_api.register(router)
 # Рутини (SY-9) — пропозиція → scheduled task у ≤2 кліки; проксі до tools.
 routines_api.register(router)
+# MCP-хаб (AP-7.4) — ре-експонує агрегатор MCP-серверів під client-API auth (за ENABLE_MCP_HUB).
+mcp_api.register(router)

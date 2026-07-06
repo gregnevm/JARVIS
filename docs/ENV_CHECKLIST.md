@@ -86,6 +86,7 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 |--------|------------|--------|
 | `ENABLE_CONTEXT_API` | `false` | Вмикає `/api/v1/ingest/events` + `/api/v1/context/{search,recent,purge}` (паспорти контексту → memory). Дефолт off (S2) |
 | `CONTEXT_INGEST_MAX_BATCH` | `500` | Стеля подій в одному батчі ingest |
+| `ENABLE_MCP_HUB` | `false` | (gateway, AP-7.4) Вмикає `/api/v1/mcp/{servers,call}` — ре-експонує агрегатор MCP-серверів (tools `/mcp/*`) під client-API auth для конектора `/jarvis`. Дефолт off (S2); вимкнено → 404 |
 | `ENABLE_CONTEXT_RETRIEVAL` | `false` | (tools) Інжект паспортів контексту в промпт агента (memory `/context/search`). Off = нуль додаткового latency |
 | `CONTEXT_RETRIEVAL_TOP_K` | `5` | Скільки паспортів інжектити в контекст агента |
 | `CONTEXT_SCHEDULER_ENABLED` | `false` | (gateway) In-app автозапуск context-jobs. Off = нічого; альтернатива — зовн. cron на `/api/v1/context/jobs/*` (ADR-008) |
@@ -157,7 +158,7 @@ docker compose up -d --build gateway tools
 
 <!-- GEN:ENV-INVENTORY:BEGIN (scripts/gen_env_docs.py — не редагуй руками) -->
 
-## Повний інвентар env-змінних (210 змінних, code-first)
+## Повний інвентар env-змінних (211 змінних, code-first)
 
 Згенеровано з Settings-класів сервісів. Оновити: `python scripts/gen_env_docs.py`.
 CI (`arch-gates`) падає, якщо таблиця/снапшоти розійшлися з кодом (drift-гейт D1).
@@ -250,6 +251,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `ENABLE_CONTEXT_RETRIEVAL` | tools | `false` |
 | `ENABLE_CONTINUE_DEV` | tools | `false` |
 | `ENABLE_FRICTION_TELEMETRY` | tools | `false` |
+| `ENABLE_MCP_HUB` | gateway | `false` |
 | `ENABLE_OPENAI_API` | gateway | `false` |
 | `ENABLE_PASSPORT_BUS` | gateway | `false` |
 | `ENABLE_REACTION_REPLIES` | gateway | `true` |

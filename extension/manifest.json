@@ -3,7 +3,7 @@
   "name": "JARVIS Chrome Bridge",
   "version": "1.0.0",
   "description": "Двосторонній міст: JARVIS керує цим браузером (і навпаки) через твій сервер.",
-  "permissions": ["tabs", "scripting", "activeTab", "storage"],
+  "permissions": ["tabs", "scripting", "activeTab", "storage", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "JARVIS Bridge" }
