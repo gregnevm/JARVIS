@@ -152,12 +152,14 @@ class PassportBus(Protocol):
 **DoD:** e2e-тест «ingest → підписник отримав паспорт»; збій підписника не валить ingest;
 прапор off → нуль змін поведінки.
 
-### SY-B2 — RedisBus (крос-сервісний транспорт) — 🔴 todo
+### SY-B2 — RedisBus (крос-сервісний транспорт) — 🟡 B2.1 done (2026-07-06)
 
 **Мета:** gateway↔tools↔memory на одній шині; Edge лишається на `InProcBus` (P1).
 
-- [ ] **SY-B2.1** адаптер `RedisBus` (pub/sub; Redis уже в стеку — нуль нових залежностей);
-      ключі з org-префіксом `jarvis:{org_id}:bus:*` (multi-tenant дисципліна, статут §5)
+- [x] **SY-B2.1** адаптер `RedisBus` (pub/sub; Redis уже в стеку — нуль нових залежностей:
+      клієнт приходить ззовні duck-type'ом `RedisClientLike`, ядро пакет redis не тягне);
+      канал з org-префіксом `jarvis:{org_id}:bus:events` через `redis_key` (статут §5);
+      listener із реконект-backoff; той самий containment/анти-петлі, що InProcBus
 - [ ] **SY-B2.2** daily/proposal переведені на підписки; `context_scheduler` лишається
       fallback-guard (дух ADR-008: реактивність — за прапором, cron — страховка)
 - [ ] **SY-B2.3** реплей після офлайну споживача: курсор по `context_events` (store-as-log)
