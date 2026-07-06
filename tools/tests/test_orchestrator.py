@@ -177,3 +177,58 @@ async def test_orchestrator_pipeline_approved_first_round(monkeypatch: pytest.Mo
     final = await orch_mod.get_run(run_id)
     assert final is not None
     assert final["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_pipeline_rejects_foreign_run_idor(monkeypatch: pytest.MonkeyPatch):
+    """Anti-IDOR: user B не може ганяти/перезаписати run користувача A.
+
+    `POST /orchestrator/run` форвардить caller-supplied run_id; без owner-scope у
+    run_orchestrator_pipeline user B завантажив би run A, виконав пайплайн і finish_run
+    перезаписав би чужий запис (+ прочитав result). get_run(run_id, user_id) фейлить
+    закрито (redis_store owner-gate) → 'run not found', жодної мутації."""
+    from app import orchestrator as orch_mod
+    from app import redis_store
+
+    class FakeRedis:
+        def __init__(self) -> None:
+            self.kv: dict[str, str] = {}
+            self.lists: dict[str, list[str]] = {}
+
+        async def set(self, key, val, ex=None):
+            self.kv[key] = val
+
+        async def get(self, key):
+            return self.kv.get(key)
+
+        async def lpush(self, key, val):
+            self.lists.setdefault(key, []).insert(0, val)
+
+        async def ltrim(self, key, start, end):
+            self.lists[key] = self.lists.get(key, [])[start : end + 1]
+
+        async def lrange(self, key, start, end):
+            return self.lists.get(key, [])[start : end + 1]
+
+    fake = FakeRedis()
+    monkeypatch.setattr(redis_store, "get_redis", lambda: fake)
+
+    chat = AsyncMock()
+    chat.chat = AsyncMock(return_value={"content": "should never run"})
+    agent = AsyncMock()
+    agent.run = AsyncMock(return_value={"text": "leaked", "iters": 1})
+
+    rec = await orch_mod.create_run(1, "Owner A task", worker_budget=2, max_revisions=0)
+    run_id = rec["id"]
+
+    # user 2 намагається прогнати run користувача 1
+    out = await run_orchestrator_pipeline(chat, agent, 2, run_id)
+    assert out == {"error": "run not found"}
+    # жодної роботи не виконано — пайплайн не торкнувся LLM/agent
+    assert chat.chat.call_count == 0
+    assert agent.run.call_count == 0
+    # запис власника A не змінено (не 'running'/'done', без result)
+    owned = await orch_mod.get_run(run_id, 1)
+    assert owned is not None
+    assert owned["status"] == "queued"
+    assert "result" not in owned or not owned.get("result")
