@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from jarvis_core.context import RequestContext
 
 from ..config import settings
-from .deps import resolve_client_context
+from .deps import context_uid as _uid, resolve_client_context
 
 logger = logging.getLogger("jarvis.gateway.client_api.apps")
 
@@ -34,15 +34,6 @@ class AppBody(BaseModel):
     name: str
     html: str
     version: str = ""
-
-
-def _uid(ctx: RequestContext) -> int:
-    if ctx.legacy_uid is not None:
-        return int(ctx.legacy_uid)
-    try:
-        return int(ctx.user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="no numeric user id")
 
 
 def _apps_root(uid: int) -> Path:

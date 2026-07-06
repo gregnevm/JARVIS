@@ -15,22 +15,13 @@ from jarvis_core.context import RequestContext
 from jarvis_core.service_client import ServiceError, call_dict
 
 from ..config import settings
-from .deps import resolve_client_context
+from .deps import context_uid as _uid, resolve_client_context
 
 logger = logging.getLogger("jarvis.gateway.client_api.confirm")
 
 
 class ApproveBody(BaseModel):
     code: str
-
-
-def _uid(ctx: RequestContext) -> int:
-    if ctx.legacy_uid is not None:
-        return int(ctx.legacy_uid)
-    try:
-        return int(ctx.user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="no numeric user id")
 
 
 async def _tools_get(path: str, params: dict[str, Any]) -> dict[str, Any]:

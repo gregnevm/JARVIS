@@ -16,7 +16,7 @@ from jarvis_core.context import RequestContext
 from jarvis_core.service_client import ServiceError, call_dict
 
 from ..config import settings
-from .deps import resolve_client_context
+from .deps import context_uid as _uid, resolve_client_context
 
 logger = logging.getLogger("jarvis.gateway.client_api.workspace")
 
@@ -34,15 +34,6 @@ class ProjectPatch(BaseModel):
     name: str | None = None
     system_prompt: str | None = None
     archived: bool | None = None
-
-
-def _uid(ctx: RequestContext) -> int:
-    if ctx.legacy_uid is not None:
-        return int(ctx.legacy_uid)
-    try:
-        return int(ctx.user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="no numeric user id")
 
 
 async def _mem_get(path: str, params: dict[str, Any]) -> dict[str, Any]:

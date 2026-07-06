@@ -20,22 +20,15 @@ from jarvis_core.context import RequestContext
 from jarvis_core.service_client import ServiceError, call_dict
 from jarvis_core.passport import (
     CONTEXT_JOB_NAMES,
-    Passport,
     Redactor,
+    build_store_event,
     default_redactor,
-    normalize_sensitivity,
-    normalize_tags,
 )
 
 from ..config import settings
-from .deps import resolve_client_context
+from .deps import context_uid as _uid, resolve_client_context
 
 logger = logging.getLogger("jarvis.gateway.client_api.context")
-
-# Подія без summary → провізорний паспорт із цим тегом; bg_job context_summarize
-# (CL-3, крок 4) пізніше зведе raw у якісний summary й зніме тег.
-PENDING_SUMMARY_TAG = "pending:summary"
-_PROVISIONAL_LEN = 240
 
 
 class ContextEvent(BaseModel):
@@ -82,16 +75,6 @@ def _require_enabled() -> None:
         raise HTTPException(status_code=404, detail="context API disabled")
 
 
-def _uid(ctx: RequestContext) -> int:
-    """int-ключ для memory: legacy_uid (Telegram id), фолбек на user_id."""
-    if ctx.legacy_uid is not None:
-        return int(ctx.legacy_uid)
-    try:
-        return int(ctx.user_id)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="no numeric user id in context")
-
-
 async def _post_memory(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
     """POST на memory `/context/{endpoint}` → JSON. Кидає ServiceError (ловить виклик)."""
     return await call_dict(
@@ -109,43 +92,23 @@ async def _post_tools(path: str, params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_store(ev: ContextEvent, uid: int, org_id: str, redactor: Redactor) -> dict[str, Any]:
-    """Будує ФІНІШНИЙ паспорт (серверна редакція + нормалізація тегів) перед store.
-
-    Дві швидкості (CONTEXT_MODULE §2):
-      * fast — є `summary` → редагуємо й шлемо;
-      * raw  — лише `content` → провізорний summary з excerpt, raw у payload,
-               тег `pending:summary` (bg_job дозведе пізніше).
-    Порожня подія (ні summary, ні content) → summary="" → виклик рахує як failed.
-    """
-    kind = (ev.kind or "note").strip() or "note"
-    payload = dict(ev.payload or {})
-    tags = list(ev.tags)
-    raw_summary = (ev.summary or "").strip()
-    if raw_summary:
-        summary = raw_summary
-    else:
-        content = (ev.content or "").strip()
-        summary = content[:_PROVISIONAL_LEN]
-        if content:
-            payload.setdefault("raw", content)
-            tags.append(PENDING_SUMMARY_TAG)
-    passport = Passport(
-        kind=kind,
-        summary=summary,
-        tags=normalize_tags(tags, kind),
-        sensitivity=normalize_sensitivity(ev.sensitivity),
+    """Мапить ContextEvent → фінішний store-паспорт. Домен (дві швидкості,
+    редакція, нормалізація) — у `jarvis_core.passport.build_store_event` (R3, S3)."""
+    return build_store_event(
+        user_id=uid,
+        org_id=org_id,
+        redactor=redactor,
+        kind=ev.kind,
+        summary=ev.summary,
+        content=ev.content,
+        tags=list(ev.tags),
+        sensitivity=ev.sensitivity,
         source=ev.source,
         ref=ev.ref,
         event_id=ev.event_id,
         event_ts=ev.event_ts,
-        payload=payload,
+        payload=ev.payload,
     )
-    # Серверна (друга) редакція: вирізає секрети/PII, прибирає raw для health/finance.
-    passport = redactor.redact_passport(passport)
-    store = passport.to_store()
-    store["user_id"] = uid
-    store["org_id"] = org_id
-    return store
 
 
 def register(router: APIRouter) -> None:

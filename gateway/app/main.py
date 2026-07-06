@@ -130,7 +130,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Auto-code coroutine (OKR-керований автономний цикл). Default off (ADR-008).
     autopilot_task: asyncio.Task[None] | None = None
     if startup_net and settings.auto_coroutine_enabled and settings.auto_coroutine_uid:
-        from .auto_coroutine import auto_coroutine_loop, make_tools_dispatch
+        # R3 «Тонкий шлюз»: стейт-машина в ядрі; тут — лише wiring (S3).
+        from jarvis_core.autopilot import auto_coroutine_loop, make_tools_dispatch
 
         autopilot_task = asyncio.create_task(
             auto_coroutine_loop(

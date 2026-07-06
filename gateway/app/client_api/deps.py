@@ -17,11 +17,24 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from jarvis_core.context import RequestContext, synthetic_context
 
+from ..auth_channels import bearer_token, jwt_request_context
 from ..platform.auth import primary_admin_id, verify_admin_password
-from ..saas import auth as jwt_auth
 from ..telegram_webapp_auth import authorize_admin
 
 _security = HTTPBasic(auto_error=False)
+
+
+def context_uid(ctx: RequestContext) -> int:
+    """int-ключ для memory/tools: legacy_uid (Telegram id), фолбек на user_id.
+
+    R3.4 «Тонкий шлюз»: єдине місце (раніше 6 побайтових копій `_uid` по
+    client_api-модулях); 400 — коли контекст без числового id."""
+    if ctx.legacy_uid is not None:
+        return int(ctx.legacy_uid)
+    try:
+        return int(ctx.user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="no numeric user id")
 
 
 def resolve_client_context(
@@ -31,17 +44,11 @@ def resolve_client_context(
     jarvis_jwt: str | None = Cookie(default=None),
 ) -> RequestContext:
     # 1. Bearer JWT, або JWT-cookie (Telegram one-tap → `/connect` → cookie).
-    bearer = (
-        authorization[7:].strip()
-        if authorization and authorization[:7].lower() == "bearer "
-        else None
-    )
-    for token in (bearer, jarvis_jwt):
-        if token and jwt_auth.jwt_enabled():
-            try:
-                return jwt_auth.context_from_claims(jwt_auth.decode(token))
-            except jwt_auth.JWTError:
-                pass  # не валідний JWT → пробуємо інші канали, інакше фінальний 401
+    #    Битий/вимкнений JWT → пробуємо інші канали, інакше фінальний 401.
+    for token in (bearer_token(authorization), jarvis_jwt):
+        ctx = jwt_request_context(token)
+        if ctx is not None:
+            return ctx
 
     # 2. Telegram initData (Mini App)
     if x_telegram_init_data:
