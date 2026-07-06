@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # Секрет вебхука (лише для webhook-режиму): Telegram шле його у заголовку
     # X-Telegram-Bot-Api-Secret-Token. Порожньо = перевірка вимкнена.
     telegram_webhook_secret: str = ""
+    # Стартова мережа gateway: webhook/BotFather-UI (best-effort фонова таска) і фонові
+    # поллери (polling, reminders, health-watch, job-runners…). false — старт повністю
+    # без зовнішнього I/O (локальні тести, offline-dev). Safe-default true: прод-поведінка
+    # без .env-змін ідентична.
+    gateway_startup_net: bool = True
 
     # Tools — агент-луп (DESIGN: без n8n-проксі)
     tools_url: str = "http://tools:8200"

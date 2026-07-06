@@ -74,30 +74,34 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     bind_access_store(access_store)
     app.state.access_store = access_store
 
+    # P2 (composition root): вище — лише чисте створення клієнтів/стейту, нижче — самі
+    # ефекти (мережа, фонові таски), і всі вони умовні. GATEWAY_STARTUP_NET=false глушить
+    # стартову мережу повністю (локальні тести, offline-dev); safe-default true.
+    startup_net = settings.gateway_startup_net
+    app.state.bot_ui_registered = False
+
     mode = settings.telegram_ingest_mode.strip().lower()
     poll_task: asyncio.Task[None] | None = None
-    if mode == "polling":
+    if startup_net and mode == "polling":
         poll_task = asyncio.create_task(_poll_loop(app))
-    elif mode == "webhook":
-        webhook_url = settings.telegram_webhook_url.strip()
-        if webhook_url:
-            secret = settings.telegram_webhook_secret.strip() or None
-            await app.state.tg.set_webhook(
-                webhook_url, secret_token=secret, allowed_updates=ALLOWED_UPDATES
-            )
-            logger.info("Webhook registered → %s", webhook_url)
-        else:
-            logger.warning("TELEGRAM_INGEST_MODE=webhook but TELEGRAM_WEBHOOK_URL is empty")
 
-    reminder_task = asyncio.create_task(
-        reminder_loop(
-            app.state.redis,
-            app.state.tg,
-            interval=settings.reminder_poll_seconds,
+    # Webhook-реєстрація + BotFather-UI — best-effort фонова таска: недоступний
+    # Telegram ≠ gateway не стартував. Статус видно у /health (bot_ui_registered).
+    startup_net_task: asyncio.Task[None] | None = None
+    if startup_net:
+        startup_net_task = asyncio.create_task(_startup_net(app, mode))
+
+    reminder_task: asyncio.Task[None] | None = None
+    if startup_net:
+        reminder_task = asyncio.create_task(
+            reminder_loop(
+                app.state.redis,
+                app.state.tg,
+                interval=settings.reminder_poll_seconds,
+            )
         )
-    )
     health_task: asyncio.Task[None] | None = None
-    if settings.health_watch_interval > 0:
+    if startup_net and settings.health_watch_interval > 0:
         alert_ids = settings.health_alert_ids
         health_task = asyncio.create_task(
             health_watch_loop(
@@ -108,21 +112,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 alert_ids=alert_ids or None,
             )
         )
-    job_task = asyncio.create_task(
-        job_runner_loop(app.state.tools, app.state.tg, interval=30.0)
-    )
-    bg_job_task = asyncio.create_task(
-        bg_job_runner_loop(app.state.tools, app.state.tg, interval=3.0)
-    )
+    job_task: asyncio.Task[None] | None = None
+    bg_job_task: asyncio.Task[None] | None = None
+    if startup_net:
+        job_task = asyncio.create_task(
+            job_runner_loop(app.state.tools, app.state.tg, interval=30.0)
+        )
+        bg_job_task = asyncio.create_task(
+            bg_job_runner_loop(app.state.tools, app.state.tg, interval=3.0)
+        )
     ctx_sched_task: asyncio.Task[None] | None = None
-    if settings.context_scheduler_enabled:
+    if startup_net and settings.context_scheduler_enabled:
         from .context_scheduler import context_scheduler_loop
 
         ctx_sched_task = asyncio.create_task(context_scheduler_loop(app.state.redis))
 
     # Auto-code coroutine (OKR-керований автономний цикл). Default off (ADR-008).
     autopilot_task: asyncio.Task[None] | None = None
-    if settings.auto_coroutine_enabled and settings.auto_coroutine_uid:
+    if startup_net and settings.auto_coroutine_enabled and settings.auto_coroutine_uid:
         from .auto_coroutine import auto_coroutine_loop, make_tools_dispatch
 
         autopilot_task = asyncio.create_task(
@@ -142,7 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # APK auto-deliver: gateway сам тягне свіжий apk-latest реліз і DM-ить адмінам
     # (без GitHub-секретів — через бот-токен із .env). Опт-ін APK_AUTO_DELIVER.
     apk_task: asyncio.Task[None] | None = None
-    if settings.apk_auto_deliver:
+    if startup_net and settings.apk_auto_deliver:
         from .apk_autodeliver import apk_autodeliver_loop
 
         apk_task = asyncio.create_task(
@@ -150,9 +157,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 app.state.tg, app.state.redis, settings.apk_auto_deliver_interval
             )
         )
-
-    # BotFather UI: команди, опис, Mini App menu button.
-    await register_bot_ui(app.state.tg)
 
     wl = sorted(allowed_ids_snapshot())
     pending_n = len(access_store.pending_ids)
@@ -168,8 +172,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     for task in (
-        poll_task, reminder_task, health_task, job_task, bg_job_task,
-        ctx_sched_task, autopilot_task, apk_task,
+        poll_task, startup_net_task, reminder_task, health_task, job_task,
+        bg_job_task, ctx_sched_task, autopilot_task, apk_task,
     ):
         if task is not None:
             task.cancel()
@@ -182,6 +186,43 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await app.state.redis.aclose()
     if app.state.tts is not None:
         await app.state.tts.aclose()
+
+
+# Скільки секунд даємо стартовим best-effort мережевим діям (webhook + BotFather-UI).
+_STARTUP_NET_TIMEOUT = 10.0
+
+
+async def _startup_net(app: FastAPI, mode: str) -> None:
+    """Best-effort стартова мережа: webhook-реєстрація + BotFather-UI.
+
+    Свідомо поза lifespan-await (P2): повільний/недоступний Telegram не блокує старт
+    і не валить сервіс. Фейл = warning у лог + bot_ui_registered=false у /health.
+    """
+    tg = app.state.tg
+
+    async def _do() -> None:
+        if mode == "webhook":
+            webhook_url = settings.telegram_webhook_url.strip()
+            if webhook_url:
+                secret = settings.telegram_webhook_secret.strip() or None
+                await tg.set_webhook(
+                    webhook_url, secret_token=secret, allowed_updates=ALLOWED_UPDATES
+                )
+                logger.info("Webhook registered → %s", webhook_url)
+            else:
+                logger.warning(
+                    "TELEGRAM_INGEST_MODE=webhook but TELEGRAM_WEBHOOK_URL is empty"
+                )
+        # BotFather UI: команди, опис, Mini App menu button.
+        await register_bot_ui(tg)
+        app.state.bot_ui_registered = True
+
+    try:
+        await asyncio.wait_for(_do(), timeout=_STARTUP_NET_TIMEOUT)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Стартова мережа (webhook/BotFather UI) не вдалася: %s", exc)
 
 
 async def _poll_loop(app: FastAPI) -> None:
@@ -242,8 +283,11 @@ async def _request_id_middleware(
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "bot_ui_registered": bool(getattr(app.state, "bot_ui_registered", False)),
+    }
 
 
 async def _process(update: dict[str, Any], app: FastAPI) -> None:
