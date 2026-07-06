@@ -354,7 +354,7 @@ kaizen-рев'ю і дайджест. «Чому ми це міняли в тр�
 **DoD:** запит «чому змінили X» повертає паспорт із ref на PR; kaizen-дайджест містить
 code_change-и вікна без читання git-логу.
 
-### SY-9 — Пропозиція → рутина — `proposal-engine × scheduled tasks × S4` — 🔴 todo
+### SY-9 — Пропозиція → рутина — `proposal-engine × scheduled tasks × S4` — 🟡 core done (2026-07-06)
 
 | Стовп | Принципи | Залежність | ICE |
 |-------|----------|------------|-----|
@@ -364,10 +364,17 @@ code_change-и вікна без читання git-логу.
 джоба/скіла (патерн `scripts/jarvis_context.py --job` — уже благословенний ADR-008 спосіб:
 рекурентність із нагляду користувача, не прихований auto-cron). Кожен запуск — run-паспорт.
 
-- [ ] **SY-9.1** проєкція: proposal-паспорт → команда/ендпоінт (мапа «пропозиція → job/skill»)
-- [ ] **SY-9.2** матеріалізація: апрув (S4) → рядок Task Scheduler/cron (Windows: schtasks/COM)
-- [ ] **SY-9.3** кожен запуск емітить `kind:routine_run` (аудит рутин ретривом)
-- [ ] **SY-9.4** /platform + TG: список активних рутин + «вимкнути» одним кліком
+- [x] **SY-9.1** проєкція: proposal-паспорт → команда/ендпоінт (`tools/app/routines.py`:
+      мапа `ROUTINE_JOBS` + `project_proposal` + `parse_schedule_hint` — LLM-free)
+- [x] **SY-9.2** матеріалізація: апрув (S4 = явний виклик `POST /api/v1/routines`) →
+      `schtasks /Create` через host-agent `/cli` (не Get-ScheduledTask — висне в дочірньому
+      PS); task б'є `jarvis_context.py --job`; прапор `ENABLE_ROUTINES` + `ROUTINES_HOST_REPO`
+- [x] **SY-9.3** кожен запуск context-job емітить `kind:routine_run` (+ `kind:routine`
+      на create/disable) — аудит рутин ретривом
+- [x] **SY-9.4a** /platform: `GET /platform/api/routines` + disable одним кліком
+      (+ ті самі ендпоінти в client-API для APK/скриптів)
+- [ ] **SY-9.4b** TG-канал: список рутин + «вимкнути» кнопкою в боті (сідає на ті самі
+      tools `/routines/*`; разом із confirm-кнопками SY-5.4/CL)
 
 **DoD:** пропозиція стає рутиною в ≤2 кліки; run-и і вимкнення видно ретривом.
 

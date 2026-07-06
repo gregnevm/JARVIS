@@ -10,7 +10,19 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
-from . import apk, logs, memory, models, overview, projects, settings_api, usage, users, workbench
+from . import (
+    apk,
+    logs,
+    memory,
+    models,
+    overview,
+    projects,
+    routines,
+    settings_api,
+    usage,
+    users,
+    workbench,
+)
 from . import autopilot as platform_autopilot
 from . import coding as platform_coding
 from . import connectors as platform_connectors
@@ -84,5 +96,6 @@ for _mod in (
     platform_team,
     apk,
     usage,
+    routines,
 ):
     _mod.register(router)

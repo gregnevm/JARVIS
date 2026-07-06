@@ -108,6 +108,9 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 | `USAGE_METER_USER_ID` | `-770002` | Синтетичний UID-власник usage-паспортів (партиція стору, прецедент kaizen `-770001`) |
 | `ENABLE_CONFIRM_PUSH` | `false` | (tools) SY-5 MVP: confirm-запит → ntfy-push із deep-link + паспорти `kind:confirm_request\|confirm_decision` (аудит S4 ретривом) |
 | `CONFIRM_PUSH_CLICK_URL` | `` | Deep-link тапу по confirm-нотифікації (канал апруву, напр. Mini App `https://<tunnel>/app`) |
+| `ENABLE_ROUTINES` | `false` | (tools) SY-9: пропозиція → рядок Task Scheduler (`schtasks` через host-agent; task б'є `jarvis_context.py --job`). Потребує `ENABLE_COMPUTER_USE`+`HOSTAGENT_TOKEN` |
+| `ROUTINES_HOST_REPO` | `O:\JARVIS` | Шлях до репо НА ХОСТІ (де `scripts/jarvis_context.py`) — обов'язковий для рутин |
+| `ROUTINES_PYTHON_EXE` / `ROUTINES_GATEWAY_URL` | `python` / `http://127.0.0.1:8000` | Чим і куди б'є scheduled task (auth — env хоста `JARVIS_PASSWORD`/`JARVIS_TOKEN`) |
 
 ## Gateway: старт і локальні тести (R1 «Тонкий шлюз»)
 
@@ -154,7 +157,7 @@ docker compose up -d --build gateway tools
 
 <!-- GEN:ENV-INVENTORY:BEGIN (scripts/gen_env_docs.py — не редагуй руками) -->
 
-## Повний інвентар env-змінних (206 змінних, code-first)
+## Повний інвентар env-змінних (210 змінних, code-first)
 
 Згенеровано з Settings-класів сервісів. Оновити: `python scripts/gen_env_docs.py`.
 CI (`arch-gates`) падає, якщо таблиця/снапшоти розійшлися з кодом (drift-гейт D1).
@@ -250,6 +253,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `ENABLE_OPENAI_API` | gateway | `false` |
 | `ENABLE_PASSPORT_BUS` | gateway | `false` |
 | `ENABLE_REACTION_REPLIES` | gateway | `true` |
+| `ENABLE_ROUTINES` | tools | `false` |
 | `ENABLE_STREAMING` | gateway | `true` |
 | `ENABLE_USAGE_METERING` | gateway, tools | `false` |
 | `ENABLE_VOICE_REPLY` | gateway | `false` |
@@ -332,6 +336,9 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `RESEARCH_MAX_CHARS` | tools | `40000` |
 | `RESEARCH_MAX_HOPS` | tools | `3` |
 | `RESEARCH_MAX_URLS` | tools | `5` |
+| `ROUTINES_GATEWAY_URL` | tools | `"http://127.0.0.1:8000"` |
+| `ROUTINES_HOST_REPO` | tools | `""` |
+| `ROUTINES_PYTHON_EXE` | tools | `"python"` |
 | `SAAS_MODE` | gateway | `false` |
 | `SELF_IMPROVE_ENABLED` | tools | `true` |
 | `SELF_IMPROVE_JUDGE_MODEL` | tools | `""` |

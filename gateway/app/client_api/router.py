@@ -25,6 +25,7 @@ from . import code as code_api
 from . import confirm as confirm_api
 from . import context as context_api
 from . import driver as driver_api
+from . import routines as routines_api
 from . import workspace as workspace_api
 from .deps import resolve_client_context
 
@@ -185,3 +186,5 @@ driver_api.register(router)
 chrome_api.register(router)
 # Code — dispatch задач кодування (рідний агент; Claude-міст опційно).
 code_api.register(router)
+# Рутини (SY-9) — пропозиція → scheduled task у ≤2 кліки; проксі до tools.
+routines_api.register(router)
