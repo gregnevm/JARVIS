@@ -16,7 +16,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
@@ -24,6 +23,8 @@ from pydantic import BaseModel
 from . import artifacts as app_artifacts
 from ._helpers import AGENT_MODES, require_mode, require_text
 from .auth import agent_mode_denied_message, can_change_agent_mode
+from jarvis_core.service_client import ServiceError, call_dict
+
 from .config import settings
 from .runtime_flags import get_flags, set_flag
 from .telegram_webapp_auth import authorize_allowed
@@ -127,14 +128,11 @@ async def app_sessions(
     user_id = authorize(x_telegram_init_data)
     lim = max(1, min(limit, 20))
     try:
-        async with httpx.AsyncClient(timeout=8.0) as cli:
-            r = await cli.get(
-                f"{settings.memory_url.rstrip('/')}/sessions",
-                params={"user_id": user_id, "limit": lim},
-            )
-            r.raise_for_status()
-            return r.json()
-    except httpx.HTTPError as exc:
+        return await call_dict(
+            settings.memory_url, "GET", "/sessions",
+            params={"user_id": user_id, "limit": lim}, timeout=8.0, service="memory",
+        )
+    except ServiceError as exc:
         logger.warning("sessions fetch failed: %s", exc)
         return {"sessions": [], "error": str(exc)}
 

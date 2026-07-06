@@ -48,6 +48,26 @@ jobs:
             pytest ${{ matrix.service }}/tests
           fi
 
+  # Архітектурні гейти «Тонкого шлюза» (спека docs/REFACTOR_THIN_GATEWAY.spec.md §1).
+  # R2.7: внутрішній RPC — лише через jarvis_core.service_client; httpx.AsyncClient
+  # дозволений тільки виділеним клієнтам-адаптерам і 2 виняткам (probe, GitHub).
+  arch-gates:
+    name: architecture gates (S3/P7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: httpx.AsyncClient allowlist (R2)
+        run: |
+          allowed='^gateway/app/(telegram|whisper|tts_client|tools_client_base|services|admin_panel|apk_autodeliver)\.py:'
+          hits=$(grep -rn "httpx\.AsyncClient(" gateway/app --include="*.py" || true)
+          bad=$(echo "$hits" | grep -vE "$allowed" || true)
+          if [ -n "$bad" ]; then
+            echo "::error::httpx.AsyncClient поза allowlist — використовуй jarvis_core.service_client (R2 «Тонкий шлюз»)"
+            echo "$bad"
+            exit 1
+          fi
+          echo "OK: усі httpx.AsyncClient у allowlist"
+
   # Дешева перевірка: docker-compose.yml лишається валідним (синтаксис + інтерполяція .env).
   compose-validate:
     name: docker compose config

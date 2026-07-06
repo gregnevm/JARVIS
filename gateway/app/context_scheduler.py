@@ -13,10 +13,11 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
 import redis.asyncio as aioredis
 
 from jarvis_core.context import DEFAULT_ORG_ID, redis_key
+
+from jarvis_core.service_client import call_dict
 
 from .config import settings
 
@@ -72,11 +73,10 @@ async def run_due(
 
 
 async def _default_post(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=300.0) as cli:
-        r = await cli.post(f"{settings.tools_url.rstrip('/')}{path}", params=params)
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    return await call_dict(
+        settings.tools_url, "POST", path,
+        params=params, timeout=300.0, service="tools",
+    )
 
 
 async def context_scheduler_loop(

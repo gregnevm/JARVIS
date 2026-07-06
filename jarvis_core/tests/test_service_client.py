@@ -112,6 +112,24 @@ async def test_no_retry_by_default():
     assert len(attempts) == 1
 
 
+async def test_custom_retry_statuses_widen_retry():
+    attempts: list[int] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        attempts.append(1)
+        if len(attempts) < 3:
+            return httpx.Response(500)  # не в дефолтному наборі 502/503/504
+        return httpx.Response(200, json={"ok": True})
+
+    async with _client(handler) as cli:
+        out = await call(
+            "http://tools:8200", "GET", "/dashboard",
+            retries=2, retry_backoff=0.0, retry_statuses=range(400, 600), client=cli,
+        )
+    assert out == {"ok": True}
+    assert len(attempts) == 3
+
+
 async def test_4xx_is_not_retried():
     attempts: list[int] = []
 

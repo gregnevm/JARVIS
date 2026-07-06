@@ -9,8 +9,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 import redis.asyncio as aioredis
+
+from jarvis_core.service_client import ServiceError, call_dict
 
 from .config import settings
 
@@ -46,40 +47,35 @@ async def set_active(redis: aioredis.Redis, user_id: int, project_id: int | None
 # --- memory-сервіс CRUD (для Telegram /project; Platform має власний проксі) ---
 async def mem_list(user_id: int) -> list[dict[str, Any]]:
     try:
-        async with httpx.AsyncClient(timeout=8.0) as cli:
-            r = await cli.get(f"{settings.memory_url.rstrip('/')}/projects", params={"user_id": user_id})
-            r.raise_for_status()
-            return list(r.json().get("projects", []))
-    except (httpx.HTTPError, ValueError) as exc:
+        data = await call_dict(
+            settings.memory_url, "GET", "/projects",
+            params={"user_id": user_id}, timeout=8.0, service="memory",
+        )
+        return list(data.get("projects", []))
+    except ServiceError as exc:
         logger.warning("projects list failed: %s", exc)
         return []
 
 
 async def mem_create(user_id: int, name: str) -> dict[str, Any] | None:
     try:
-        async with httpx.AsyncClient(timeout=8.0) as cli:
-            r = await cli.post(
-                f"{settings.memory_url.rstrip('/')}/projects",
-                json={"user_id": user_id, "name": name},
-            )
-            r.raise_for_status()
-            return dict(r.json())
-    except (httpx.HTTPError, ValueError) as exc:
+        return await call_dict(
+            settings.memory_url, "POST", "/projects",
+            json={"user_id": user_id, "name": name}, timeout=8.0, service="memory",
+        )
+    except ServiceError as exc:
         logger.warning("project create failed: %s", exc)
         return None
 
 
 async def mem_get(user_id: int, project_id: int) -> dict[str, Any] | None:
     try:
-        async with httpx.AsyncClient(timeout=8.0) as cli:
-            r = await cli.get(
-                f"{settings.memory_url.rstrip('/')}/projects/{int(project_id)}",
-                params={"user_id": user_id},
-            )
-            if r.status_code == 404:
-                return None
-            r.raise_for_status()
-            return dict(r.json())
-    except (httpx.HTTPError, ValueError) as exc:
+        return await call_dict(
+            settings.memory_url, "GET", f"/projects/{int(project_id)}",
+            params={"user_id": user_id}, timeout=8.0, service="memory",
+        )
+    except ServiceError as exc:
+        if exc.status == 404:
+            return None
         logger.warning("project get failed: %s", exc)
         return None

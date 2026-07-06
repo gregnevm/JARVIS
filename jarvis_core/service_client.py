@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Collection
 from typing import Any
 
 import httpx
@@ -82,9 +83,10 @@ async def call(
     json: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
-    timeout: float = DEFAULT_TIMEOUT,
+    timeout: float | None = DEFAULT_TIMEOUT,
     retries: int = 0,
     retry_backoff: float = 0.2,
+    retry_statuses: Collection[int] | None = None,
     service: str = "",
     client: httpx.AsyncClient | None = None,
 ) -> Any:
@@ -93,6 +95,10 @@ async def call(
     `client` — опційний довгоживучий `httpx.AsyncClient` (реюз з'єднань, DI у
     тестах через MockTransport); без нього створюється одноразовий — семантика
     теперішніх `async with httpx.AsyncClient(...)`-блоків 1:1.
+    `timeout=None` — не переозначати таймаут-профіль переданого `client`
+    (напр. тонко налаштований httpx.Timeout дашборда).
+    `retry_statuses` — які статуси ретраїти (дефолт 502/503/504); місця виклику
+    зі своєю історичною семантикою (напр. dashboard — будь-який ≥400) передають свій набір.
     """
     url = f"{base_url.rstrip('/')}{path}"
     verb = method.upper()
@@ -100,10 +106,16 @@ async def call(
     while True:
         try:
             if client is None:
-                async with httpx.AsyncClient(timeout=timeout) as cli:
+                async with httpx.AsyncClient(
+                    timeout=DEFAULT_TIMEOUT if timeout is None else timeout
+                ) as cli:
                     resp = await cli.request(
                         verb, url, json=json, params=params, headers=headers
                     )
+            elif timeout is None:
+                resp = await client.request(
+                    verb, url, json=json, params=params, headers=headers
+                )
             else:
                 resp = await client.request(
                     verb, url, json=json, params=params, headers=headers, timeout=timeout
@@ -115,7 +127,8 @@ async def call(
                 continue
             raise ServiceError(service, verb, path, detail=str(exc)) from exc
 
-        if resp.status_code in RETRYABLE_STATUSES and attempt < retries:
+        statuses = RETRYABLE_STATUSES if retry_statuses is None else retry_statuses
+        if resp.status_code in statuses and attempt < retries:
             attempt += 1
             await asyncio.sleep(retry_backoff * attempt)
             continue
@@ -139,7 +152,7 @@ async def call_dict(
     json: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
-    timeout: float = DEFAULT_TIMEOUT,
+    timeout: float | None = DEFAULT_TIMEOUT,
     retries: int = 0,
     retry_backoff: float = 0.2,
     service: str = "",
