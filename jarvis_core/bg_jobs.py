@@ -39,6 +39,21 @@ def _require_task(payload: dict[str, Any]) -> str:
     return task
 
 
+def _int_field(payload: dict[str, Any], key: str, default: int) -> int:
+    """`int(payload.get(key) or default)`, але з чистою помилкою валідації.
+
+    Голий `int(...)` на нечисловому вводі кидав би або витік `int()`-повідомлення
+    (`invalid literal for int() with base 10: 'x'`), або `TypeError` (для list/dict),
+    що прослизнув би повз `except ValueError` у роут-хендлерах (bgjobs.py:41 тощо)
+    і дав би 500 замість чистого 400. Тут нормалізуємо обидва у `ValueError` з явним
+    повідомленням — це та сама fail-fast-валідація на межі (P2), що й `*_required` вище.
+    Семантику `or default` (відсутнє/falsy → дефолт) збережено побайтово для валідного вводу."""
+    try:
+        return int(payload.get(key) or default)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"{key} must be an integer") from exc
+
+
 def normalize_payload(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Валідація та нормалізація payload перед збереженням у Redis."""
     jt = (job_type or "agent_turn").strip()
@@ -55,13 +70,13 @@ def normalize_payload(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query") or payload.get("text") or "").strip()
         if not query:
             raise ValueError("query required")
-        return {"query": query, "max_hops": int(payload.get("max_hops") or 3)}
+        return {"query": query, "max_hops": _int_field(payload, "max_hops", 3)}
 
     if jt == "subagent":
         task = _require_task(payload)
         return {
             "task": task,
-            "budget_iters": int(payload.get("budget_iters") or 3),
+            "budget_iters": _int_field(payload, "budget_iters", 3),
             "run_id": str(payload.get("run_id") or ""),
             "mode": str(payload.get("mode") or "agent"),
         }
@@ -71,7 +86,7 @@ def normalize_payload(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return {
             "task": task,
             "team_id": str(payload.get("team_id") or ""),
-            "budget_per_role": int(payload.get("budget_per_role") or 3),
+            "budget_per_role": _int_field(payload, "budget_per_role", 3),
             "roles": payload.get("roles") or [],
         }
 
@@ -80,8 +95,8 @@ def normalize_payload(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         return {
             "task": task,
             "run_id": str(payload.get("run_id") or ""),
-            "worker_budget": int(payload.get("worker_budget") or 5),
-            "max_revisions": int(payload.get("max_revisions") or 1),
+            "worker_budget": _int_field(payload, "worker_budget", 5),
+            "max_revisions": _int_field(payload, "max_revisions", 1),
         }
 
     if jt == "coding_task":
@@ -93,7 +108,7 @@ def normalize_payload(job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
             "args": [str(a) for a in (payload.get("args") or [])],
             "path": str(payload.get("path") or ""),
             "task": str(payload.get("task") or ""),
-            "max_rounds": int(payload.get("max_rounds") or 0),
+            "max_rounds": _int_field(payload, "max_rounds", 0),
         }
 
     if jt == "delegate_tick":
