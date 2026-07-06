@@ -160,6 +160,10 @@ computer-confirm з телефона. Єдина auth і єдиний API під
 pytest gateway/tests ; pytest tools/tests ; pytest memory/tests ; pytest hostagent/tests
 mypy gateway/app    # strict; конфіг у pyproject.toml. Те саме для tools/memory/jarvis_core
 ```
+Повний `pytest gateway/tests` ганяється **локально** (~1 хв, без мережі): autouse-фікстура
+глушить стартову мережу (`GATEWAY_STARTUP_NET=false`) і переводить docker-хости на `0.0.0.0:1`
+(миттєвий фейл замість ~2s ретраїв Windows) — R1 «Тонкий шлюз», 2026-07-06. Пам'ятка «повний
+ган лише на CI» знята.
 CI (`.github/workflows/ci.yml`) — matrix по `jarvis_core/gateway/memory/tools/twin/hostagent` +
 `docker compose config`. PR не мерджиться без green.
 

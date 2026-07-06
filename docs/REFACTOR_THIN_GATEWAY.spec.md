@@ -123,7 +123,7 @@ handler-и напряму). Відкат — revert одного PR, бо міг
 - [x] **R1.1** Витягти `register_bot_ui`/webhook-setup у best-effort фонову таску з таймаутом 10s
 - [x] **R1.2** Прапор `GATEWAY_STARTUP_NET` (+ .env.example, ENV_CHECKLIST) — глушить стартову мережу
 - [x] **R1.3** Фікстура тестів: дефолтно `startup_net=false`; прибрати обхідні милиці з conftest
-- [ ] **R1.4** Верифікація: повний `pytest gateway/tests` локально < 5 хв (записати в AGENTS.md §5)
+- [x] **R1.4** Верифікація: повний `pytest gateway/tests` локально < 5 хв (записати в AGENTS.md §5)
 - [ ] **R2.1** `jarvis_core/service_client.py` + юніт-тести (ретраї, таймаути, error-envelope)
 - [ ] **R2.2–R2.6** Міграція: client_api/* → platform/* → services/projects → openai_api/admin_panel
       → tools_client_base (по PR на групу)
@@ -149,8 +149,11 @@ handler-и напряму). Відкат — revert одного PR, бо міг
   `GATEWAY_STARTUP_NET` глушить і поллери (reminders/health-watch/job-runners/autopilot/apk).
   Autouse-фікстура `_no_startup_net` у conftest; милиця `health_watch_interval=0` прибрана.
   Відхилення: `asyncio.wait_for` замість `asyncio.timeout` (локальний dev-Python 3.10).
-  Перший повний локальний прогін: **проходить** (раніше — hang), ~7 хв на холодному старті —
-  до критерію < 5 хв див. R1.4.
+- **2026-07-06 · R1.4** — критерій < 5 хв перевиконано: повний локальний прогін **~58s**
+  (раніше — нескінченний hang). Другий пожирач часу після стартової мережі — Windows
+  ретраїть TCP-connect до закритого порту ~2s: docker-хости у фікстурі переведені на
+  `0.0.0.0:1` (миттєвий фейл на Win і Linux-CI, семантика «недосяжний» та сама).
+  AGENTS.md §5 оновлено — пам'ятка «повний ган лише на CI» знята.
 
 ## Ризики й відкат
 
