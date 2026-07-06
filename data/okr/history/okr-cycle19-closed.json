@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "cycle": 19,
+  "admin_context": "Фокус кварталу: дозріти нативний coding-агент і замкнути autopilot-петлю. Не чіпати multi-tenant/Stripe без явного дозволу.",
+  "progress": 1.0,
+  "objectives": [
+    {
+      "id": "CA",
+      "title": "Зрілий нативний coding-агент",
+      "roadmap": "docs/CODING_AGENT_ROADMAP.md",
+      "priority": 1,
+      "status": "done",
+      "progress": 1.0,
+      "key_results": [
+        {
+          "id": "CA-edit",
+          "text": "edit/repo-context maturity ≥ 8/10",
+          "target": 1.0,
+          "progress": 1.0,
+          "metric": "ratio"
+        },
+        {
+          "id": "CA-exec",
+          "text": "run/test exec maturity ≥ 9/10",
+          "target": 1.0,
+          "progress": 1.0,
+          "metric": "ratio"
+        },
+        {
+          "id": "CA-fixloop",
+          "text": "no-progress детектор + live-fix eval (CA-3.4/3.5)",
+          "target": 1.0,
+          "progress": 1.0,
+          "metric": "ratio"
+        }
+      ]
+    },
+    {
+      "id": "AP",
+      "title": "Autopilot-петля замкнена (code→review→refactor→analyze→test→evolve)",
+      "roadmap": "docs/AUTO_CODE_COROUTINE_ROADMAP.md",
+      "priority": 2,
+      "status": "done",
+      "progress": 1.0,
+      "key_results": [
+        {
+          "id": "AP-loop",
+          "text": "6-фазний цикл крутиться зелено в проді",
+          "target": 1.0,
+          "progress": 1.0,
+          "metric": "ratio"
+        },
+        {
+          "id": "AP-dash",
+          "text": "OKR-дашборд + run-log генеруються щоциклу",
+          "target": 1.0,
+          "progress": 1.0,
+          "metric": "ratio"
+        },
+        {
+          "id": "AP-mutate",
+          "text": "OKR мутує за адмін-контекстом без ручного JSON",
+          "target": 1.0,
+          "progress": 1.0,
+          "metric": "ratio"
+        }
+      ]
+    },
+    {
+      "id": "PLT",
+      "title": "Platform-консоль: повний контроль autopilot з UI",
+      "roadmap": "docs/PLATFORM_ROADMAP.md",
+      "priority": 3,
+      "status": "done",
+      "progress": 1.0,
+      "key_results": [
+        {
+          "id": "PLT-tab",
+          "text": "Autopilot tab: status/tick/OKR/dashboard",
+          "target": 1.0,
+          "progress": 1.0,
+          "metric": "ratio"
+        },
+        {
+          "id": "PLT-improve",
+          "text": "self-improve scan інтегрований у review-фазу",
+          "target": 1.0,
+          "progress": 1.0,
+          "metric": "ratio"
+        }
+      ]
+    }
+  ]
+}

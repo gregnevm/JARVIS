@@ -97,6 +97,12 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 > Auth — спільний client-API resolver (JWT/initData/Basic). Колектор без залежностей:
 > `scripts/jarvis_context.py` (нотатка/pipe/hotkey/cron). Дані лише в memory користувача (S1).
 
+## Gateway: старт і локальні тести (R1 «Тонкий шлюз»)
+
+| Змінна | Приклад | Навіщо |
+|--------|---------|--------|
+| `GATEWAY_STARTUP_NET` | `true` | Стартова мережа gateway: webhook/BotFather-UI (best-effort фонова таска) і фонові поллери. `false` — старт без зовнішнього I/O (локальний `pytest gateway/tests`, offline-dev). Статус реєстрації UI видно у `/health` → `bot_ui_registered` |
+
 ## Безпека (рекомендовано)
 
 | Змінна | Навіщо |
