@@ -1,6 +1,6 @@
-"""PassportBus (SY-B1) — Observer поверх паспортів: підписка = tag-containment.
+"""PassportBus (SY-B1/B2) — Observer поверх паспортів: підписка = tag-containment.
 
-Порт + in-proc адаптер (SYNERGY_ROADMAP §3). Шина НЕ має власної схеми повідомлень:
+Порт + два адаптери (SYNERGY_ROADMAP §3). Шина НЕ має власної схеми повідомлень:
 подія = `Passport` (C1 — конверт уже канонізований). Emit відбувається ПІСЛЯ store,
 тож durable log шини = `context_events`, а replay пропущеного = звичайний ContextQuery.
 
@@ -16,17 +16,20 @@ wildcard (отримує все). «Що сталося» і «що я знаю�
     зупиняється при hop >= hop_limit.
 
 Доставка fire-and-forget: збій одного підписника ізольований (лог) і не валить
-ні emit, ні інших підписників (DoD SY-B1). Крос-сервісний транспорт — RedisBus
-(SY-B2); Edge лишається на InProcBus (P1 offline-first).
+ні emit, ні інших підписників (DoD SY-B1). Адаптери: `InProcBus` (один процес;
+Edge — P1 offline-first) і `RedisBus` (SY-B2.1: gateway↔tools↔memory через Redis
+pub/sub — нуль нових залежностей: клієнт приходить ззовні duck-type'ом).
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .context import redis_key
 from .passport import Passport
 from .passport.tags import tags_contain
 
@@ -75,7 +78,7 @@ class Subscription:
     __slots__ = ("pattern", "handler", "name", "_bus")
 
     def __init__(
-        self, pattern: list[str], handler: Handler, name: str, bus: "InProcBus"
+        self, pattern: list[str], handler: Handler, name: str, bus: "InProcBus | RedisBus"
     ) -> None:
         self.pattern = pattern
         self.handler = handler
@@ -152,5 +155,167 @@ class InProcBus:
 
     async def drain(self) -> None:
         """Дочекатися всіх уже запланованих доставок (тести, graceful shutdown)."""
+        while self._tasks:
+            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+
+
+class RedisClientLike(Protocol):
+    """Мінімальний контракт Redis-клієнта для шини (duck-type: redis.asyncio.Redis).
+
+    jarvis_core свідомо НЕ залежить від пакета redis (P1: Edge живе на InProcBus) —
+    клієнта створює і володіє ним сервіс (gateway/tools), ядро лише викликає."""
+
+    async def publish(self, channel: str, message: str) -> Any: ...
+
+    def pubsub(self) -> Any: ...
+
+
+class RedisBus:
+    """Крос-сервісний адаптер порту (SY-B2.1): Redis pub/sub, gateway↔tools↔memory.
+
+    Канал org-префіксований `jarvis:{org}:bus:events` (multi-tenant дисципліна §5,
+    через `redis_key`; org=None → legacy unscoped — self-hosted незмінний, S2).
+    Публікація — JSON `{passport: to_store, meta: {...}}`; приймання — фоновий
+    listener (`start()`), той самий containment-матчинг і анти-петлі, що InProcBus.
+    Durable log лишається store (`context_events`) — pub/sub лише транспорт,
+    реплей пропущеного — курсор по стору (SY-B2.3).
+    """
+
+    def __init__(
+        self,
+        redis: RedisClientLike,
+        *,
+        org_id: str | None = None,
+        hop_limit: int = DEFAULT_HOP_LIMIT,
+    ) -> None:
+        self._redis = redis
+        self._channel = redis_key(org_id, "bus", "events")
+        self._hop_limit = hop_limit
+        self._subs: list[Subscription] = []
+        self._tasks: set[asyncio.Task[None]] = set()
+        self._listener: asyncio.Task[None] | None = None
+
+    @property
+    def channel(self) -> str:
+        return self._channel
+
+    def subscribe(
+        self, pattern: list[str], handler: Handler, *, name: str = ""
+    ) -> Subscription:
+        normalized = [t.strip().lower() for t in pattern if t.strip()]
+        sub = Subscription(normalized, handler, name.strip(), self)
+        self._subs.append(sub)
+        return sub
+
+    def _remove(self, sub: Subscription) -> None:
+        try:
+            self._subs.remove(sub)
+        except ValueError:
+            pass
+
+    async def emit(self, passport: Passport, meta: BusMeta | None = None) -> None:
+        """PUBLISH у канал. Не кидає (best-effort — Redis лежить ≠ ingest впав)."""
+        meta = meta or BusMeta()
+        payload = json.dumps(
+            {
+                "passport": passport.to_store(),
+                "meta": {
+                    "user_id": meta.user_id,
+                    "org_id": meta.org_id,
+                    "store_id": meta.store_id,
+                },
+            },
+            ensure_ascii=False,
+        )
+        try:
+            await self._redis.publish(self._channel, payload)
+        except Exception as exc:  # noqa: BLE001 — транспорт нефатальний
+            logger.warning("bus: redis publish failed: %s", type(exc).__name__)
+
+    def handle_raw(self, raw: str) -> None:
+        """Розбір повідомлення каналу → локальний фан-аут (виділено для тестів)."""
+        try:
+            data = json.loads(raw)
+            passport = Passport.from_store(dict(data["passport"]))
+            meta_raw = dict(data.get("meta") or {})
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            logger.warning("bus: відкинуто малформед-повідомлення каналу")
+            return
+        meta = BusMeta(
+            user_id=meta_raw.get("user_id"),
+            org_id=meta_raw.get("org_id"),
+            store_id=meta_raw.get("store_id"),
+        )
+        if hop_of(passport) >= self._hop_limit:
+            logger.warning(
+                "bus: hop-limit %s досягнуто (kind=%s) — ланцюг зупинено",
+                self._hop_limit, passport.kind,
+            )
+            return
+        for sub in list(self._subs):
+            if sub.name and passport.source == sub.name:
+                continue
+            if not tags_contain(passport.tags, sub.pattern):
+                continue
+            task = asyncio.create_task(self._deliver(sub, passport, meta))
+            self._tasks.add(task)
+            task.add_done_callback(self._tasks.discard)
+
+    async def _deliver(self, sub: Subscription, passport: Passport, meta: BusMeta) -> None:
+        try:
+            await sub.handler(passport, meta)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 — ізоляція збоїв підписника
+            logger.exception(
+                "bus: підписник %r впав на kind=%s — ізольовано", sub.name, passport.kind
+            )
+
+    def start(self) -> None:
+        """Запускає фоновий listener (ідемпотентно). Кличе сервіс у lifespan."""
+        if self._listener is None or self._listener.done():
+            self._listener = asyncio.create_task(self._listen_loop())
+
+    async def stop(self) -> None:
+        if self._listener is not None:
+            self._listener.cancel()
+            try:
+                await self._listener
+            except asyncio.CancelledError:
+                pass
+            self._listener = None
+        await self.drain()
+
+    async def _listen_loop(self) -> None:
+        """PSUBSCRIBE-луп із реконектом (Redis-рестарт не вбиває підписки)."""
+        backoff = 1.0
+        while True:
+            try:
+                pubsub = self._redis.pubsub()
+                await pubsub.subscribe(self._channel)
+                backoff = 1.0
+                while True:
+                    msg = await pubsub.get_message(
+                        ignore_subscribe_messages=True, timeout=1.0
+                    )
+                    if msg is None:
+                        continue
+                    if msg.get("type") != "message":
+                        continue
+                    data = msg.get("data")
+                    self.handle_raw(
+                        data.decode("utf-8") if isinstance(data, bytes) else str(data)
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — реконект із backoff
+                logger.warning(
+                    "bus: listener впав (%s) — реконект за %.0fс", type(exc).__name__, backoff
+                )
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 30.0)
+
+    async def drain(self) -> None:
+        """Дочекатися запланованих доставок (тести, graceful shutdown)."""
         while self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
