@@ -22,6 +22,7 @@ from jarvis_core.llm.chat import ChatBackend
 from jarvis_core.llm.parsers import extract_json_object, scan_balanced_json
 
 from .config import settings
+from .friction import REASON_LOOP_EXHAUSTED, record_friction
 from .memory_client import MemoryClient
 from .thread_context import build_thread_context
 from .toolkit import agent_tool_schemas, coerce_args, dispatch, image_gen_enabled
@@ -661,6 +662,10 @@ class AgentRunner:
                 yield {"iters": int(ev["iters"])}
                 return
             if "need_final" in ev:
+                record_friction(
+                    user_id, REASON_LOOP_EXHAUSTED,
+                    summary=f"Агент вичерпав {int(ev['iters'])} ітерацій без фінальної відповіді",
+                )
                 messages.append(
                     {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
                 )
@@ -713,6 +718,10 @@ class AgentRunner:
                 return _ensure_tool_media(str(ev["final"]), messages), int(ev["iters"])
             if "need_final" in ev:
                 # Ітерації вичерпано — змусимо модель дати текстову відповідь без тулів.
+                record_friction(
+                    user_id, REASON_LOOP_EXHAUSTED,
+                    summary=f"Агент вичерпав {int(ev['iters'])} ітерацій без фінальної відповіді",
+                )
                 messages.append(
                     {"role": "system", "content": "Дай фінальну відповідь користувачу без інструментів."}
                 )

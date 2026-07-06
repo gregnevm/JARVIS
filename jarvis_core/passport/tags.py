@@ -7,8 +7,14 @@
 from __future__ import annotations
 
 # Канонічні namespace-префікси (для довідки/валідації; не замикаємо — open/closed).
+# Тегова гігієна (SYNERGY_ROADMAP §6): новий неймспейс = рядок тут (+ докстрінг у PR),
+# інакше адресний простір деградує. SY-1: tool:/reason: (friction-телеметрія),
+# priority: (шина SY-B1: підписка push на priority:high). capability:/tier: — SY-B3.3.
 KNOWN_NAMESPACES = frozenset(
-    {"kind", "topic", "person", "entity", "source", "pillar", "module", "sensitivity", "lang"}
+    {
+        "kind", "topic", "person", "entity", "source", "pillar", "module",
+        "sensitivity", "lang", "tool", "reason", "priority",
+    }
 )
 
 _MAX_TAGS = 64

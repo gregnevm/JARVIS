@@ -197,7 +197,7 @@ class PassportBus(Protocol):
 > `context_events` без шини (можна робити **зараз**); `B1/B2/B3` = чекає відповідної фази шасі.
 > ICE = Impact × Confidence ÷ Effort (1–5).
 
-### SY-1 — Самозарядний backlog — `runtime-телеметрія × kaizen × стор` — 🔴 todo
+### SY-1 — Самозарядний backlog — `runtime-телеметрія × kaizen × стор` — 🟢 done (2026-07-06)
 
 | Стовп | Принципи | Залежність | ICE |
 |-------|----------|------------|-----|
@@ -208,11 +208,14 @@ class PassportBus(Protocol):
 поповнюється з реального болю, а не лише з roadmap-ів. Мотивація з даних: паспорт `0076`
 зупинив луп із причиною `backlog_dry` — цикл глохне без людського підкидання задач.
 
-- [ ] **SY-1.1** продюсер friction: агент-луп/tools емітять `kind:friction` (tool-fail, retry,
-      user-correction) через наявний `/context/ingest` (fast path, без LLM)
-- [ ] **SY-1.2** kaizen plan (профіль jarvis): query `tags=[kind:friction]` за вікно →
-      кандидати задач поруч із roadmap-джерелами
-- [ ] **SY-1.3** daily digest: розділ «пофікшено з телеметрії» з ref на friction-паспорт (felt, O1)
+- [x] **SY-1.1** продюсер friction: агент-луп/tools емітять `kind:friction` (tool-fail,
+      unknown-tool, loop-exhausted) прямим ingest у memory (fast path, без LLM; анти-leak —
+      лише тип помилки) — `tools/app/friction.py` + хуки в dispatch/agent, прапор
+      `ENABLE_FRICTION_TELEMETRY`. *(user-correction/retry як фідбек-сигнали → SY-4.1)*
+- [x] **SY-1.2** kaizen plan (профіль jarvis): query `tags=[kind:friction]` за вікно →
+      кандидати задач поруч із roadmap-джерелами (kaizen-loop PLAN + profile roadmap_source)
+- [x] **SY-1.3** daily digest: shipped-елемент з `friction_ref` рендериться «from telemetry»
+      з ref на friction-паспорт (render_digest BLOCK 4; felt, O1)
 
 **DoD:** у kaizen-вікні ≥1 задача походить з телеметрії; частка stop-reason `backlog_dry` падає.
 

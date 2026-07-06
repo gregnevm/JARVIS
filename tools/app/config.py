@@ -181,6 +181,12 @@ class Settings(RedisCfg, OllamaCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, Com
     enable_context_retrieval: bool = False
     context_retrieval_top_k: int = 5
 
+    # Friction-телеметрія (SY-1, SYNERGY_ROADMAP): агент-луп емітить kind:friction
+    # (tool-fail / unknown-tool / loop-exhausted) у context_events — plan-фаза kaizen
+    # читає їх як кандидатів backlog-у. Fire-and-forget, без сирих аргументів
+    # (анти-leak). Дефолт off (ADR-008).
+    enable_friction_telemetry: bool = False
+
     # Push через ntfy (BE3, CL-3.6) — daily-дайджест/пропозиції на телефон.
     # Поля — спільний блок PushCfg (jarvis_core.settings): env-імена/дефолти незмінні.
 
