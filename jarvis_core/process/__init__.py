@@ -7,14 +7,14 @@
 """
 from __future__ import annotations
 
+from .engine import advance, escalation_target, is_complete, ready_steps
 from .models import (
+    PROCESS_STATUSES,
     STEP_KINDS,
     STEP_STATUSES,
-    PROCESS_STATUSES,
     Process,
     ProcessStep,
 )
-from .engine import advance, escalation_target, is_complete, ready_steps
 
 __all__ = [
     "STEP_KINDS",

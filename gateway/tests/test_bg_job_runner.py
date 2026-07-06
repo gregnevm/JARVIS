@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
 
 from app.bg_job_runner import run_bg_job_once
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from app import toolkit
 from app.config import settings
 from app.tools import continue_tool

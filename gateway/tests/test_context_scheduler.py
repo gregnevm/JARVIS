@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 from app.context_scheduler import _daily_key, plan_context_run, run_due
 
 _UTC = timezone.utc

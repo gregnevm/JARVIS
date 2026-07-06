@@ -5,11 +5,10 @@ stray "'" would break out and inject commands on the host. Validation runs BEFOR
 _run_powershell, so the rejection paths need neither Windows nor a real PS process.
 """
 import pytest
-from fastapi.testclient import TestClient
-
 from app import main as hostagent_main
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 TOKEN = {"X-Hostagent-Token": "secret"}
 

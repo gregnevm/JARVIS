@@ -4,8 +4,6 @@ from __future__ import annotations
 import asyncio
 import types
 
-import pytest
-
 from app import apk_autodeliver
 from app.config import settings
 

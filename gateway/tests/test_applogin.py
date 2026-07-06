@@ -1,8 +1,6 @@
 """One-tap login link: mint_login_link прив'язує токен до user_id і будує deeplink."""
 from __future__ import annotations
 
-import pytest
-
 from app import applogin
 from app.config import settings
 

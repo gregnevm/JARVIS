@@ -11,9 +11,9 @@ from pydantic import BaseModel
 
 from .config import settings
 from .context import router as context_router
-from .team import router as team_router
 from .db import DB
 from .rag import Embedder, chunk_text
+from .team import router as team_router
 
 logging.basicConfig(
     level=logging.INFO,

@@ -9,7 +9,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.tools.check_tools import _summarize_lint, _summarize_pytest
 
 _GOLDEN = json.loads(

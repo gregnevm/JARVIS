@@ -9,7 +9,6 @@ None — а не передаються як `None`, що для деяких ht
 from __future__ import annotations
 
 import httpx
-
 from app.tools_client_http import tools_request
 
 

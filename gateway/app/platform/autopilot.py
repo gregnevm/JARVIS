@@ -11,6 +11,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
+from jarvis_core.okr import mutate_okr, okr_to_dict
+
 from ..auto_coroutine import (
     load_okr,
     make_tools_dispatch,
@@ -20,7 +22,6 @@ from ..auto_coroutine import (
     save_okr,
 )
 from ..config import settings
-from jarvis_core.okr import mutate_okr, okr_to_dict
 from .auth import PlatformAuth, require_platform_auth, resolve_uid
 
 

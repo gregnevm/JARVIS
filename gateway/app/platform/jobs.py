@@ -4,8 +4,9 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from jarvis_core.bg_jobs import platform_create_method
 from pydantic import BaseModel
+
+from jarvis_core.bg_jobs import platform_create_method
 
 from .._helpers import require_text
 from .auth import PlatformAuth, require_platform_auth, resolve_uid

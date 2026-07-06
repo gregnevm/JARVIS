@@ -7,6 +7,7 @@ from __future__ import annotations
 
 def test_shim_reexports_core_api():
     from app import auto_coroutine as shim
+
     from jarvis_core import autopilot as core
 
     for name in (

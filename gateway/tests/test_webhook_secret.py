@@ -1,10 +1,9 @@
 """Перевірка секрету вебхука: /webhook має відкидати апдейти без правильного заголовка."""
 from typing import Any
 
-from fastapi.testclient import TestClient
-
 import app.main as main
 from app.config import settings
+from fastapi.testclient import TestClient
 
 
 async def _noop(update: dict[str, Any], app: Any) -> None:

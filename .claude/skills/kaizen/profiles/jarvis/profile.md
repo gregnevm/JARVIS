@@ -36,6 +36,11 @@ Per-service `pytest + mypy` over `[jarvis_core, gateway, memory, tools, twin, ho
   [`kaizen/scripts/passport_store.py`](../../scripts/passport_store.py) →
   `data/artifacts/self-improve/passports/` (write / recency-read / AND-of-tags search). The loop runs
   fully **without** memory:8100 or Ollama. This is the active binding today.
+- **retention (R5 «Тонкий шлюз»):** at the END of every window run
+  `python scripts/passport_retention.py` (repo-level script, keep-50): older passports are packed to
+  `data/artifacts/self-improve/archive/*.tar.gz` (gitignored; archive is written & verified BEFORE
+  deletion) and removed from git. `summary.json` keeps the all-time aggregate. Commit the deletions
+  in the window's final PR — git history never bloats past ~50 passport files.
 - **upgrade (when `ENABLE_CONTEXT_API` + services up):** rag-backend via the gateway client-API —
   **write:** `POST /ingest/events`; **read:** `POST /context/search`
   ([`gateway/app/client_api/context.py`](../../../../../gateway/app/client_api/context.py); gated by

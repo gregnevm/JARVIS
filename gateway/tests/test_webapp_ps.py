@@ -5,10 +5,9 @@ import json
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture

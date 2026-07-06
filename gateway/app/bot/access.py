@@ -10,7 +10,6 @@ from ..auth import is_admin
 from ..config import settings
 from ..telegram import TelegramClient
 from ._helpers import require_admin_or_reply
-from .dashboard import esc
 from .keyboards import access_decision_keyboard
 
 logger = logging.getLogger("jarvis.gateway.access")

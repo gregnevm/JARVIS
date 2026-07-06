@@ -1,9 +1,8 @@
 """AP-5: /v1 + key-management surface is discoverable in the OpenAPI schema."""
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 def test_openapi_exposes_platform_surface() -> None:

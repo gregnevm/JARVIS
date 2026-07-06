@@ -1,13 +1,10 @@
 """Client-API: driver (remote PC) + chrome (extension queue) + code (dispatch)."""
 from __future__ import annotations
 
-import json
-
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 AUTH = ("admin", "secret")
 

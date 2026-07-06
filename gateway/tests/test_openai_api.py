@@ -2,11 +2,10 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture

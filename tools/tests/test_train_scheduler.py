@@ -2,7 +2,6 @@
 import json
 
 import pytest
-
 from app.config import settings
 from app.train_scheduler import mark_exported, retrain_status
 

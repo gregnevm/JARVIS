@@ -5,10 +5,9 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from app.routes import team
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-
-from app.routes import team
 
 
 @pytest.fixture

@@ -5,7 +5,7 @@ import pytest
 
 from jarvis_core.llm.adapters import KoboldAdapter
 from jarvis_core.llm.chat import OllamaChatBackend
-from jarvis_core.llm.decorators import CacheLLM, StyleLLM, build_llm_stack
+from jarvis_core.llm.decorators import CacheLLM, StyleLLM
 from jarvis_core.llm.parsers import (
     extract_json_object,
     kobold_token,

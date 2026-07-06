@@ -132,7 +132,7 @@ class OllamaChatBackend:
             resp = await self._client.post(self._url, json=payload)
             resp.raise_for_status()
             data = resp.json()
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx.HTTPError, ValueError):
             self._trip()
             raise
         msg = data.get("message")

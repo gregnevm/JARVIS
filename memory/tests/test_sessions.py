@@ -1,6 +1,5 @@
 """list_sessions DB helper."""
 import pytest
-
 from app.db import DB
 
 

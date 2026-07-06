@@ -1,9 +1,7 @@
 """C5 admin PowerShell gate + double confirm."""
 import pytest
-
 from app.computer_access import admin_powershell_denied_message
 from app.computer_confirm import (
-    ADMIN_CONFIRM_MARKER,
     audit_tier,
     execute_confirmed,
     save_pending,

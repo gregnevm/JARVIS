@@ -7,6 +7,8 @@ I/O — gateway/tools; цей пакет — лише домен (P8, стату
 """
 from __future__ import annotations
 
+from .delegate import DelegateActor, delegate_actor
+from .graph import OrgGraph, interaction_edges
 from .models import (
     REL_KINDS,
     SQUAD_KINDS,
@@ -16,9 +18,7 @@ from .models import (
     Squad,
     SquadMember,
 )
-from .graph import OrgGraph, interaction_edges
 from .visibility import VisibleResource, can_read
-from .delegate import DelegateActor, delegate_actor
 
 __all__ = [
     "DelegateActor",

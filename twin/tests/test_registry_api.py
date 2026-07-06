@@ -1,10 +1,9 @@
 """ModelRegistry REST — /registry/* (FastAPI TestClient)."""
 from pathlib import Path
 
-from fastapi.testclient import TestClient
-
 import app.main as main
 from app.config import settings
+from fastapi.testclient import TestClient
 
 
 def _client(tmp_path: Path, monkeypatch) -> TestClient:

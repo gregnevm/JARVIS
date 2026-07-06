@@ -1,9 +1,9 @@
 """TC-5 — watchers: overdue-step детектор → read-only notify-пропозиції."""
 from __future__ import annotations
 
-from jarvis_core.process import Process, ProcessStep
 from jarvis_core.proactive import overdue_steps, process_watch_proposals
 from jarvis_core.proactive.gate import requires_confirmation
+from jarvis_core.process import Process, ProcessStep
 
 
 def _proc(status: str = "running") -> Process:

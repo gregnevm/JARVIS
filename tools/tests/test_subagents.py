@@ -1,6 +1,5 @@
 """P8 subagents storage."""
 import pytest
-
 from app import subagents
 
 

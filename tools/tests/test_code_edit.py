@@ -5,7 +5,6 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from app import computer, toolkit
 from app.computer_confirm import (
     CONFIRM_MARKER,
@@ -15,7 +14,6 @@ from app.computer_confirm import (
     tier_for,
 )
 from app.config import settings
-
 
 # --- pure: mutating / tier / describe ---------------------------------------
 

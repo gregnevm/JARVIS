@@ -4,8 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 
-import redis.asyncio as aioredis
-
 from .telegram import TelegramClient
 from .tools_client import ToolsClient
 

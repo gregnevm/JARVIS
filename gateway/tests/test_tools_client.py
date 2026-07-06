@@ -2,7 +2,6 @@
 import asyncio
 
 import httpx
-
 from app.tools_client import ToolsClient, extract_text
 
 

@@ -1,6 +1,5 @@
 """P9 agent teams storage."""
 import pytest
-
 from app import teams
 
 

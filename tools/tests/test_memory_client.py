@@ -1,6 +1,5 @@
 """MemoryClient толерує помилки Memory-сервісу (памʼять — не критичний шлях)."""
 import httpx
-
 from app.memory_client import MemoryClient
 
 

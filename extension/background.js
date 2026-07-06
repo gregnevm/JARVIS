@@ -4,9 +4,13 @@
 
 const POLL_MS = 1500;
 
+function normalizeServer(u) {
+  return (u || "").replace(/\/$/, "");
+}
+
 async function cfg() {
   const s = await chrome.storage.local.get(["server", "token"]);
-  return { server: (s.server || "").replace(/\/$/, ""), token: s.token || "" };
+  return { server: normalizeServer(s.server), token: s.token || "" };
 }
 
 function authHeaders(token) {
@@ -63,5 +67,13 @@ async function execute(cmd) {
   return out ? out.result : null;
 }
 
-setInterval(poll, POLL_MS);
-poll();
+// Бутстрап лише в service worker (chrome є). У node-тестах (R5.3) таймери не стартують.
+if (typeof chrome !== "undefined" && chrome.storage) {
+  setInterval(poll, POLL_MS);
+  poll();
+}
+
+// Node-тести (R5.3 smoke): у Chrome service worker `module` не існує — гілка мертва в проді.
+if (typeof module !== "undefined") {
+  module.exports = { authHeaders, normalizeServer };
+}

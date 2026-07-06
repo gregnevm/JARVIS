@@ -1,7 +1,6 @@
 import asyncio
 
 import httpx
-
 from app.bot.setup import bot_commands, register_bot_ui
 from app.telegram import TelegramClient
 

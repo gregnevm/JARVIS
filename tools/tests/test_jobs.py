@@ -1,9 +1,7 @@
 """schedule_job / due_jobs з підробленим Redis (ZSET)."""
-import json
 import time
 
 import pytest
-
 from app import jobs
 
 

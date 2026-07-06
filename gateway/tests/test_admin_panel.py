@@ -9,10 +9,9 @@ import time
 from urllib.parse import quote
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 def _auth_header(user: str, password: str) -> dict[str, str]:

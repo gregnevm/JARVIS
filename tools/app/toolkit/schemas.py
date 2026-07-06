@@ -460,7 +460,7 @@ def _mcp_enabled() -> bool:
 
 
 def _connector_schemas() -> list[dict[str, Any]]:
-    from ..connectors import calendar, notion, slack
+    from ..connectors import notion, slack
 
     out: list[dict[str, Any]] = []
     if notion.is_configured():

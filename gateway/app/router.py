@@ -17,9 +17,12 @@ from typing import Any
 import httpx
 import redis.asyncio as aioredis
 
-from .auth import get_access_store, is_admin, is_allowed, can_use_computer
-from .bot.access import handle_guest_access
+from jarvis_core.routing import is_screenshot_request
+
+from .agent_turn import run_agent_turn
+from .auth import can_use_computer, get_access_store, is_admin, is_allowed
 from .bot import handle_callback, handle_command, handle_quick_action, is_command, is_quick_action
+from .bot.access import handle_guest_access
 from .bot.quick_actions import ensure_reply_keyboard_auto
 from .config import settings
 from .media import (
@@ -34,11 +37,9 @@ from .media import (
     extract_file_attachment,
     message_context,
 )
-from jarvis_core.routing import is_screenshot_request
 from .outbound import deliver
 from .ratelimit import RateLimiter
 from .services import ServicesClient
-from .agent_turn import run_agent_turn
 from .telegram import TelegramClient
 from .tools_client import ToolsClient
 from .tts_client import TtsClient

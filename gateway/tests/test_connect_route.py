@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app import auth_links
 from app.config import settings
 from app.main import app
 from app.saas import auth as jwt_auth
+from fastapi.testclient import TestClient
 
 
 class FakeRedis:

@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from app import computer
 from app.computer_confirm import (
     describe_action,

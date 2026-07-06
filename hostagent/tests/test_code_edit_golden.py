@@ -11,10 +11,9 @@ import json
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import _apply_search_replace, _apply_unified_diff, app
+from fastapi.testclient import TestClient
 
 _GOLDEN = json.loads(
     (Path(__file__).parent / "golden" / "code_edit.json").read_text(encoding="utf-8")

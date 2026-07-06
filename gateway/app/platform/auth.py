@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from fastapi import Cookie, Depends, Header, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+
 from jarvis_core.context import RequestContext, synthetic_context
 
 from ..auth import is_admin

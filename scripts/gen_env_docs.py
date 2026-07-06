@@ -60,9 +60,9 @@ def _inspect_child(svc: str) -> dict[str, str]:
 def _inspect_here(svc: str) -> dict[str, str]:
     sys.path.insert(0, str(ROOT))
     sys.path.insert(1, str(ROOT / svc))
-    from jarvis_core.settings.inventory import settings_inventory
-
     import app.config as cfg  # noqa: PLC0415 — сервісний пакет після path-манпуляції
+
+    from jarvis_core.settings.inventory import settings_inventory
 
     return settings_inventory(cfg.Settings)
 

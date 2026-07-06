@@ -1,6 +1,5 @@
 """Доступ до Computer Use лише для власника ПК."""
 import pytest
-
 from app.computer_access import can_use_computer, computer_denied_message
 from app.config import settings
 

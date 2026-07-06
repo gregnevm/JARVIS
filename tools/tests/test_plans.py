@@ -1,6 +1,5 @@
 """P3 plans storage."""
 import pytest
-
 from app import plans
 
 

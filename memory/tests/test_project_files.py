@@ -1,8 +1,6 @@
 """read_project_files_content — токен-бюджет інжекту (P1.7 → CA-2.5)."""
 from __future__ import annotations
 
-import pytest
-
 from app.db import DB
 
 

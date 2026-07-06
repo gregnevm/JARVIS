@@ -1,5 +1,5 @@
 """Remote macros."""
-from app.macros import list_macros, load_macros, run_macro
+from app.macros import list_macros, run_macro
 
 
 def test_list_macros_default():

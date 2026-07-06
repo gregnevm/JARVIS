@@ -1,6 +1,5 @@
 """P6 connectors."""
 import pytest
-
 from app.connectors import calendar, notion, slack
 
 

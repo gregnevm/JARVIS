@@ -3,7 +3,6 @@ import json
 import time
 
 import pytest
-
 from app import reminders
 
 

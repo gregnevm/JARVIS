@@ -6,11 +6,11 @@ import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from .computer_access import computer_denied_message
 from .computer_audit import log_action
 from .computer_learned import is_cli_trusted, is_ps_trusted, learn_from_action
-from .ps_whitelist import check_ps_whitelist, extract_ps_cmdlets
-from .computer_access import computer_denied_message
 from .config import settings
+from .ps_whitelist import check_ps_whitelist, extract_ps_cmdlets
 from .redis_util import get_redis
 
 _PENDING_PREFIX = "jarvis:computer:pending:"

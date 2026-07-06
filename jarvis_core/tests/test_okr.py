@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from jarvis_core.okr import (
-    KeyResult,
     OKR,
+    KeyResult,
     Objective,
     mutate_okr,
     okr_from_dict,

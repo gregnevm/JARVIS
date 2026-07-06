@@ -9,7 +9,6 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-
 from app.agent import AgentRunner
 
 _FAIL_A = (

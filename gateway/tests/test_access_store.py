@@ -1,6 +1,5 @@
 """Динамічний whitelist: черга, approve, revoke."""
 import pytest
-
 from app.access_store import AccessStore, UserRecord
 
 

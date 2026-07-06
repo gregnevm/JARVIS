@@ -5,7 +5,7 @@ from typing import Any
 
 from jarvis_core.pipeline.base import Handler
 from jarvis_core.pipeline.handlers import screen_text
-from jarvis_core.pipeline.types import AgentRequest, AgentResponse
+from jarvis_core.pipeline.types import AgentRequest
 
 StreamProvider = Callable[[int, str, str | None], AsyncIterator[dict[str, Any]]]
 

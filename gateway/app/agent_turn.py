@@ -5,7 +5,6 @@ from typing import Any
 
 import redis.asyncio as aioredis
 
-from .config import settings
 from .outbound import deliver
 from .runtime_flags import streaming_enabled
 from .streaming import stream_reply

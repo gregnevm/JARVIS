@@ -4,8 +4,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-import pytest
-
 from jarvis_core.passport import build_daily, build_proposals, run_retention, summarize_pending
 
 

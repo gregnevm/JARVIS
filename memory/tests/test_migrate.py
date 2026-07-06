@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app import migrate as migrate_mod
 from app.config import Settings
 from app.migrate import column_dim_mismatch, embed_dim_mismatch
-from app import migrate as migrate_mod
 
 
 def test_sync_dsn_uses_psycopg2_driver():

@@ -78,6 +78,25 @@ jobs:
           pip install -q -r requirements-dev.txt -r jarvis_core/requirements.txt pydantic-settings
           python scripts/gen_env_docs.py --check
 
+      # R5.2: базовий лінт (E/F/I, конфіг у pyproject) — без стилістичних воєн.
+      - name: ruff (E/F/I)
+        run: |
+          pip install -q ruff
+          ruff check gateway tools memory twin hostagent jarvis_core scripts
+
+      # R5.2: секрет-скан робочого дерева (фейкові тест-секрети — у .gitleaks.toml).
+      - name: gitleaks (working tree)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz gitleaks
+          ./gitleaks detect --no-git --source . --redact
+
+      # R5.3: smoke чистих хелперів extension (node:test, без залежностей).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: extension smoke (node --test)
+        run: node --test extension/tests/*.test.js
+
   # Дешева перевірка: docker-compose.yml лишається валідним (синтаксис + інтерполяція .env).
   compose-validate:
     name: docker compose config

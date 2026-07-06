@@ -4,10 +4,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 AUTH = ("admin", "secret")
 _REAL_APK = Path(__file__).resolve().parents[2] / "data" / "artifacts" / "jarvis-mvp.apk"

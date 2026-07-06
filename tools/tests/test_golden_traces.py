@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+
 import pytest
 
 from jarvis_core.pipeline.handlers import screen_text

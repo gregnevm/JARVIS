@@ -5,7 +5,6 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from app import computer, toolkit
 from app.agent import decide_mode
 from app.config import settings

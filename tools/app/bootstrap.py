@@ -14,7 +14,7 @@ from jarvis_core.pipeline.handlers import build_agent_pipeline
 from .agent import AgentRunner, decide_mode
 from .config import settings
 from .memory_client import MemoryClient
-from .runtime import get_agent_mode, set_agent_mode
+from .runtime import get_agent_mode
 
 
 async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:

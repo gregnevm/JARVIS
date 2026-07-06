@@ -46,7 +46,7 @@ async def test_add_reminder_rejects_empty_and_past(monkeypatch):
 
 
 async def test_list_reminders_filters_by_user(monkeypatch):
-    fake = _inject(monkeypatch)
+    _inject(monkeypatch)
     await reminders.add_reminder(42, 10, "моє")
     await reminders.add_reminder(99, 10, "чуже")
     out = await reminders.list_reminders(42)

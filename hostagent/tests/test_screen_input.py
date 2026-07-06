@@ -4,11 +4,10 @@ from __future__ import annotations
 import sys
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
 from app.screen_input import build_hotkey_ps, build_scroll_ps, build_type_ps
+from fastapi.testclient import TestClient
 
 
 def test_build_type_ps_short():

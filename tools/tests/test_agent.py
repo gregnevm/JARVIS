@@ -2,7 +2,6 @@
 from typing import Any
 
 import pytest
-
 from app import agent
 from app.agent import AgentRunner, decide_mode
 from app.config import settings
