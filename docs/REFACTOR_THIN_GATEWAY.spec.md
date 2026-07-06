@@ -134,10 +134,10 @@ handler-и напряму). Відкат — revert одного PR, бо міг
 - [x] **R3.4** Єдиний auth-резолвер + адаптери client_api/platform; вбити дубль `_uid()`
 - [x] **R4.1** `jarvis_core/settings/` блоки + міграція gateway/tools config (env-імена незмінні)
 - [x] **R4.2** `scripts/gen_env_docs.py` + CI drift-гейт; згенерувати .env.example/ENV_CHECKLIST
-- [ ] **R5.1** Retention паспортів (kaizen-профіль ротує; архів поза git)
-- [ ] **R5.2** ruff + gitleaks у CI (базові профілі)
-- [ ] **R5.3** Extension: jest-smoke на background.js хелпери
-- [ ] Тести під усі критерії прийняття §1
+- [x] **R5.1** Retention паспортів (kaizen-профіль ротує; архів поза git)
+- [x] **R5.2** ruff + gitleaks у CI (базові профілі)
+- [x] **R5.3** Extension: jest-smoke на background.js хелпери
+- [x] Тести під усі критерії прийняття §1
 
 ## 4. Implement
 
@@ -170,6 +170,15 @@ handler-и напряму). Відкат — revert одного PR, бо міг
   в `arch-gates`. Відхилення від букви критерію: `.env.example` лишається кураторським
   (рукописні коментарі цінні), але під stale-гейтом — невідома коду змінна валить CI;
   перший улов гейта: мертва `GATEWAY_URL` прибрана.
+- **2026-07-06 · R5 (R5.1–R5.3)** — гілка `claude/tg-r5-hygiene`: retention паспортів
+  (`scripts/passport_retention.py`, keep-50; архів пишеться і ВЕРИФІКУЄТЬСЯ до видалення;
+  61 → 50 у git, `passports-0010.tar.gz` у gitignored archive/ + копія в живому data/;
+  kaizen-профіль ротує наприкінці кожного вікна). ruff E/F/I (конфіг у pyproject,
+  E501 свідомо off): 224 знахідки → 0 (216 автофіксом); gitleaks по робочому дереву
+  (.gitleaks.toml вайтлістить фейкові тест-секрети redaction-тестів). Extension smoke —
+  node:test без залежностей (відхилення від «jest»: нуль нових deps, той самий смисл);
+  background.js: guard бутстрапа + guarded module.exports (у Chrome гілка мертва).
+  Всі 3 гейти — кроки CI job arch-gates + node-smoke.
 - **2026-07-06 · R1.4** — критерій < 5 хв перевиконано: повний локальний прогін **~58s**
   (раніше — нескінченний hang). Другий пожирач часу після стартової мережі — Windows
   ретраїть TCP-connect до закритого порту ~2s: docker-хости у фікстурі переведені на

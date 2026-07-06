@@ -21,6 +21,7 @@ sys.path.insert(0, str(REPO_ROOT / "gateway"))
 sys.path.insert(0, str(REPO_ROOT))
 
 from app.auto_coroutine import (  # noqa: E402
+    append_run_log,  # noqa: E402
     load_okr,
     make_local_dispatch,
     render_dashboard,
@@ -28,7 +29,6 @@ from app.auto_coroutine import (  # noqa: E402
     save_dashboard,
     save_okr,
 )
-from app.auto_coroutine import append_run_log  # noqa: E402
 
 
 async def _main() -> int:

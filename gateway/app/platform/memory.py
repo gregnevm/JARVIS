@@ -11,13 +11,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from jarvis_core.service_client import ServiceError, call
 
-from ..config import settings
 from .._helpers import require_text
+from ..config import settings
 from .auth import PlatformAuth, require_platform_auth, resolve_uid
 
 logger = logging.getLogger("jarvis.gateway.platform.memory")

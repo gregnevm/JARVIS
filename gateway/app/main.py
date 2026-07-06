@@ -5,36 +5,35 @@ import asyncio
 import contextlib
 import hmac
 import logging
-from contextlib import asynccontextmanager
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 import redis.asyncio as aioredis
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from starlette.responses import Response
 
-from pathlib import Path
-
 from . import router
 from .access_store import AccessStore
+from .admin_panel import router as admin_panel_router
 from .auth import allowed_ids_snapshot, bind_access_store
-from .config import settings
+from .bg_job_runner import bg_job_runner_loop
 from .bot.setup import register_bot_ui
-from .reminders import reminder_loop
+from .client_api import router as client_api_router
+from .config import settings
+from .connect import router as connect_router
 from .health_watch import health_watch_loop
 from .job_runner import job_runner_loop
-from .bg_job_runner import bg_job_runner_loop
-from .services import ServicesClient
-from .admin_panel import router as admin_panel_router
-from .platform import router as platform_router
 from .openai_api import router as openai_router
-from .client_api import router as client_api_router
-from .webapp import router as webapp_router
-from .connect import router as connect_router
-from .tools_client import ToolsClient
+from .platform import router as platform_router
 from .ratelimit import RateLimiter
+from .reminders import reminder_loop
+from .services import ServicesClient
 from .telegram import TelegramClient
+from .tools_client import ToolsClient
 from .tts_client import TtsClient
+from .webapp import router as webapp_router
 from .whisper import WhisperClient
 
 logging.basicConfig(

@@ -1,6 +1,5 @@
 """Cursor Telegram flow."""
 import pytest
-
 from app.bot.cursor_flow import can_use_cursor, format_status, try_extract_cursor_task
 
 

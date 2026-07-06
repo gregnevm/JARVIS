@@ -8,10 +8,9 @@ import time
 from urllib.parse import quote
 
 import pytest
-from fastapi import HTTPException
-
 from app.config import settings
 from app.telegram_webapp_auth import admin_app_url, authorize_admin, user_id_from_init_data
+from fastapi import HTTPException
 
 
 def _sign(pairs: dict[str, str], bot_token: str) -> str:

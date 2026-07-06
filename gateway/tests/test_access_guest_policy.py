@@ -1,15 +1,14 @@
 """Політика доступу: режим лише адмін; Computer Use — лише власник ПК."""
 import pytest
-
+from app.access_store import AccessStore
 from app.auth import (
     agent_mode_denied_message,
+    bind_access_store,
     can_change_agent_mode,
     can_use_computer,
     can_use_computer_mode,
     is_allowed,
 )
-from app.access_store import AccessStore, UserRecord
-from app.auth import bind_access_store
 
 
 def test_mode_change_admin_only(monkeypatch) -> None:

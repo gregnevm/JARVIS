@@ -43,6 +43,9 @@ data/artifacts/self-improve/resume.json
 data/artifacts/self-improve/window.json
 data/artifacts/self-improve/signatures.json
 data/artifacts/self-improve/runs/**/run.jsonl
+# R5 «Тонкий шлюз»: retention — старі паспорти пакуються в архів поза git
+# (scripts/passport_retention.py, keep-50); історія лишається в git-історії й tar-ах.
+data/artifacts/self-improve/archive/
 
 # build-артефакти (APK тощо) — не сорс, не комітимо.
 data/artifacts/*.apk

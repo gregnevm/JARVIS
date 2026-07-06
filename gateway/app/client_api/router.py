@@ -23,8 +23,8 @@ from . import chat as chat_api
 from . import chrome as chrome_api
 from . import code as code_api
 from . import confirm as confirm_api
-from . import driver as driver_api
 from . import context as context_api
+from . import driver as driver_api
 from . import workspace as workspace_api
 from .deps import resolve_client_context
 

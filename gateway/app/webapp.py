@@ -20,11 +20,11 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 
+from jarvis_core.service_client import ServiceError, call_dict
+
 from . import artifacts as app_artifacts
 from ._helpers import AGENT_MODES, require_mode, require_text
 from .auth import agent_mode_denied_message, can_change_agent_mode
-from jarvis_core.service_client import ServiceError, call_dict
-
 from .config import settings
 from .runtime_flags import get_flags, set_flag
 from .telegram_webapp_auth import authorize_allowed

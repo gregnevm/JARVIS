@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 AUTH = ("admin", "secret")
 

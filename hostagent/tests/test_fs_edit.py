@@ -4,9 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import (
     _apply_rename_symbol,
@@ -15,6 +12,8 @@ from app.main import (
     _parse_hunks,
     app,
 )
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 TOKEN = "test-token-secret"
 H = {"X-Hostagent-Token": TOKEN}

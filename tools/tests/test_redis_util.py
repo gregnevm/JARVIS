@@ -10,7 +10,6 @@ setattr(<module>, "get_redis", lambda: fake)` у викликачів, що по
 from __future__ import annotations
 
 import pytest
-
 from app import redis_util
 
 

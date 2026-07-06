@@ -6,21 +6,53 @@
 """
 from .core import (
     STAGE_IDS as STAGE_IDS,
+)
+from .core import (
     STAGES as STAGES,
+)
+from .core import (
     CycleResult as CycleResult,
+)
+from .core import (
     StageContext as StageContext,
+)
+from .core import (
     StageDispatch as StageDispatch,
+)
+from .core import (
     StageOutcome as StageOutcome,
-    append_run_log as append_run_log,
-    auto_coroutine_loop as auto_coroutine_loop,
-    load_okr as load_okr,
-    make_local_dispatch as make_local_dispatch,
-    make_tools_dispatch as make_tools_dispatch,
-    outcome_deltas as outcome_deltas,
-    plan_cycle as plan_cycle,
-    render_dashboard as render_dashboard,
-    run_cycle as run_cycle,
-    save_dashboard as save_dashboard,
-    save_okr as save_okr,
 )
 from .core import _pytest_summary as _pytest_summary  # тести parsers (приватний, свідомо)
+from .core import (
+    append_run_log as append_run_log,
+)
+from .core import (
+    auto_coroutine_loop as auto_coroutine_loop,
+)
+from .core import (
+    load_okr as load_okr,
+)
+from .core import (
+    make_local_dispatch as make_local_dispatch,
+)
+from .core import (
+    make_tools_dispatch as make_tools_dispatch,
+)
+from .core import (
+    outcome_deltas as outcome_deltas,
+)
+from .core import (
+    plan_cycle as plan_cycle,
+)
+from .core import (
+    render_dashboard as render_dashboard,
+)
+from .core import (
+    run_cycle as run_cycle,
+)
+from .core import (
+    save_dashboard as save_dashboard,
+)
+from .core import (
+    save_okr as save_okr,
+)

@@ -16,19 +16,18 @@ from ..config import settings
 from ..services import ServicesClient
 from ..telegram import TelegramClient
 from ..tools_client import ToolsClient
-from .dashboard import esc, format_dashboard, format_help
-from .dispatch import CbCtx, Ctx, CallbackRegistry, CommandRegistry
 from ._helpers import send_denial
 from .access import handle_access_command, is_access_command
 from .admin import handle_admin_command, is_admin_command
+from .dashboard import esc, format_dashboard, format_help
+from .dispatch import CallbackRegistry, CbCtx, CommandRegistry, Ctx
 from .keyboards import (
     main_menu_keyboard,
     mode_keyboard,
-    remove_reply_keyboard,
-    reply_keyboard,
     reminders_hint_keyboard,
+    remove_reply_keyboard,
 )
-from .quick_actions import _run_brief, mark_keyboard_off, mark_keyboard_on, show_reply_keyboard
+from .quick_actions import _run_brief, mark_keyboard_off, show_reply_keyboard
 from .reminders_view import format_reminders_message, list_user_reminders
 
 logger = logging.getLogger("jarvis.gateway.bot")

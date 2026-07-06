@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from app import hooks, precommit_gate
 from app.config import settings
 

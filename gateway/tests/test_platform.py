@@ -7,10 +7,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 AUTH = ("admin", "secret")
 
@@ -145,7 +144,7 @@ def test_workbench_sse(client):
     r = client.post("/platform/api/workbench/ask", auth=AUTH, json={"text": "яка погода", "mode": "agent"})
     assert r.status_code == 200
     assert "text/event-stream" in r.headers.get("content-type", "")
-    events = [json.loads(l[5:].strip()) for l in r.text.split("\n") if l.strip().startswith("data:")]
+    events = [json.loads(ln[5:].strip()) for ln in r.text.split("\n") if ln.strip().startswith("data:")]
     assert any("tool_start" in e for e in events)
     assert any(e.get("done") for e in events)
     assert events[-1]["text"] == "Сьогодні сонячно."

@@ -16,15 +16,16 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
 from typing import Any
 
-from .config import settings
-from .memory_client import MemoryClient
-from .thread_context import build_thread_context
-from .user_profile import profile_prompt_block
 from jarvis_core.agent.tool_loop import ToolStepResult, run_tool_loop
 from jarvis_core.agent.trace import tool_trace_entry
 from jarvis_core.llm.chat import ChatBackend
 from jarvis_core.llm.parsers import extract_json_object, scan_balanced_json
+
+from .config import settings
+from .memory_client import MemoryClient
+from .thread_context import build_thread_context
 from .toolkit import agent_tool_schemas, coerce_args, dispatch, image_gen_enabled
+from .user_profile import profile_prompt_block
 
 logger = logging.getLogger("jarvis.tools.agent")
 
@@ -424,10 +425,9 @@ class AgentRunner:
         max_iters_override: int | None = None,
     ) -> dict[str, Any]:
         """Повертає {'text': ..., 'mode': 'chat'|'agent'|'computer', 'iters': N}."""
-        from .runtime import get_agent_mode
         from . import hooks as agent_hooks
-
         from .metrics import record_turn
+        from .runtime import get_agent_mode
 
         t0 = time.perf_counter()
         iters = 0
@@ -487,9 +487,8 @@ class AgentRunner:
 
         Дзеркалить run(): та сама маршрутизація, контекст і запис у памʼять.
         """
-        from .runtime import get_agent_mode
-
         from .metrics import record_turn
+        from .runtime import get_agent_mode
 
         t0 = time.perf_counter()
         iters = 0

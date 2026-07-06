@@ -1,6 +1,5 @@
 """C6.1 vision on-demand VRAM helpers."""
 import pytest
-
 from app.config import settings
 from app.ollama_vram import vision_chat_payload, vision_vram_scope
 

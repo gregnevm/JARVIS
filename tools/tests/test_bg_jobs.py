@@ -1,8 +1,6 @@
 """Background jobs (P2) — окремо від macro scheduler."""
-import json
 
 import pytest
-
 from app import bg_jobs
 
 

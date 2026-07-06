@@ -5,7 +5,6 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Any
 from urllib.parse import parse_qsl
 
 from fastapi import HTTPException

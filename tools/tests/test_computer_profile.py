@@ -1,6 +1,5 @@
 """COMPUTER_PROFILE presets (AM-0.3)."""
 import pytest
-
 from app.agent import system_computer
 from app.computer_profile import (
     allows_browser,

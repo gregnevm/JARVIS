@@ -1,8 +1,7 @@
 """Browser tools (C3) — mock Playwright, без мережі."""
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-
 from app import browser
 from app.computer_confirm import is_mutating, tier_for
 from app.config import settings

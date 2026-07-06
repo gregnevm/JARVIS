@@ -10,7 +10,6 @@ import json
 from typing import Any
 
 import pytest
-
 from app.agent import AgentRunner
 from app.config import settings
 

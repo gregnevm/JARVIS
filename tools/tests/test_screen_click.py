@@ -2,7 +2,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-
 from app.computer_confirm import is_mutating, tier_for
 from app.config import settings
 

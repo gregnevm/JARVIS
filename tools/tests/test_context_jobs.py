@@ -5,11 +5,9 @@ jarvis_core/tests/test_passport_jobs.py; тут — інтеграція ада�
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 import httpx
 import pytest
-
 from app.context_jobs import run_context_job
 from app.main import app
 

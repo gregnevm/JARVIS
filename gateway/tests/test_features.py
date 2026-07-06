@@ -1,8 +1,5 @@
 """Нові типи контенту: контекст (reply/forward), альбоми, реакції, inline, кнопки."""
-import json
 from typing import Any
-
-import pytest
 
 import app.router as router
 from app.config import settings

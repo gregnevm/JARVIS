@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from app import apk_artifact
 from app.bot import apk as apk_bot
 from app.bot.commands import handle_command, is_command

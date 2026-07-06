@@ -1,6 +1,5 @@
 """ModelRegistry — register / promote / rollback / get_active (in-memory SQLite)."""
 import pytest
-
 from app.registry import ModelRegistry
 
 

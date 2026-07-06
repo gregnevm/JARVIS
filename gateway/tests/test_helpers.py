@@ -9,10 +9,8 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
-
 from app._helpers import AGENT_MODES, require_found, require_mode, require_text
-
+from fastapi import HTTPException
 
 # --- require_text ---
 

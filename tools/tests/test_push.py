@@ -1,8 +1,6 @@
 """ntfy push (BE3): guard-логіка + успішна публікація з фейковим httpx-клієнтом."""
 from __future__ import annotations
 
-import pytest
-
 from app import push
 from app.config import settings
 

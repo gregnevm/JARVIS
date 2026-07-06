@@ -1,6 +1,5 @@
 """Computer rate limit per hour."""
 import pytest
-
 from app.computer_rate_limit import check_mutating_allowed, record_mutating
 from app.config import settings
 

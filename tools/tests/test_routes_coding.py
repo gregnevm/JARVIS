@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import pytest
+from app.routes import coding
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-
-from app.routes import coding
 
 
 @pytest.fixture

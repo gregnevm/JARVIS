@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from app.computer_confirm import is_mutating
 from app.computer_learned import (
     effective_ps_allowed,

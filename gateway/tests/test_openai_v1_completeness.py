@@ -4,10 +4,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 class FakeRedis:
@@ -143,8 +142,9 @@ def test_models_merges_ollama_catalog(client: TestClient, monkeypatch: pytest.Mo
 def test_v1_request_is_logged(client: TestClient) -> None:
     client.get("/v1/models", headers=_auth())
     client.get("/v1/models", headers={"Authorization": "Bearer nope"})  # 401 also logged
-    from app.saas.request_log import RequestLogStore
     import asyncio
+
+    from app.saas.request_log import RequestLogStore
 
     rows = asyncio.run(RequestLogStore(client.app.state.redis).recent(limit=10))
     assert any(r["path"] == "/v1/models" and r["status"] == 200 for r in rows)

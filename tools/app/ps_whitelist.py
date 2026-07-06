@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import re
 
-from .config import settings
-
 
 def parse_whitelist(raw: str) -> set[str]:
     return {x.strip().lower() for x in (raw or "").split(",") if x.strip()}

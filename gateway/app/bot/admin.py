@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any
 
 import redis.asyncio as aioredis
 

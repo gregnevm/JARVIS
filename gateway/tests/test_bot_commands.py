@@ -1,13 +1,13 @@
 import asyncio
 
+from app.bot.commands import is_command
 from app.bot.keyboards import (
     BTN_STATUS,
     main_menu_keyboard,
     mode_keyboard,
-    reply_keyboard,
     remove_reply_keyboard,
+    reply_keyboard,
 )
-from app.bot.commands import is_command
 from app.bot.quick_actions import is_quick_action
 
 

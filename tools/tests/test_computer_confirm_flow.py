@@ -1,6 +1,5 @@
 """Confirm flow: rate limit + admin second step."""
 import pytest
-
 from app.computer_confirm import (
     ADMIN_CONFIRM_MARKER,
     CONFIRM_MARKER,
@@ -120,7 +119,7 @@ async def test_admin_two_step_confirm(redis_env, monkeypatch: pytest.MonkeyPatch
     assert ADMIN_CONFIRM_MARKER[:24] in r1
     assert not executed
 
-    code2 = r1.split(":")[1].split("]")[0][:6]
+    r1.split(":")[1].split("]")[0][:6]  # parse-перевірка формату маркера
     # parse code from marker [[COMPUTER_ADMIN_CONFIRM:xxxxxx]]
     import re
 

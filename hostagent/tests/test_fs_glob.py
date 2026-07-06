@@ -4,10 +4,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 TOKEN = "test-token-secret"
 H = {"X-Hostagent-Token": TOKEN}

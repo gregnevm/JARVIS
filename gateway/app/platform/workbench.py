@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from .._helpers import AGENT_MODES_AUTO, require_mode, require_text
 from ..auth import computer_denied_message
 from ..computer_resume import resume_text
-from .._helpers import AGENT_MODES_AUTO, require_mode, require_text
 from .auth import PlatformAuth, require_platform_auth
 
 logger = logging.getLogger("jarvis.gateway.platform.workbench")

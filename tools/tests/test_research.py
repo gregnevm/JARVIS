@@ -1,6 +1,5 @@
 """P4 deep research orchestrator."""
 import pytest
-
 from app import research
 
 

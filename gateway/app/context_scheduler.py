@@ -16,7 +16,6 @@ from typing import Any
 import redis.asyncio as aioredis
 
 from jarvis_core.context import DEFAULT_ORG_ID, redis_key
-
 from jarvis_core.service_client import call_dict
 
 from .config import settings

@@ -10,11 +10,10 @@ import asyncio
 from types import SimpleNamespace
 
 import httpx
-from fastapi.testclient import TestClient
-
 from app import main
 from app.config import settings
 from app.telegram import TelegramClient
+from fastapi.testclient import TestClient
 
 
 def _tg_with_recorder(seen: list[str]) -> TelegramClient:

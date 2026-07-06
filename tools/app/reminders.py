@@ -121,7 +121,7 @@ async def export_ics(user_id: int) -> str:
     """iCalendar VEVENT для активних нагадувань користувача."""
     try:
         raw = await get_redis().zrange(REMINDERS_KEY, 0, -1, withscores=True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return ""
     rows = cast("list[tuple[str, float]]", raw)
     now_ts = int(time.time())

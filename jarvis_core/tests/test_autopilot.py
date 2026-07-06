@@ -19,7 +19,7 @@ from jarvis_core.autopilot import (
     run_cycle,
     save_okr,
 )
-from jarvis_core.okr import KeyResult, OKR, Objective
+from jarvis_core.okr import OKR, KeyResult, Objective
 
 
 def _okr(*progress: float) -> OKR:

@@ -8,7 +8,6 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from app import toolkit
 from app.config import settings
 from app.tools import coding_tools

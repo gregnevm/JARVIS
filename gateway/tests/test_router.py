@@ -1,9 +1,8 @@
 """handle_update: whitelist, rate-limit, текст, голос, невідомий контент."""
 from typing import Any
 
-import pytest
-
 import app.router as router
+import pytest
 from app.config import settings
 from app.streaming import _PLACEHOLDER
 

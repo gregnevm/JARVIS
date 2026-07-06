@@ -2,7 +2,6 @@
 import json
 
 import pytest
-
 from app import session_ingest
 from app.config import settings
 

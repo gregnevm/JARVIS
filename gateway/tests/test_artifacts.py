@@ -1,10 +1,7 @@
 """[[app:…]] директиви + Redis-історія Канвасу."""
-import json
+
 
-from app import artifacts
-
-
-class FakeRedis:
+from app import artifactsclass FakeRedis:
     def __init__(self) -> None:
         self.kv: dict[str, str] = {}
         self.lists: dict[str, list[str]] = {}

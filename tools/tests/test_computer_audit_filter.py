@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.computer_audit import log_action, tail_actions
 from app.config import settings
 

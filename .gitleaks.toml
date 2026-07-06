@@ -1,0 +1,15 @@
+# R5 «Тонкий шлюз»: секрет-скан робочого дерева (CI job arch-gates).
+# Тести НАВМИСНО містять фейкові секрети — це матеріал для redaction-тестів
+# (jarvis_core.passport). Їх вайтлістимо шляхами; app-код, конфіги, скрипти
+# і доки поза прикладами скануються повністю. Справжні секрети живуть лише
+# в .env (gitignored) — AGENTS.md §5.
+
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+    '''.*/tests/.*''',
+    '''docs/SAAS_DEEP_DIVE\.md''',
+    '''.*__pycache__.*''',
+]

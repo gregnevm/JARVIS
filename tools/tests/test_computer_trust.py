@@ -1,6 +1,5 @@
 """Trusted Computer Use session."""
 import pytest
-
 from app.computer_trust import grant_trust, is_trusted, revoke_trust, trust_level
 from app.config import settings
 

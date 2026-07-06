@@ -11,21 +11,21 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
 from . import apk, logs, memory, models, overview, projects, settings_api, users, workbench
+from . import autopilot as platform_autopilot
 from . import coding as platform_coding
-from . import team as platform_team
-from . import jobs as platform_jobs
-from . import plans as platform_plans
-from . import mcp as platform_mcp
 from . import connectors as platform_connectors
+from . import developer as platform_developer
+from . import hooks as platform_hooks
+from . import improve as platform_improve
+from . import jobs as platform_jobs
+from . import mcp as platform_mcp
+from . import orchestrator as platform_orchestrator
+from . import plans as platform_plans
 from . import research as platform_research
 from . import skills as platform_skills
 from . import subagents as platform_subagents
-from . import hooks as platform_hooks
+from . import team as platform_team
 from . import teams as platform_teams
-from . import orchestrator as platform_orchestrator
-from . import improve as platform_improve
-from . import autopilot as platform_autopilot
-from . import developer as platform_developer
 from .auth import PlatformAuth, require_platform_auth, resolve_context
 
 router = APIRouter()

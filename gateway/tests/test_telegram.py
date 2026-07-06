@@ -2,7 +2,6 @@
 import asyncio
 
 import httpx
-
 from app.telegram import TELEGRAM_MAX_LEN, TelegramClient, split_message
 
 

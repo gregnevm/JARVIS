@@ -5,14 +5,7 @@
 """
 from __future__ import annotations
 
-from .models import (
-    DEFAULT_KIND,
-    DEFAULT_SENSITIVITY,
-    VALID_SENSITIVITIES,
-    Passport,
-    normalize_sensitivity,
-    should_store_raw,
-)
+from .build import PROVISIONAL_SUMMARY_LEN, build_store_event
 from .jobs import (
     CONTEXT_JOB_NAMES,
     DEFAULT_RETENTION_DAYS,
@@ -22,7 +15,14 @@ from .jobs import (
     run_retention,
     summarize_pending,
 )
-from .build import PROVISIONAL_SUMMARY_LEN, build_store_event
+from .models import (
+    DEFAULT_KIND,
+    DEFAULT_SENSITIVITY,
+    VALID_SENSITIVITIES,
+    Passport,
+    normalize_sensitivity,
+    should_store_raw,
+)
 from .redaction import Redactor, Rule, default_redactor
 from .retrieval import format_context_block
 from .tags import normalize_tags, split_tag, tags_contain

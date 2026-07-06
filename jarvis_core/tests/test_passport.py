@@ -12,7 +12,6 @@ from jarvis_core.passport import (
     tags_contain,
 )
 
-
 # --- tags.normalize_tags (P10 + інваріант C1) ---
 
 def test_normalize_adds_kind_tag_first():

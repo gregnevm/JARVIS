@@ -1,6 +1,5 @@
 """Metrics rolling window."""
 import pytest
-
 from app import metrics
 
 

@@ -3,7 +3,6 @@ import json
 
 import httpx
 import pytest
-
 from app.config import Settings, create_llm
 from app.llm import (
     KoboldAdapter,

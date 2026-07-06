@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from app.bot import auth_link
 from app.bot.commands import handle_command
 from app.config import settings

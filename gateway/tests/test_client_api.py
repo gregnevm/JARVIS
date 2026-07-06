@@ -4,10 +4,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
 
 AUTH = ("admin", "secret")
 

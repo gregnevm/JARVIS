@@ -17,16 +17,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from jarvis_core.context import RequestContext
-from jarvis_core.service_client import ServiceError, call_dict
 from jarvis_core.passport import (
     CONTEXT_JOB_NAMES,
     Redactor,
     build_store_event,
     default_redactor,
 )
+from jarvis_core.service_client import ServiceError, call_dict
 
 from ..config import settings
-from .deps import context_uid as _uid, resolve_client_context
+from .deps import context_uid as _uid
+from .deps import resolve_client_context
 
 logger = logging.getLogger("jarvis.gateway.client_api.context")
 

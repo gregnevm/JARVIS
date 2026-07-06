@@ -9,9 +9,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from jarvis_core.settings import settings_inventory
-
 from app.config import Settings
+
+from jarvis_core.settings import settings_inventory
 
 
 def test_env_names_and_defaults_match_snapshot():

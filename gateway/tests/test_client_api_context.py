@@ -5,12 +5,12 @@ TestClient + Basic-auth (як test_client_api.py); memory-виклик (`_post_m
 org-scope (uid=legacy_uid), стелю батчу і graceful-фолбек при недоступному memory."""
 from __future__ import annotations
 
-from jarvis_core.service_client import ServiceError
 import pytest
-from fastapi.testclient import TestClient
-
 from app.config import settings
 from app.main import app
+from fastapi.testclient import TestClient
+
+from jarvis_core.service_client import ServiceError
 
 AUTH = ("admin", "secret")
 

@@ -2,7 +2,6 @@
 from pathlib import Path
 
 import pytest
-
 from app.lora_paths import resolve_lora_path
 
 

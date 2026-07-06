@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import redis.asyncio as aioredis
 
@@ -12,8 +11,8 @@ from ..outbound import deliver
 from ..services import ServicesClient
 from ..telegram import TelegramClient
 from ..tools_client import ToolsClient
-from .dashboard import esc, format_dashboard
 from ._helpers import send_denial
+from .dashboard import esc, format_dashboard
 from .keyboards import (
     BTN_BRIEF,
     BTN_CLIPBOARD,
@@ -26,9 +25,9 @@ from .keyboards import (
     BTN_STATUS,
     main_menu_keyboard,
     mode_keyboard,
+    reminders_hint_keyboard,
     remove_reply_keyboard,
     reply_keyboard,
-    reminders_hint_keyboard,
 )
 from .reminders_view import format_reminders_message, list_user_reminders
 

@@ -1,9 +1,6 @@
-import json
-import time
 
 import pytest
-
-from app.reminders import REMINDERS_KEY, add_reminder, cancel_reminder, list_reminders
+from app.reminders import add_reminder, cancel_reminder, list_reminders
 
 
 @pytest.fixture()

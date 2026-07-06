@@ -2,7 +2,6 @@
 import json
 
 import pytest
-
 from app import dataset_export
 from app.config import settings
 

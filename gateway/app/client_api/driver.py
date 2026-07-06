@@ -21,7 +21,8 @@ from jarvis_core.service_client import ServiceError, call_dict
 
 from ..agent_payload import build_agent_payload
 from ..config import settings
-from .deps import context_uid as _uid, resolve_client_context
+from .deps import context_uid as _uid
+from .deps import resolve_client_context
 
 logger = logging.getLogger("jarvis.gateway.client_api.driver")
 

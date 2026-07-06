@@ -1,6 +1,5 @@
 """is_allowed з динамічним store."""
 import pytest
-
 from app.access_store import AccessStore, UserRecord
 from app.auth import bind_access_store, is_allowed
 
