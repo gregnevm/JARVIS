@@ -22,8 +22,9 @@
     {"title": "passport-RAG retrieval in PLAN",
      "before": "re-derived repo state every iter",
      "after": "1 /context call, top-5 prior iters",
-     "pillar": "B", "passport": true}
-  ],
+     "pillar": "B", "passport": true,
+     "friction_ref": ""}   // optional (SY-1): ref of the kind:friction passport that spawned
+  ],                       // the task; BLOCK 4 renders "· from telemetry: `ref`"
   "tests_delta": "+18",
   "tokens": {"total": 412000, "inner_local": 280000, "outer_remote": 132000, "delta_pct": -32},
   "reverted": [{"title": "repo_grep AST refactor", "reason": "mypy red twice"}],

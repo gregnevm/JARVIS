@@ -115,11 +115,15 @@ def render_markdown(s: dict[str, Any]) -> str:
         lines.append("**What changed today**")
         for it in shipped:
             before, after = it.get("before"), it.get("after")
+            # telemetry-born task (SY-1): cite the friction passport that spawned it
+            friction = f" · from telemetry: `{it['friction_ref']}`" if it.get("friction_ref") else ""
             if before and after:
-                lines.append(f"- {it.get('title','(item)')} — _before:_ {before} → _after:_ {after}")
+                lines.append(
+                    f"- {it.get('title','(item)')} — _before:_ {before} → _after:_ {after}{friction}"
+                )
             else:
                 # no measured before/after -> muted, drives the yellow meta-KR dot
-                lines.append(f"- _{it.get('title','(item)')} (no measured before/after)_")
+                lines.append(f"- _{it.get('title','(item)')} (no measured before/after)_{friction}")
         lines.append("")
     # BLOCK 5 — risk / reverted + actions
     reverted = s.get("reverted", []) or []

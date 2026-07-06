@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ..config import settings
+from ..friction import REASON_TOOL_FAIL, REASON_UNKNOWN_TOOL, record_friction
 from .image import describe_image, generate_image, ocr_image
 from .notes import recall_notes, take_note
 from .schemas import COMPUTER_TOOL_NAMES
@@ -561,12 +562,22 @@ async def dispatch(
             )
     handler = _HANDLERS.get(name)
     if handler is None:
+        # Friction (SY-1): модель вигадала неіснуючий тул — сигнал для kaizen-backlog.
+        record_friction(
+            user_id, REASON_UNKNOWN_TOOL, tool=name,
+            summary=f"Невідомий інструмент: {name}",
+        )
         return f"Невідомий інструмент: {name}"
     t0 = time.perf_counter()
     try:
         return await handler(arguments, user_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("tool %s failed", name)
+        # Friction (SY-1): лише ТИП помилки — без аргументів/трейсбека (анти-leak).
+        record_friction(
+            user_id, REASON_TOOL_FAIL, tool=name,
+            summary=f"Інструмент {name} впав: {type(exc).__name__}",
+        )
         return f"Інструмент {name} впав: {exc}"
     finally:
         from ..metrics import record_tool

@@ -68,8 +68,13 @@ Per-service `pytest + mypy` over `[jarvis_core, gateway, memory, tools, twin, ho
 - **NO-LOCAL (stays on Claude):** outer adversarial review, security gate, L1 leverage, L6 completeness.
 
 ### 5. roadmap_source
-- **read:** track checkboxes in `docs/{CODING_AGENT,API_PLATFORM,CLIENTS}_ROADMAP.md` (skip blocked:
-  RunPod/GPU/cloud-secrets). Consider unblock-order from `docs/GAP_ANALYSIS.md`.
+- **read:** track checkboxes in `docs/{CODING_AGENT,API_PLATFORM,CLIENTS,SYNERGY}_ROADMAP.md` (skip
+  blocked: RunPod/GPU/cloud-secrets). Consider unblock-order from `docs/GAP_ANALYSIS.md`.
+- **read (runtime telemetry, SY-1):** `kind:friction` passports for the window — candidates next to
+  roadmap items. rag-backend: gateway client-API `POST /context/recent` with
+  `tags=["kind:friction"]` (same auth/wrappers as port 3; producer = tools agent-loop behind
+  `ENABLE_FRICTION_TELEMETRY`). file-backend: `passport_store.py search --tags kind:friction`.
+  No hits / store down → roadmap-only (never blocks).
 - **write-back (one canonical file):** `[x]` in the **track** roadmap (PRODUCT_ROADMAP = phase status
   only; AGENTS.md = no statuses). One fact, one place.
 

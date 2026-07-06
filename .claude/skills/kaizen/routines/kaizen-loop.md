@@ -24,7 +24,13 @@ here is just the per-phase intent. Each phase ends with a passport-report + chec
 ## PLAN (start of each iteration)
 - Pick the task by **leverage** (L1) from `profile.roadmap_source`: `(goal-advancement × unblock) ÷
   effort`. Right-size to the window remainder; don't start what you can't close.
-- Passport: chosen task, score, time estimate, which goal/pillar.
+- **Runtime telemetry as candidates:** before scoring, query `profile.passport_store` for
+  `kind:friction` passports in the current window (tag-search; cheap read, no model). Each recurring
+  friction is a task candidate ranked by the same leverage formula next to roadmap items — the
+  backlog self-recharges from real pain instead of drying up (`backlog_dry`). Store empty or
+  backend lacks search → roadmap-only, no failure.
+- Passport: chosen task, score, time estimate, which goal/pillar; if telemetry-born — `ref` to the
+  friction passport (the digest cites it).
 
 ## Phase 1 — write
 **Goal:** one smallest valuable increment toward a product goal.
