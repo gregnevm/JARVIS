@@ -48,6 +48,13 @@
   gateway `editMessageText`. Покрито тестами (на live чека ребілд `gateway`+`tools`).
 - ⏳ **E1** llama.cpp benchmark, **E2** Ollama-in-Docker GPU (вердикт: НІ на цій машині) — експерименти.
 - ⏳ **Twin Етап B/C/D** (Edge MVP · курація даних+eval · RunPod-training) — `docs/GAP_ANALYSIS.md`.
+- ✅ **S5 (sandbox)** kernel-sandbox для code_exec — bwrap fail-closed
+  (`CODE_EXEC_REQUIRE_SANDBOX=true`, `toolkit/sandbox.py`) + pre-exec guard
+  (`jarvis_core/safety/exec_guard.py`, розширюваний `CODE_EXEC_DENY_PATTERNS`) + rlimits.
+  Закриває guardrail-борг «subprocess -I не sandbox». Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.5.
+- ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
+  одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
+  невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
 
 ---
 
@@ -247,9 +254,10 @@ UIA lite, admin gate, vision/screenshot, cursor_task, cascade routing.
 
 - **Не міняти модель ембедингів** без міграції pgvector. `nomic-embed-text` = 768D,
   таблиця жорстко на `vector(768)`. Зміна = повний re-embed усього історії.
-- **Не вмикати `ENABLE_CODE_EXEC=true`** без sandbox-isolation. Зараз код виконується
-  через `subprocess [sys.executable, "-I", "-c", code]` у tools-контейнері — це
-  обмежений, але не повний sandbox.
+- **`ENABLE_CODE_EXEC=true`** тепер безпечніший за замовчуванням: bwrap kernel-sandbox
+  fail-closed (`CODE_EXEC_REQUIRE_SANDBOX=true`) + pre-exec guard (`safety/exec_guard.py`).
+  Не вимикати require-sandbox без свідомої причини; у Docker дефолтний seccomp може
+  блокувати bwrap → тоді або compose-override, або свідомий opt-out (лишаються `-I`+rlimits+guard).
 - **Не починати "переписати на FastStream/Celery/тощо"** — поточний async-стек на
   FastAPI + httpx обробляє Telegram-навантаження одного користувача із запасом 100x.
 - **Не вмикати `EnableDockerAI=true`** у Docker Desktop ≤4.76 без фіксу від Docker.

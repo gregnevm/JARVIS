@@ -12,6 +12,11 @@ COPY tools/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && playwright install chromium --with-deps
 
+# bubblewrap — kernel-sandbox для code_exec (toolkit/sandbox.py, fail-closed).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bubblewrap \
+    && rm -rf /var/lib/apt/lists/*
+
 # Node.js LTS — потрібен MCP Gateway (P5), щоб піднімати stdio-сервери через `npx -y ...`.
 # Копіюємо з node:22-slim (без apt-кешу й build-tools) → +~110 МБ, образ лишається стрункий.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node

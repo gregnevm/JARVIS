@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from . import computer_policy
 from .config import settings
 from .ps_whitelist import extract_ps_cmdlets, parse_whitelist
 
@@ -70,7 +71,7 @@ def cli_exe_name(exe: str) -> str:
 
 def is_ps_trusted(script: str) -> bool:
     """Після першого ✅ повторні PS-скрипти з тими ж cmdlet — без підтвердження."""
-    if not settings.computer_auto_trust_learned:
+    if not computer_policy.auto_trust_learned():
         return False
     cmdlets = extract_ps_cmdlets(script)
     if not cmdlets:
@@ -80,7 +81,7 @@ def is_ps_trusted(script: str) -> bool:
 
 
 def is_cli_trusted(exe: str) -> bool:
-    if not settings.computer_auto_trust_learned:
+    if not computer_policy.auto_trust_learned():
         return False
     name = cli_exe_name(exe)
     return bool(name) and name in learned_cli()

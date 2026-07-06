@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from .. import computer_policy
 from ..config import settings
 from ..schemas import (
     ComputerConfirmRequest,
@@ -169,7 +170,8 @@ def register(router: APIRouter) -> None:
         return {
             "enable_computer_use": settings.enable_computer_use,
             "allow_admin": settings.computer_allow_admin,
-            "require_confirm": settings.computer_require_confirm,
+            "approval_policy": computer_policy.policy() or "(flags)",
+            "require_confirm": computer_policy.require_confirm(),
             "hostagent_up": await computer.hostagent_healthy(),
             "ps_whitelist": env_ps,
             "learned_ps": learned,

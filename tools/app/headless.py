@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 
+from . import computer_policy
 from .config import settings
 
 logger = logging.getLogger("jarvis.tools.headless")
@@ -29,7 +30,7 @@ async def authorize_headless_apply(user_id: int, no_confirm: bool) -> str | None
     if not no_confirm:
         return None  # інтерактивний режим — confirm діє як завжди
     # Глобальний bypass відкриває headless apply нарівні з явною policy CODING_HEADLESS_APPLY.
-    if not (settings.coding_headless_apply or settings.bypass_confirmations):
+    if not (settings.coding_headless_apply or computer_policy.bypass_confirmations()):
         return _DENIED
     if int(user_id) <= 0:
         return "Headless apply потребує валідний user_id."

@@ -56,6 +56,17 @@ class Settings(
 
     # Безпека / ліміти
     enable_code_exec: bool = False
+    # Kernel-sandbox для code_exec (bwrap). true = fail-closed: нема пісочниці →
+    # відмова замість виконання (toolkit/sandbox.py). false = legacy `-I`+rlimits.
+    code_exec_require_sandbox: bool = True
+    code_exec_memory_mb: int = 512
+    # Додаткові guard-регекси (CSV `regex` або `regex=label`) до вбудованих
+    # (jarvis_core/safety/exec_guard.py) — домен-правила профілю.
+    code_exec_deny_patterns: str = ""
+    # Іменована approval-драбина (computer_policy.py): "" = гранулярні прапори
+    # нижче як є (back-compat) | strict | smart | auto | off. Задана політика —
+    # SSOT, перекриває require_confirm/auto_trust/bypass (P7: один факт — одне місце).
+    computer_approval_policy: str = ""
     # Computer Use — керування Windows-хостом через host-agent (поза Docker).
     enable_computer_use: bool = False
     computer_allow_admin: bool = False

@@ -190,7 +190,9 @@ CI (`.github/workflows/ci.yml`) — matrix по `jarvis_core/gateway/memory/tool
 ## 6. Guardrails / Свідомо НЕ робимо
 
 - ❌ **Зовнішній AI-API як дефолт для inference** — лише явний opt-in; ламає S1.
-- ❌ **`ENABLE_CODE_EXEC=true` без sandbox-ізоляції** — поточний `subprocess -I` не повний sandbox.
+- ❌ **`ENABLE_CODE_EXEC=true` без sandbox-ізоляції** — дефолт закриває це: bwrap kernel-sandbox,
+  fail-closed (`CODE_EXEC_REQUIRE_SANDBOX=true`, `toolkit/sandbox.py` + guard `safety/exec_guard.py`).
+  Opt-out прапором = свідоме рішення оператора; тоді діють лише `-I`+rlimits+guard.
 - ❌ **Зміна embed-моделі без міграції** — `nomic-embed-text`=768D жорстко; зміна = повний re-embed (Alembic).
 - ❌ **Ollama в Docker на AMD/Windows** — немає `/dev/dri`/`/dev/kfd` у WSL2 (ADR-E2). Ollama лишається на хості.
 - ❌ **Auto-confirm для admin/power computer-дій** — завжди double confirm (C5).
