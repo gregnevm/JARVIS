@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import difflib
 import hmac
+import ipaddress
 import json
 import logging
 import re
@@ -996,19 +997,30 @@ async def power_action(
     return {"status": "ok", "action": action, "delay": str(delay)}
 
 
+_MAC_RE = re.compile(r"[0-9A-F]{2}(?::[0-9A-F]{2}){5}")
+
+
 @app.post("/wol")
 async def wake_on_lan(
     req: WolRequest,
     _: Annotated[None, Depends(_check_token)],
 ) -> dict[str, str]:
+    # Fail-fast (P2): validate BEFORE interpolating into PowerShell. Both fields land inside
+    # single-quoted PS literals, so a stray "'" would break out and inject arbitrary commands on
+    # the host. The old 6-group check let non-hex octets (and a "'") through, and `broadcast` was
+    # interpolated with zero validation. Strict hex-MAC + IPv4 make both injection-proof by shape.
     mac = (req.mac or "").replace("-", ":").replace(".", ":").upper()
-    if len(mac.split(":")) != 6:
+    if not _MAC_RE.fullmatch(mac):
         raise HTTPException(status_code=400, detail="invalid mac")
+    try:
+        broadcast = str(ipaddress.IPv4Address(req.broadcast))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid broadcast")
     ps = (
         f"$mac = '{mac}'; $macBytes = ($mac -split ':') | ForEach-Object {{ [byte]('0x' + $_) }}; "
         f"$packet = [byte[]](,0xFF * 6) + ($macBytes * 16); "
         f"$udp = New-Object System.Net.Sockets.UdpClient; "
-        f"$udp.Connect('{req.broadcast}', 9); $udp.Send($packet, $packet.Length) | Out-Null; $udp.Close()"
+        f"$udp.Connect('{broadcast}', 9); $udp.Send($packet, $packet.Length) | Out-Null; $udp.Close()"
     )
     result = _run_powershell(ps, False, 10.0)
     if int(result.get("code", -1)) != 0:
