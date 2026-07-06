@@ -1,0 +1,8 @@
+{
+  "TTS_DEVICE": "\"cuda\"",
+  "TTS_LANGUAGE": "\"ru\"",
+  "TTS_MAX_CHARS": "800",
+  "TTS_MODEL": "\"tts_models/multilingual/multi-dataset/xtts_v2\"",
+  "TTS_SPEAKER_WAV": "\"/app/voices/reference.wav\"",
+  "TTS_SYNTH_TIMEOUT": "120.0"
+}
