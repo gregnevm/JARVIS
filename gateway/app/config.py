@@ -4,10 +4,17 @@ from __future__ import annotations
 from pydantic_settings import SettingsConfigDict
 
 from jarvis_core.auth_ids import parse_comma_separated_ids
-from jarvis_core.settings import AuthIdsCfg, ComputerCfg, CoreServiceUrls, DataDirCfg, RedisCfg
+from jarvis_core.settings import (
+    AuthIdsCfg,
+    ComputerCfg,
+    CoreServiceUrls,
+    DataDirCfg,
+    PushCfg,
+    RedisCfg,
+)
 
 
-class Settings(RedisCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg):
+class Settings(RedisCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg, PushCfg):
     """Композиція: спільні блоки з jarvis_core.settings (R4 «Тонкий шлюз») +
     gateway-специфічні поля. Env-імена/дефолти незмінні (test_config_snapshot)."""
 
@@ -145,6 +152,11 @@ class Settings(RedisCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg):
     enable_context_api: bool = False
     # Стеля подій в одному батчі /api/v1/ingest/events (анти-зловживання).
     context_ingest_max_batch: int = 500
+
+    # Паспортна шина (SY-B1, SYNERGY_ROADMAP): in-proc Observer — ingest emit →
+    # підписники (перший: push ntfy на priority:high). Реактивність за прапором
+    # (ADR-008); off (дефолт) = нуль змін поведінки, полінг-шляхи незмінні.
+    enable_passport_bus: bool = False
 
     # Claude-міст для coding (dispatch -> remote code via Claude). Cloud, явний opt-in (S1).
     enable_claude_code_bridge: bool = False

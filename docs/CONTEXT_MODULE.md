@@ -169,7 +169,7 @@ class ContextQuery:
 | Repository | `ContextRepo` над `context_events` |
 | Chain of Responsibility | context-retrieval `Handler` в агент-пайплайні |
 | Decorator | InputDecorator інжектить контекст у промпт |
-| Observer | ingest emit → daily/proposal підписники (далі) |
+| Observer | ✅ SY-B1: `jarvis_core/bus.py` (InProcBus), ingest emit ПІСЛЯ store, перший підписник — push на `priority:high`; daily/proposal-підписки — SY-B2 ([SYNERGY_ROADMAP](SYNERGY_ROADMAP.md)) |
 
 ---
 
