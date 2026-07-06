@@ -1,36 +1,36 @@
 {
   "schema_version": 1,
-  "cycle": 19,
-  "admin_context": "Фокус кварталу: програма «Тонкий шлюз» (Hexagon 2.0) за спекою docs/REFACTOR_THIN_GATEWAY.spec.md — порядок воркстрімів: спершу локальний тест-луп, далі RPC-helper і мозок у ядро, далі конфіг/гігієна. Зовнішні контракти /v1, /api/v1, /platform і Telegram-flow — байт-у-байт; tools не пилити на мікросервіси, hostagent не чіпати, без LangGraph/Celery. Кожен PR атомарний і зелений (mypy strict + pytest по-сервісно).",
-  "progress": 0.0,
+  "cycle": 21,
+  "admin_context": "Фокус кварталу: програма «Тонкий шлюз» (Hexagon 2.0) за спекою docs/REFACTOR_THIN_GATEWAY.spec.md — порядок воркстрімів: спершу локальний тест-луп, далі RPC-helper і мозок у ядро, далі конфіг/гігієна. Зовнішні контракти /v1, /api/v1, /platform і Telegram-flow — байт-у-байт; tools не пилити на мікросервіси, hostagent не чіпати, без LangGraph/Celery. Кожен PR атомарний і зелений (mypy strict + pytest по-сервісно). [ЗАКРИТО 2026-07-06: усі KR доставлені PR #86-#94, критерії §1 спеки виконані; деталі — spec §4 Implement.]",
+  "progress": 1.0,
   "objectives": [
     {
       "id": "TG-R1",
       "title": "Локальний тест-луп живий: composition root і чистий старт gateway",
       "roadmap": "docs/REFACTOR_THIN_GATEWAY.spec.md",
       "priority": 1,
-      "status": "active",
-      "progress": 0.0,
+      "status": "done",
+      "progress": 1.0,
       "key_results": [
         {
           "id": "R1-net",
           "text": "lifespan без безумовних мережевих await; BotFather-UI/webhook — best-effort фонова таска з таймаутом",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "R1-flag",
           "text": "прапор GATEWAY_STARTUP_NET (safe-default) + тестові фікстури глушать стартову мережу",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "R1-local",
           "text": "повний pytest gateway/tests локально < 5 хв без мережі; AGENTS.md §5 оновлено",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         }
       ]
@@ -40,35 +40,35 @@
       "title": "S3 enforced: один внутрішній RPC-helper, мозок у ядрі",
       "roadmap": "docs/REFACTOR_THIN_GATEWAY.spec.md",
       "priority": 2,
-      "status": "active",
-      "progress": 0.0,
+      "status": "done",
+      "progress": 1.0,
       "key_results": [
         {
           "id": "R2-helper",
           "text": "jarvis_core/service_client.py: ретраї/таймаути/error-envelope + юніт-тести",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "R2-migrate",
           "text": "26 httpx-блоків gateway мігровано на helper; grep-гейт у CI (allowlist)",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "R3-core",
           "text": "auto_coroutine стейт-машина + 21 тест у jarvis_core/autopilot; gateway-лупер thin (< 80 LOC)",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "R3-auth",
           "text": "єдиний auth-резолвер + redaction у jarvis_core.passport; _uid() в одному місці",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         }
       ]
@@ -78,35 +78,35 @@
       "title": "Конфіг SSOT і гігієна автоматизовані",
       "roadmap": "docs/REFACTOR_THIN_GATEWAY.spec.md",
       "priority": 3,
-      "status": "active",
-      "progress": 0.0,
+      "status": "done",
+      "progress": 1.0,
       "key_results": [
         {
           "id": "R4-blocks",
           "text": "jarvis_core/settings/ композитні блоки; сервісні config.py — композиція; env-імена незмінні (снапшот-тест)",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "R4-gen",
           "text": "scripts/gen_env_docs.py генерує .env.example + ENV_CHECKLIST.md; CI drift-гейт зелений",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "R5-retention",
           "text": "retention паспортів keep-50 + архів поза git; kaizen-профіль ротує сам",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         },
         {
           "id": "R5-gates",
           "text": "ruff + gitleaks у CI зелені; jest-smoke на extension",
           "target": 1.0,
-          "progress": 0.0,
+          "progress": 1.0,
           "metric": "ratio"
         }
       ]
