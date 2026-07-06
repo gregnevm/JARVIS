@@ -259,6 +259,7 @@ Auth: `Authorization: Bearer sk-jarvis-…` → org/scopes derive. Self-hosted: 
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-07-06 | 1.17 | **Hardening (broken access control):** cookie-канал `require_platform_auth` (`platform/auth.py`) повертав `PlatformAuth(via="cookie")` для БУДЬ-ЯКОГО валідного `jarvis_jwt` без `is_admin`-звірки, тоді як initData/Basic — admin-only. `/connect` мінтить cookie для будь-кого `allowed`, тож не-адмін-друг через one-tap отримував developer-консоль (мінт/відкликання `sk-jarvis-*`, usage, логи). Фікс: `if is_admin(cookie_uid)` — не-адмін падає у Basic/401. +4 регрес-тести |
 | 2026-06-23 | 1.16 | **P0-4 hardening:** anti-impersonation gate поширено на весь `/v1`-surface — `/responses`, `POST /jobs`, `GET /jobs/{id}` ішли через ungated `_resolve_uid` (impersonation + job IDOR); тепер один gated SSOT-резолвер (`allowed_ids`-gate), `_resolve_user_id` інлайнено |
 | 2026-06-16 | 1.15 | AP-5.3 Node/openai-node quickstart (§2b) |
 | 2026-06-16 | 1.14 | AP-5.5 Postman collection (`sdk/`) |

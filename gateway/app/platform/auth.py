@@ -1,11 +1,13 @@
 """Авторизація Platform-консолі.
 
-Два канали (як `/admin`, але з власним PLATFORM_PASSWORD):
-  * Telegram Mini App  — `X-Telegram-Init-Data` HMAC, лише ADMIN_USER_IDS;
+Три канали (усі **admin-only** — консоль керує ключами/автопілотом, не даємо не-адміну):
+  * Telegram Mini App  — `X-Telegram-Init-Data` HMAC, лише ADMIN_USER_IDS (`authorize_admin`);
+  * Cookie one-tap     — `jarvis_jwt` з `/connect`, звірка `is_admin(uid)` (токен мінтиться
+                         для будь-кого allowed, тож без цієї звірки друг ≠ адмін пройшов би);
   * Браузер (LAN)      — HTTP Basic, пароль PLATFORM_PASSWORD або ADMIN_PANEL_PASSWORD.
 
-Reuse: `telegram_webapp_auth.authorize_admin`. Дублювати логіку `/admin` не треба —
-просто приймаємо обидва паролі, щоб Platform не вимагав окремого секрету.
+Reuse: `telegram_webapp_auth.authorize_admin`, `auth.is_admin`. Дублювати логіку `/admin`
+не треба — просто приймаємо обидва паролі, щоб Platform не вимагав окремого секрету.
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ from fastapi import Cookie, Depends, Header, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from jarvis_core.context import RequestContext, synthetic_context
 
+from ..auth import is_admin
 from ..config import settings
 from ..saas import auth as jwt_auth
 from ..telegram_webapp_auth import authorize_admin
@@ -25,7 +28,7 @@ _security = HTTPBasic(auto_error=False)
 
 @dataclass(frozen=True)
 class PlatformAuth:
-    """Хто і як зайшов: via=telegram|basic, user_id для runtime-запитів."""
+    """Хто і як зайшов: via=telegram|cookie|basic, user_id для runtime-запитів."""
 
     via: str
     user_id: int
@@ -37,7 +40,7 @@ def resolve_uid(auth: "PlatformAuth", user_id: int | None) -> int:
     у кожному platform-роуті (`int(user_id) if user_id is not None else auth.user_id`).
 
     Anti-IDOR (AGENTS §5): cross-uid (діяти від імені ІНШОГО user_id) дозволено лише
-    справжньому адміну. Сьогодні обидва канали platform-auth = admin-only, тож guard
+    справжньому адміну. Сьогодні всі три канали platform-auth = admin-only, тож guard
     no-op; але він стає load-bearing, щойно постануть non-owner ролі (SaaS PR#6) —
     тоді не-адмін не зможе зімперсонити чужий uid через `?user_id=`."""
     if user_id is None or int(user_id) == auth.user_id:
@@ -112,7 +115,13 @@ def require_platform_auth(
             claims = jwt_auth.decode(jarvis_jwt)
             raw_uid = claims.get("legacy_uid")
             cookie_uid = int(raw_uid) if raw_uid is not None else int(claims["sub"])
-            return PlatformAuth(via="cookie", user_id=cookie_uid)
+            # Cookie-канал admin-only, як initData (authorize_admin) і Basic (_primary_admin_id):
+            # `/connect` мінтить JWT для БУДЬ-КОГО allowed (друг з ALLOWED_USER_IDS чи /allow),
+            # а не лише admin. Без цієї звірки не-адмін через one-tap отримував повний доступ
+            # до developer-консолі (створення/відкликання sk-jarvis-* ключів, usage, логи).
+            # Не-адмін → не повертаємо: падаємо у Basic/401/503 нижче (як битий cookie).
+            if is_admin(cookie_uid):
+                return PlatformAuth(via="cookie", user_id=cookie_uid)
         except (jwt_auth.JWTError, KeyError, ValueError, TypeError):
             pass  # битий/прострочений cookie → пробуємо Basic, інакше 401/503
     if platform_enabled():
