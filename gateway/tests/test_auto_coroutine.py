@@ -137,6 +137,13 @@ def test_render_dashboard_mode_reflects_bypass_flag():
     assert "🔓 Bypass permissions" in render_dashboard(okr, [], bypass=True)
 
 
+def test_render_dashboard_mode_reflects_ultracode_flag():
+    okr = OKR(objectives=(Objective(id="O", title="Obj"),))
+    assert "ULTRACODE" not in render_dashboard(okr, [], bypass=True)
+    md = render_dashboard(okr, [], bypass=True, ultracode=True)
+    assert "🔓 Bypass permissions" in md and "⚡ ULTRACODE" in md
+
+
 def test_save_dashboard_bypass_persists_mode(tmp_path):
     from app.auto_coroutine import save_dashboard
 
@@ -226,3 +233,27 @@ async def test_dispatch_marks_error_outcome():
     obj = _okr(0.0).objectives[0]
     out = await dispatch(StageContext(objective=obj, stage="review", user_id=1, repo_path="."))
     assert out.ok is False and "tools down" in out.summary
+
+
+class CapturingTools(FakeTools):
+    def __init__(self) -> None:
+        super().__init__()
+        self.budgets: list[int] = []
+        self.tasks: list[str] = []
+
+    async def spawn_orchestrator(self, uid, task, *, worker_budget=5):
+        self.budgets.append(worker_budget)
+        self.tasks.append(task)
+        return {"run_id": "r1"}
+
+
+async def test_ultracode_bumps_budget_and_frames_prompt():
+    tools = CapturingTools()
+    obj = _okr(0.0).objectives[0]
+    ctx = StageContext(objective=obj, stage="code", user_id=7, repo_path=".")
+
+    await make_tools_dispatch(tools, worker_budget=4)(ctx)
+    assert tools.budgets[-1] == 4 and "[ULTRACODE]" not in tools.tasks[-1]
+
+    await make_tools_dispatch(tools, worker_budget=4, ultracode=True)(ctx)
+    assert tools.budgets[-1] == 8 and tools.tasks[-1].startswith("[ULTRACODE]")

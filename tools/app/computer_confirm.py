@@ -336,7 +336,12 @@ async def wrap_execute(
         blocked = await _check_mutating_quota(user_id, tool, args)
         if blocked:
             return blocked
-    if mutating and settings.computer_require_confirm and int(user_id) > 0:
+    if (
+        mutating
+        and settings.computer_require_confirm
+        and not settings.bypass_confirmations
+        and int(user_id) > 0
+    ):
         # Не споживаємо квоту лише за видачу CONFIRM_MARKER — дію ще не застосовано.
         # Квота рахується один раз у execute_confirmed після реального виконання
         # (_check_mutating_quota вище блокує confirm-и понад ліміт).

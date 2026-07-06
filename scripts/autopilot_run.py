@@ -38,6 +38,7 @@ async def _main() -> int:
     ap.add_argument("--user-id", type=int, default=42)
     ap.add_argument("--tests", nargs="*", default=None, help="pytest-таргети для test-фази")
     ap.add_argument("--bypass", action="store_true", help="режим Bypass permissions (auto, без підтверджень)")
+    ap.add_argument("--ultracode", action="store_true", help="режим ULTRACODE (max-effort code/refactor)")
     args = ap.parse_args()
 
     okr = load_okr(args.data_dir)
@@ -45,8 +46,10 @@ async def _main() -> int:
         print(f"❌ OKR порожній: немає {args.data_dir}/okr/okr.json")
         return 2
 
-    dispatch = make_local_dispatch(args.repo, test_targets=args.tests)
+    dispatch = make_local_dispatch(args.repo, test_targets=args.tests, ultracode=args.ultracode)
     mode = "🔓 bypass" if args.bypass else "🔒 supervised"
+    if args.ultracode:
+        mode += " · ⚡ ULTRACODE"
     print(f"▶️  Старт циклу · режим={mode} · cycle={okr.cycle} · objectives={len(okr.objectives)}")
 
     new_okr, result = await run_cycle(
@@ -62,7 +65,7 @@ async def _main() -> int:
 
     save_okr(args.data_dir, new_okr)
     append_run_log(args.data_dir, result)
-    save_dashboard(args.data_dir, new_okr, [result], bypass=args.bypass)
+    save_dashboard(args.data_dir, new_okr, [result], bypass=args.bypass, ultracode=args.ultracode)
 
     print(f"\n📊 OKR прогрес: {okr.progress * 100:.0f}% → {new_okr.progress * 100:.0f}% · cycle={new_okr.cycle}")
     print(f"📝 run-log: {args.data_dir}/autopilot/run_log.md")

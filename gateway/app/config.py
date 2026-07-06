@@ -181,6 +181,9 @@ class Settings(BaseSettings):
     # дзеркало режиму «Bypass permissions» у Claude Code. Лише індикатор+намір на
     # gateway-боці; фактичний auto-apply вмикає tools-політика CODING_HEADLESS_APPLY.
     auto_coroutine_bypass_permissions: bool = False
+    # ULTRACODE: routine крутить code/refactor у max-effort профілі (вищий orchestrator
+    # worker_budget + exhaustive-рамка промпта — «вичерпно й коректно, не найшвидше»).
+    auto_coroutine_ultracode: bool = False
 
     # Стовп D (TEAM_ECOSYSTEM): обробка Telegram-груп (presence/ambient). Дефолт off —
     # self-hosted solo-user не зачіпає (S2); вмикати свідомо для командного режиму.

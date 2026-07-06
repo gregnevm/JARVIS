@@ -117,6 +117,24 @@ async def test_code_plan_pending_without_trust(monkeypatch: pytest.MonkeyPatch):
     assert "[[PLAN_CONFIRM:cp3]]" in result["marker"]
 
 
+async def test_code_plan_bypass_auto_approves_without_trust(monkeypatch: pytest.MonkeyPatch):
+    from app.config import settings
+
+    captured: dict[str, object] = {}
+
+    async def _fake_create(user_id, **kwargs):  # noqa: ANN001
+        captured.update(kwargs)
+        return {"id": "cp4", "user_id": user_id, "status": kwargs.get("status"), "steps": []}
+
+    monkeypatch.setattr(settings, "bypass_confirmations", True)
+    monkeypatch.setattr("app.computer_trust.trust_level", _trust(None))  # навіть без trust
+    monkeypatch.setattr("app.plans.create_plan", _fake_create)
+    llm = FakeLLM('{"summary":"s","steps":[{"file":"a.py","action":"x"}],"risks":[]}')
+    result = await AgentRunner(llm, object()).code_plan(7, "fix a.py")
+    assert captured["status"] == "approved"  # глобальний bypass → авто-апрув
+    assert result["auto_approved"] is True and result.get("marker", "") == ""
+
+
 def test_normalize_steps_preserves_code_fields():
     from app.plans import _normalize_steps
 

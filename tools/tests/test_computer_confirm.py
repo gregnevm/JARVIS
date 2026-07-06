@@ -137,6 +137,17 @@ async def test_wrap_execute_skips_confirm_when_disabled(monkeypatch: pytest.Monk
     assert out == "done"
 
 
+async def test_wrap_execute_bypass_overrides_require_confirm(confirm_env: FakeRedis, monkeypatch):
+    # require_confirm лишається True, але глобальний bypass знімає ✅ — дія виконується.
+    monkeypatch.setattr(settings, "bypass_confirmations", True)
+
+    async def exec_fn() -> str:
+        return "done"
+
+    out = await wrap_execute(42, "fs_write", {"path": "C:\\a", "content": "x"}, exec_fn)
+    assert out == "done" and "[[COMPUTER_CONFIRM:" not in out
+
+
 async def test_save_load_origin(confirm_env: FakeRedis):
     from app import computer_confirm
 
