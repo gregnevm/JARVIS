@@ -8,10 +8,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+
+from jarvis_core.service_client import ServiceError, call
 
 from ..config import settings
 from ..projects import get_active, set_active
@@ -40,22 +41,28 @@ class ActiveBody(BaseModel):
     project_id: int | None = None
 
 
-async def _mem(method: str, path: str, **kw: Any) -> httpx.Response:
-    url = f"{settings.memory_url.rstrip('/')}{path}"
-    async with httpx.AsyncClient(timeout=12.0) as cli:
-        return await cli.request(method, url, **kw)
-
-
-def _bubble(resp: httpx.Response) -> dict[str, Any]:
-    """memory-помилку (404/400) піднімаємо як HTTP; інакше — JSON."""
-    if resp.status_code >= 400:
-        detail = "memory error"
-        try:
-            detail = resp.json().get("detail", detail)
-        except ValueError:
-            pass
-        raise HTTPException(status_code=resp.status_code, detail=detail)
-    return resp.json()
+async def _mem(
+    method: str,
+    path: str,
+    *,
+    json: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Проксі до memory з bubble-семантикою: 2xx → JSON; 4xx/5xx від memory →
+    та сама HTTP-помилка назовні (статус + detail); транспортний фейл →
+    ServiceError (виклик вирішує — заглушка чи 500, як раніше)."""
+    try:
+        out = await call(
+            settings.memory_url, method, path,
+            json=json, params=params, timeout=12.0, service="memory",
+        )
+    except ServiceError as exc:
+        if exc.status is not None:
+            raise HTTPException(
+                status_code=exc.status, detail=exc.detail or "memory error"
+            ) from exc
+        raise
+    return out if isinstance(out, dict) else {}
 
 
 def register(router: APIRouter) -> None:
@@ -66,12 +73,11 @@ def register(router: APIRouter) -> None:
         include_archived: bool = False,
     ) -> dict[str, Any]:
         try:
-            resp = await _mem(
+            data = await _mem(
                 "GET", "/projects",
                 params={"user_id": auth.user_id, "include_archived": include_archived},
             )
-            data = _bubble(resp)
-        except httpx.HTTPError as exc:
+        except ServiceError as exc:
             logger.warning("projects list failed: %s", exc)
             return {"projects": [], "active_id": None, "error": str(exc)}
         active = await get_active(request.app.state.redis, auth.user_id)
@@ -83,11 +89,10 @@ def register(router: APIRouter) -> None:
     ) -> dict[str, Any]:
         if not body.name.strip():
             raise HTTPException(status_code=400, detail="name required")
-        resp = await _mem(
+        return await _mem(
             "POST", "/projects",
             json={"user_id": auth.user_id, "name": body.name, "system_prompt": body.system_prompt},
         )
-        return _bubble(resp)
 
     # Статичні /active МАЮТЬ бути перед динамічним /{project_id}, інакше FastAPI
     # матчить "active" як project_id (int-валідація падає 422).
@@ -103,12 +108,14 @@ def register(router: APIRouter) -> None:
     ) -> dict[str, Any]:
         redis: aioredis.Redis = request.app.state.redis
         if body.project_id is not None:
-            resp = await _mem(
-                "GET", f"/projects/{body.project_id}", params={"user_id": auth.user_id}
-            )
-            if resp.status_code == 404:
-                raise HTTPException(status_code=404, detail="project not found")
-            _bubble(resp)
+            try:
+                await _mem(
+                    "GET", f"/projects/{body.project_id}", params={"user_id": auth.user_id}
+                )
+            except HTTPException as exc:
+                if exc.status_code == 404:
+                    raise HTTPException(status_code=404, detail="project not found") from exc
+                raise
         await set_active(redis, auth.user_id, body.project_id)
         return {"ok": True, "active_id": body.project_id}
 
@@ -116,23 +123,20 @@ def register(router: APIRouter) -> None:
     async def projects_get(
         project_id: int, auth: PlatformAuth = Depends(require_platform_auth)
     ) -> dict[str, Any]:
-        resp = await _mem("GET", f"/projects/{project_id}", params={"user_id": auth.user_id})
-        return _bubble(resp)
+        return await _mem("GET", f"/projects/{project_id}", params={"user_id": auth.user_id})
 
     @router.patch("/platform/api/projects/{project_id}")
     async def projects_update(
         project_id: int, body: ProjectPatch, auth: PlatformAuth = Depends(require_platform_auth)
     ) -> dict[str, Any]:
         payload = {"user_id": auth.user_id, **body.model_dump(exclude_none=True)}
-        resp = await _mem("PATCH", f"/projects/{project_id}", json=payload)
-        return _bubble(resp)
+        return await _mem("PATCH", f"/projects/{project_id}", json=payload)
 
     @router.delete("/platform/api/projects/{project_id}")
     async def projects_delete(
         project_id: int, request: Request, auth: PlatformAuth = Depends(require_platform_auth)
     ) -> dict[str, Any]:
-        resp = await _mem("DELETE", f"/projects/{project_id}", params={"user_id": auth.user_id})
-        out = _bubble(resp)
+        out = await _mem("DELETE", f"/projects/{project_id}", params={"user_id": auth.user_id})
         if await get_active(request.app.state.redis, auth.user_id) == project_id:
             await set_active(request.app.state.redis, auth.user_id, None)
         return out
@@ -141,18 +145,16 @@ def register(router: APIRouter) -> None:
     async def project_file_add(
         project_id: int, body: FileBody, auth: PlatformAuth = Depends(require_platform_auth)
     ) -> dict[str, Any]:
-        resp = await _mem(
+        return await _mem(
             "POST", f"/projects/{project_id}/files",
             json={"user_id": auth.user_id, "name": body.name, "content": body.content},
         )
-        return _bubble(resp)
 
     @router.delete("/platform/api/projects/{project_id}/files/{file_id}")
     async def project_file_delete(
         project_id: int, file_id: int, auth: PlatformAuth = Depends(require_platform_auth)
     ) -> dict[str, Any]:
-        resp = await _mem(
+        return await _mem(
             "DELETE", f"/projects/{project_id}/files/{file_id}",
             params={"user_id": auth.user_id},
         )
-        return _bubble(resp)

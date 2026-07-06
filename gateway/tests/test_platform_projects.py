@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.config import settings
@@ -10,13 +11,11 @@ from app.main import app
 AUTH = ("admin", "secret")
 
 
-class FakeResp:
-    def __init__(self, status: int, payload: dict) -> None:
-        self.status_code = status
-        self._p = payload
-
-    def json(self) -> dict:
-        return self._p
+def _resp(status: int, payload: dict) -> dict:
+    """Новий контракт _mem (R2): 2xx -> dict, 4xx/5xx -> HTTPException (bubble)."""
+    if status >= 400:
+        raise HTTPException(status_code=status, detail=payload.get("detail", "memory error"))
+    return payload
 
 
 @pytest.fixture
@@ -50,30 +49,30 @@ def client(monkeypatch):
     async def fake_mem(method, path, **kw):
         parts = path.strip("/").split("/")
         if path == "/projects" and method == "GET":
-            return FakeResp(200, {"projects": list(store.values())})
+            return _resp(200, {"projects": list(store.values())})
         if path == "/projects" and method == "POST":
             pid = (max(store) + 1) if store else 1
             store[pid] = {"id": pid, "user_id": 42, "name": kw["json"]["name"],
                           "system_prompt": kw["json"].get("system_prompt", ""),
                           "archived": False, "updated_at": ""}
-            return FakeResp(200, store[pid])
+            return _resp(200, store[pid])
         if parts[:1] == ["projects"] and len(parts) == 2:
             pid = int(parts[1])
             if method == "GET":
-                return FakeResp(200, {**store[pid], "files": []}) if pid in store else FakeResp(404, {"detail": "not found"})
+                return _resp(200, {**store[pid], "files": []}) if pid in store else _resp(404, {"detail": "not found"})
             if method == "PATCH":
                 if pid not in store:
-                    return FakeResp(404, {"detail": "not found"})
+                    return _resp(404, {"detail": "not found"})
                 store[pid].update({k: v for k, v in kw["json"].items() if k != "user_id"})
-                return FakeResp(200, store[pid])
+                return _resp(200, store[pid])
             if method == "DELETE":
                 if pid not in store:
-                    return FakeResp(404, {"detail": "not found"})
+                    return _resp(404, {"detail": "not found"})
                 del store[pid]
-                return FakeResp(200, {"ok": True})
+                return _resp(200, {"ok": True})
         if "files" in parts:
-            return FakeResp(200, {"id": 7, "name": (kw.get("json") or {}).get("name", "f")})
-        return FakeResp(404, {"detail": "unknown"})
+            return _resp(200, {"id": 7, "name": (kw.get("json") or {}).get("name", "f")})
+        return _resp(404, {"detail": "unknown"})
 
     monkeypatch.setattr("app.platform.projects._mem", fake_mem)
 

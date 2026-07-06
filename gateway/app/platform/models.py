@@ -8,9 +8,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+
+from jarvis_core.service_client import ServiceError, call
 
 from .._helpers import require_text
 from ..services import ServicesClient
@@ -28,11 +29,8 @@ async def _ollama_tags(host: str) -> list[dict[str, Any]]:
     if not host or host == "—":
         return []
     try:
-        async with httpx.AsyncClient(timeout=5.0) as cli:
-            r = await cli.get(f"{host}/api/tags")
-            r.raise_for_status()
-            data = r.json()
-    except (httpx.HTTPError, ValueError) as exc:
+        data = await call(host, "GET", "/api/tags", timeout=5.0, service="ollama")
+    except ServiceError as exc:
         logger.debug("ollama tags failed: %s", exc)
         return []
     out: list[dict[str, Any]] = []
