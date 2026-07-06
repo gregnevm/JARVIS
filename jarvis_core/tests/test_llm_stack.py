@@ -67,7 +67,9 @@ def test_chat_chunk_parser():
     assert ollama_chat_chunk('{"message":{"content":""},"done":true}') == ("", True, None)
     assert ollama_chat_chunk(
         '{"message":{"content":""},"done":true,"eval_count":100,"eval_duration":5000000000}'
-    ) == ("", True, {"eval_count": 100, "eval_duration_ns": 5000000000, "model": ""})
+    ) == ("", True, {
+        "eval_count": 100, "eval_duration_ns": 5000000000, "prompt_eval_count": 0, "model": "",
+    })
     assert ollama_chat_chunk("not json") == ("", False, None)
     assert ollama_chat_chunk("") == ("", False, None)
 

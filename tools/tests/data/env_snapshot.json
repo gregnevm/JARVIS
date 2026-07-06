@@ -54,6 +54,7 @@
   "ENABLE_CONTEXT_RETRIEVAL": "false",
   "ENABLE_CONTINUE_DEV": "false",
   "ENABLE_FRICTION_TELEMETRY": "false",
+  "ENABLE_USAGE_METERING": "false",
   "FETCH_MAX_CHARS": "6000",
   "HOOKS_ENABLED": "true",
   "HORDE_API_KEY": "\"0000000000\"",
@@ -104,5 +105,6 @@
   "SUBAGENT_DEFAULT_BUDGET": "3",
   "SUBAGENT_MAX_BUDGET": "8",
   "TRAIN_RETRAIN_MIN_CURATED": "200",
-  "TWIN_URL": "\"http://twin:8765\""
+  "TWIN_URL": "\"http://twin:8765\"",
+  "USAGE_METER_USER_ID": "-770002"
 }

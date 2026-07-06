@@ -522,10 +522,17 @@ async def responses(
 
 @router.get("/usage")
 async def usage(request: Request, days: int = 7, _: None = Depends(_auth_bearer)) -> dict[str, Any]:
-    """Per-key usage за період (AP-2.4) — лічильники запитів для ключа-викликача."""
+    """Per-key usage за період (AP-2.4) — лічильники запитів для ключа-викликача.
+
+    SY-6: + блок `tokens` зі стору (kind:usage паспорти) — той самий SSOT, що
+    /platform cost-дашборд і kaizen O3 ECO (одна цифра всюди, D1)."""
+    from .saas.token_usage import token_usage_summary
+
     ctx = getattr(request.state, "api_auth", None) or {}
     kid = str(ctx.get("key_id") or "root")
-    return await _usage_store(request).summary(kid, days=days)
+    out = await _usage_store(request).summary(kid, days=days)
+    out["tokens"] = await token_usage_summary(days=days)
+    return out
 
 
 async def _ollama_catalog(request: Request) -> list[dict[str, Any]]:

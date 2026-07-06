@@ -46,6 +46,11 @@ Route each unit of work to the cheapest tier that doesn't hurt quality:
   are loaded only when the relevant phase runs.
 - **Eco on the loop's own instrumentation.** The run-event sink uses an in-memory line counter (no
   O(n) recount per append).
+- **Measured, not estimated (SY-6).** When the product exposes `kind:usage` passports in the
+  context store (a usage meter on its model calls), the O3 ECO self-score reads local-model spend
+  with a tag-query over the window instead of hand-estimating it. Same store the product's own
+  usage endpoint reads → the digest number and the billing number can never diverge. Remote-session
+  spend still comes from the session ledger; store missing → fall back to the ledger alone.
 
 ## The one genuinely ambiguous boundary
 

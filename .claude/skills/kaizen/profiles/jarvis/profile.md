@@ -56,6 +56,13 @@ Per-service `pytest + mypy` over `[jarvis_core, gateway, memory, tools, twin, ho
   (`tags @> $4`) + `since`, `user_id`-scoped. On store-unreachable the loop degrades to the
   file-backend default above (never blocks).
 
+### 4a. usage source (O3 ECO, SY-6)
+- **local-model spend:** `kind:usage` passports (producer: tools `UsageMeter`, flag
+  `ENABLE_USAGE_METERING`, synthetic uid `-770002`) — read via gateway client-API
+  `POST /context/recent` with `kind=usage`, same wrappers as port 3. Consumers `/v1/usage`
+  and `/platform/api/usage` read the same rows → ECO number == billing number (DoD SY-6).
+  Store empty/off → session-ledger estimate as before.
+
 ### 4. local_ai_hook → host Ollama (Vulkan) CHAT/EMBED — eco two-speed
 - **inner loop candidate:** `AgentRunner.fix_tests` ([`tools/app/agent.py:986`](../../../../../tools/app/agent.py),
   via `POST /agent/code/fix`) — clean 4-status state machine `already_green|fixed|no_progress|stuck`.

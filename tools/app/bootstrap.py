@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +9,7 @@ import httpx
 from jarvis_core.facade.jarvis import JARVIS
 from jarvis_core.llm.chat import CompositeChatBackend, OllamaChatBackend
 from jarvis_core.llm.decorators import build_llm_stack
+from jarvis_core.llm.usage import UsageMeter
 from jarvis_core.pipeline.handlers import build_agent_pipeline
 
 from .agent import AgentRunner, decide_mode
@@ -84,18 +85,39 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
     return out
 
 
-async def _on_inference_stats(stats: dict[str, Any]) -> None:
-    from .metrics import record_inference
+def _build_usage_meter(memory: MemoryClient) -> UsageMeter | None:
+    """SY-6: usage-паспорти kind:usage у стор (партиція — синтетичний usage-UID)."""
+    if not settings.enable_usage_metering:
+        return None
 
-    await record_inference(
-        str(stats.get("model") or ""),
-        int(stats["eval_count"]),
-        int(stats["eval_duration_ns"]),
-    )
+    async def sink(store: dict[str, Any]) -> None:
+        store["user_id"] = settings.usage_meter_user_id
+        await memory.context_ingest(store)
+
+    return UsageMeter(sink, source="usage_meter")
+
+
+def _make_stats_handler(
+    meter: UsageMeter | None,
+) -> "Callable[[dict[str, Any]], Awaitable[None]]":
+    async def _on_inference_stats(stats: dict[str, Any]) -> None:
+        from .metrics import record_inference
+
+        await record_inference(
+            str(stats.get("model") or ""),
+            int(stats["eval_count"]),
+            int(stats["eval_duration_ns"]),
+        )
+        if meter is not None:
+            # Той самий потік метрики (SY-6): агентський шлях → kind:usage.
+            meter.record_ollama_stats(stats, path="agent")
+
+    return _on_inference_stats
 
 
 def build_jarvis(memory: MemoryClient, twin_url: str = "") -> tuple[JARVIS, AgentRunner, CompositeChatBackend]:
     log_path = Path(settings.data_dir) / "logs" / "llm.jsonl"
+    usage_meter = _build_usage_meter(memory)
     # LLMInterface обслуговує CHAT-шлях (відповіді без інструментів) → chat-модель.
     # Агентський tool-loop окремо передає ollama_model_agent у OllamaChatBackend.chat().
     llm = build_llm_stack(
@@ -105,13 +127,14 @@ def build_jarvis(memory: MemoryClient, twin_url: str = "") -> tuple[JARVIS, Agen
         kobold_host=settings.kobold_host,
         timeout=settings.ollama_timeout,
         log_path=str(log_path),
+        usage_meter=usage_meter,
     )
     ollama_chat = OllamaChatBackend(
         settings.ollama_host,
         timeout=settings.ollama_timeout,
         fail_threshold=settings.ollama_fail_threshold,
         cooldown=settings.ollama_cooldown,
-        on_inference_stats=_on_inference_stats,
+        on_inference_stats=_make_stats_handler(usage_meter),
     )
     chat_backend = CompositeChatBackend(ollama_chat, llm)
     runner = AgentRunner(chat_backend, memory)

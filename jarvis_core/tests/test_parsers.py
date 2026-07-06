@@ -94,7 +94,9 @@ class TestOllamaChatChunk:
             '{"message":{"content":""},"done":true,"eval_count":7,"eval_duration":1000,"model":"m"}'
         )
         assert (delta, done) == ("", True)
-        assert stats == {"eval_count": 7, "eval_duration_ns": 1000, "model": "m"}
+        assert stats == {
+            "eval_count": 7, "eval_duration_ns": 1000, "prompt_eval_count": 0, "model": "m",
+        }
 
     def test_message_not_dict(self) -> None:
         assert ollama_chat_chunk('{"message":"oops","done":false}') == ("", False, None)
@@ -108,7 +110,13 @@ class TestOllamaInferenceStats:
     def test_valid_stats(self) -> None:
         assert ollama_inference_stats(
             {"eval_count": 10, "eval_duration": 2000, "model": "m"}
-        ) == {"eval_count": 10, "eval_duration_ns": 2000, "model": "m"}
+        ) == {"eval_count": 10, "eval_duration_ns": 2000, "prompt_eval_count": 0, "model": "m"}
+
+    def test_prompt_eval_count_passthrough(self) -> None:
+        stats = ollama_inference_stats(
+            {"eval_count": 10, "eval_duration": 2000, "prompt_eval_count": 33, "model": "m"}
+        )
+        assert stats is not None and stats["prompt_eval_count"] == 33
 
     def test_model_defaults_to_empty(self) -> None:
         stats = ollama_inference_stats({"eval_count": 1, "eval_duration": 1})

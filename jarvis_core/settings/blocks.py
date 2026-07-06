@@ -53,6 +53,14 @@ class PushCfg(BaseSettings):
     ntfy_topic: str = ""  # унікальний топік користувача; APK підписаний (UnifiedPush)
 
 
+class UsageMeteringCfg(BaseSettings):
+    """Usage-метрика LLM → kind:usage паспорти (SY-6): tools продукує, gateway читає."""
+
+    enable_usage_metering: bool = False
+    # Синтетичний UID-власник usage-паспортів (партиція стору; прецедент kaizen -770001).
+    usage_meter_user_id: int = -770002
+
+
 class ComputerCfg(BaseSettings):
     """Computer Use: коло довірених, trust-вікно, drop-zone, ліміт файлів (gateway ↔ tools)."""
 
