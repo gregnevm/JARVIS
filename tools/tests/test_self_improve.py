@@ -13,6 +13,47 @@ def test_turn_fingerprint_stable():
     assert self_improve.turn_fingerprint(row) == self_improve.turn_fingerprint(row)
 
 
+@pytest.mark.parametrize(
+    "text",
+    ["   ", "\n\t ", "", "\n\n"],
+)
+def test_parse_verdict_blank_does_not_crash(text: str):
+    # regression: whitespace-only judge reply is truthy -> splitlines()[0] used to IndexError
+    # and abort the whole scan. Must fail closed (not approved), never raise.
+    ok, _reason = self_improve._parse_verdict(text)
+    assert ok is False
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        # well-formed prefixed verdicts
+        ("PASS: good training turn", True),
+        ("FAIL: hallucinated a source", False),
+        ("pass", True),
+        ("FAIL", False),
+        # substring fallback: a rejection that merely MENTIONS "PASS" must NOT parse as approval
+        ("The reply does not PASS the bar", False),
+        ("No PASS — the answer is wrong", False),
+        ("this would not pass review", False),
+        ("cannot pass on this one", False),
+        ("it can't pass, too vague", False),
+        ("won't pass the quality bar", False),
+        # FAIL wins over an incidental PASS mention (fail-closed ordering)
+        ("FAIL, though it almost reaches a PASS", False),
+        # genuine positive prose still approves
+        ("Looks good, PASS", True),
+        ("clearly a PASS", True),
+        # unparseable fails closed
+        ("hmm, unclear", False),
+        ("", False),
+    ],
+)
+def test_parse_verdict_fallback_fail_closed(text: str, expected: bool):
+    ok, _reason = self_improve._parse_verdict(text)
+    assert ok is expected
+
+
 def test_review_approve_moves_to_approved(tmp_path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(self_improve.settings, "data_dir", str(tmp_path))
     item = {
