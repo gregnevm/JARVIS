@@ -1,0 +1,25 @@
+{
+  "run_id": "2026-06-20-verify",
+  "day": 10,
+  "iters": 1,
+  "duration_min": 6.0,
+  "ci": "green",
+  "kaizen_score": 88,
+  "score_delta": 0,
+  "score_history": [86, 90, 88, 88],
+  "shipped": [
+    {
+      "title": "Close tts mypy gap (torch.* override)",
+      "before": "mypy tts/app failed on `torch` (no stubs, not in ignore_missing_imports) — tts could not be added to the CI matrix honestly",
+      "after": "torch.* added to pyproject mypy-override; mypy tts/app green (4 files), pytest tts/tests green (3), no regression across jarvis_core+tools",
+      "pillar": "B"
+    }
+  ],
+  "tests_delta": "+0",
+  "tokens": {"total": 0, "note": "local-first; gate run token-free"},
+  "reverted": [],
+  "risks": [
+    {"note": "tts still absent from .github/workflows/ci.yml matrix — adding pulls heavy deps (TTS/torch); CI-time tradeoff is a human call. mypy blocker now removed."}
+  ],
+  "meta_kr": {"felt": true, "green_streak": 1, "eco_no_local_violation": true, "drift": 0}
+}

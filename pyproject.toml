@@ -19,7 +19,7 @@ exclude = ['(^|/)tests/', '(^|/)\.venv/']
 
 # Сторонні бібліотеки без type-стабів (або не встановлені в dev-оточенні).
 [[tool.mypy.overrides]]
-module = ["asyncpg.*", "simpleeval.*", "bs4.*", "docx.*", "pytesseract.*", "playwright.*", "TTS.*"]
+module = ["asyncpg.*", "simpleeval.*", "bs4.*", "docx.*", "pytesseract.*", "playwright.*", "TTS.*", "torch.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
