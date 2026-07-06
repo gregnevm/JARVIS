@@ -203,6 +203,8 @@ async def probe_services() -> list[dict[str, Any]]:
     ]
     if settings.enable_voice_reply:
         probes.append(("tts", f"{settings.tts_url.rstrip('/')}/health"))
+    # Виняток R2 (allowlist CI-гейта): діагностичний probe міряє сирий status/ms
+    # кожного сервісу — це не внутрішній RPC, error-envelope тут зайвий.
     async with httpx.AsyncClient(timeout=4.0) as client:
         out: list[dict[str, Any]] = []
         for name, url in probes:

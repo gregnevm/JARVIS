@@ -72,6 +72,8 @@ async def check_once(tg: TelegramClient, redis: aioredis.Redis | None) -> bool:
     if not settings.telegram_bot_token.strip():
         return False
 
+    # Виняток R2 (allowlist CI-гейта): зовнішній GitHub Releases API (redirects,
+    # бінарні файли) — не внутрішній RPC, service_client тут не пасує.
     async with httpx.AsyncClient() as client:
         remote_v = await _fetch_remote_version(client)
         if not remote_v:

@@ -8,12 +8,13 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
+
+from jarvis_core.service_client import ServiceError, call_dict
 
 from .config import settings
 
@@ -353,13 +354,12 @@ async def chat_completions(
 
 async def _memory_embed(text: str) -> list[float]:
     """Викликає memory `/embed` (nomic-embed-text); 502 на збій бекенду (AP-2.1)."""
-    url = settings.memory_url.rstrip("/") + "/embed"
     try:
-        async with httpx.AsyncClient(timeout=30.0) as cli:
-            resp = await cli.post(url, json={"text": text})
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as exc:  # noqa: BLE001
+        data = await call_dict(
+            settings.memory_url, "POST", "/embed",
+            json={"text": text}, timeout=30.0, service="memory",
+        )
+    except ServiceError as exc:
         raise HTTPException(status_code=502, detail=f"embedding backend error: {exc}") from exc
     vec = data.get("embedding")
     if not isinstance(vec, list):
