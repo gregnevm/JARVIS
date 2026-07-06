@@ -104,6 +104,8 @@ Deep link `/start canvas` додає `?canvas=1` до URL Mini App.
 | `ENABLE_PASSPORT_BUS` | `false` | (gateway) In-proc Observer: ingest emit ПІСЛЯ store → підписники (перший — push ntfy на `priority:high`). Off = нуль змін поведінки (ADR-008) |
 | `PUSH_ENABLED` + `NTFY_URL`/`NTFY_TOPIC` | `false` | Спільний блок `PushCfg` (gateway шина + tools джоби): ntfy UnifiedPush, S1-суверенно |
 | `ENABLE_FRICTION_TELEMETRY` | `false` | (tools) SY-1: агент-луп емітить `kind:friction` (tool-fail/unknown-tool/loop-exhausted) → kaizen-backlog з реального болю. Без сирих аргументів (анти-leak) |
+| `ENABLE_USAGE_METERING` | `false` | (tools→gateway) SY-6: kind:usage агрегат-паспорти LLM-викликів — один SSOT для `/v1/usage` (tokens-блок), `/platform/api/usage` і kaizen O3 ECO |
+| `USAGE_METER_USER_ID` | `-770002` | Синтетичний UID-власник usage-паспортів (партиція стору, прецедент kaizen `-770001`) |
 
 ## Gateway: старт і локальні тести (R1 «Тонкий шлюз»)
 
@@ -150,7 +152,7 @@ docker compose up -d --build gateway tools
 
 <!-- GEN:ENV-INVENTORY:BEGIN (scripts/gen_env_docs.py — не редагуй руками) -->
 
-## Повний інвентар env-змінних (202 змінних, code-first)
+## Повний інвентар env-змінних (204 змінних, code-first)
 
 Згенеровано з Settings-класів сервісів. Оновити: `python scripts/gen_env_docs.py`.
 CI (`arch-gates`) падає, якщо таблиця/снапшоти розійшлися з кодом (drift-гейт D1).
@@ -245,6 +247,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `ENABLE_PASSPORT_BUS` | gateway | `false` |
 | `ENABLE_REACTION_REPLIES` | gateway | `true` |
 | `ENABLE_STREAMING` | gateway | `true` |
+| `ENABLE_USAGE_METERING` | gateway, tools | `false` |
 | `ENABLE_VOICE_REPLY` | gateway | `false` |
 | `FETCH_MAX_CHARS` | tools | `6000` |
 | `GATEWAY_BROWSER_URL` | gateway | `"http://127.0.0.1:8000"` |
@@ -356,6 +359,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `TWIN_REGISTRY_DB` | twin | `"/data/twin/registry.db"` |
 | `TWIN_URL` | gateway, tools | `"http://twin:8765"` |
 | `UPLOAD_DIR` | gateway | `"/data/uploads"` |
+| `USAGE_METER_USER_ID` | gateway, tools | `-770002` |
 | `WEBAPP_DEV_OPEN` | gateway | `false` |
 | `WHISPER_LANGUAGE` | gateway | `""` |
 | `WHISPER_URL` | gateway | `"http://whisper:9000"` |

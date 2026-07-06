@@ -112,10 +112,14 @@ def ollama_chat_chunk(line: str) -> tuple[str, bool, dict[str, Any] | None]:
 
 
 def ollama_inference_stats(data: dict[str, Any]) -> dict[str, Any] | None:
-    """eval_count / eval_duration (ns) з відповіді Ollama /api/chat."""
+    """eval_count / eval_duration (ns) з відповіді Ollama /api/chat.
+
+    Додатково (SY-6, адитивно): `prompt_eval_count` — вхідні токени (0, якщо
+    Ollama їх не віддав) — для usage-паспортів tokens-in/out."""
     try:
         ec = int(data.get("eval_count") or 0)
         ed = int(data.get("eval_duration") or 0)
+        pec = int(data.get("prompt_eval_count") or 0)
     except (TypeError, ValueError):
         return None
     if ec <= 0 or ed <= 0:
@@ -123,5 +127,6 @@ def ollama_inference_stats(data: dict[str, Any]) -> dict[str, Any] | None:
     return {
         "eval_count": ec,
         "eval_duration_ns": ed,
+        "prompt_eval_count": max(0, pec),
         "model": str(data.get("model") or ""),
     }

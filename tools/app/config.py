@@ -13,10 +13,14 @@ from jarvis_core.settings import (
     OllamaCfg,
     PushCfg,
     RedisCfg,
+    UsageMeteringCfg,
 )
 
 
-class Settings(RedisCfg, OllamaCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg, PushCfg):
+class Settings(
+    RedisCfg, OllamaCfg, CoreServiceUrls, DataDirCfg, AuthIdsCfg, ComputerCfg, PushCfg,
+    UsageMeteringCfg,
+):
     """Композиція: спільні блоки з jarvis_core.settings (R4 «Тонкий шлюз») +
     tools-специфічні поля. Env-імена/дефолти незмінні (test_config_snapshot)."""
 

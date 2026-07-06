@@ -4,13 +4,15 @@ import hashlib
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 
 from jarvis_core.llm.adapters import KoboldAdapter, OllamaAdapter
 from jarvis_core.llm.interface import LLMInterface
 from jarvis_core.llm.jsonl_log import JsonlLog
+from jarvis_core.llm.parsers import ollama_inference_stats
+from jarvis_core.llm.usage import UsageMeter
 
 
 class LoggingLLM(LLMInterface):
@@ -110,6 +112,52 @@ class StyleLLM(LLMInterface):
         yield from self._inner.stream(self._wrap(prompt), max_tokens)
 
 
+class MeterLLM(LLMInterface):
+    """Лічильник як декоратор (SY-6): usage-подія на КОЖЕН реальний виклик бекенда.
+
+    Сидить ПІД CacheLLM — кеш-хіт не коштує токенів і не рахується. Токени бере
+    зі слота, який наповнює адаптер (`on_stats`, той самий thread у nested
+    sync-виклику); бекенд без stats (kobold) → лише model+latency (tokens 0).
+    """
+
+    def __init__(self, inner: LLMInterface, meter: UsageMeter, *, model: str, path: str = "chat") -> None:
+        self._inner = inner
+        self._meter = meter
+        self._model = model
+        self._path = path
+
+    def _note_stats(self, raw: dict[str, Any]) -> None:
+        """Колбек для адаптера: сирий json бекенда → thread-local слот."""
+        self._meter.slot.stats = ollama_inference_stats(raw)
+
+    def _flush_slot(self, fallback_ms: float) -> None:
+        stats = self._meter.slot.stats
+        self._meter.slot.stats = None
+        if stats:
+            self._meter.record(
+                model=str(stats.get("model") or self._model),
+                tokens_out=int(stats.get("eval_count") or 0),
+                tokens_in=int(stats.get("prompt_eval_count") or 0),
+                duration_ms=int(stats.get("eval_duration_ns") or 0) / 1e6,
+                path=self._path,
+            )
+        else:
+            self._meter.record(model=self._model, duration_ms=fallback_ms, path=self._path)
+
+    def generate(self, prompt: str, max_tokens: int = 512) -> str:
+        self._meter.slot.stats = None
+        t0 = time.monotonic()
+        out = self._inner.generate(prompt, max_tokens)
+        self._flush_slot((time.monotonic() - t0) * 1000)
+        return out
+
+    def stream(self, prompt: str, max_tokens: int = 512) -> Iterator[str]:
+        self._meter.slot.stats = None
+        t0 = time.monotonic()
+        yield from self._inner.stream(prompt, max_tokens)
+        self._flush_slot((time.monotonic() - t0) * 1000)
+
+
 JARVIS_STYLE_PREFIX = (
     "Ти JARVIS — лаконічний україномовний помічник. Відповідай стисло і по суті."
 )
@@ -127,16 +175,33 @@ def build_llm_stack(
     retry_attempts: int = 3,
     style_prefix: str = JARVIS_STYLE_PREFIX,
     client: httpx.Client | None = None,
+    usage_meter: UsageMeter | None = None,
 ) -> LLMInterface:
-    """Composition root: Style → Retry → Cache → Logging → Adapter."""
+    """Composition root: Style → Retry → Cache → [Meter] → Logging → Adapter.
+
+    `usage_meter` (SY-6, опційно): шар MeterLLM під Cache — usage-паспорти лише
+    за реальні виклики бекенда; адаптер репортить у нього сирі stats (токени)."""
     base: LLMInterface
+    meter_layer: MeterLLM | None = None
+
+    def _relay_stats(raw: dict[str, Any]) -> None:
+        # Слот наповнює адаптер; шар Meter створюється нижче — late-bound closure.
+        if meter_layer is not None:
+            meter_layer._note_stats(raw)
+
     if backend == "kobold":
         base = KoboldAdapter(kobold_host, client=client, timeout=timeout)
     else:
-        base = OllamaAdapter(ollama_host, ollama_model, client=client, timeout=timeout)
+        base = OllamaAdapter(
+            ollama_host, ollama_model, client=client, timeout=timeout,
+            on_stats=_relay_stats if usage_meter is not None else None,
+        )
     llm: LLMInterface = base
     if log_path:
         llm = LoggingLLM(llm, log_path)
+    if usage_meter is not None:
+        meter_layer = MeterLLM(llm, usage_meter, model=ollama_model)
+        llm = meter_layer
     llm = CacheLLM(llm, ttl_sec=cache_ttl)
     llm = RetryLLM(llm, attempts=retry_attempts)
     llm = StyleLLM(llm, style_prefix)

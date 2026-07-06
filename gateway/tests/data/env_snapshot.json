@@ -35,6 +35,7 @@
   "ENABLE_PASSPORT_BUS": "false",
   "ENABLE_REACTION_REPLIES": "true",
   "ENABLE_STREAMING": "true",
+  "ENABLE_USAGE_METERING": "false",
   "ENABLE_VOICE_REPLY": "false",
   "GATEWAY_BROWSER_URL": "\"http://127.0.0.1:8000\"",
   "GATEWAY_STARTUP_NET": "true",
@@ -72,6 +73,7 @@
   "TTS_URL": "\"http://tts:8300\"",
   "TWIN_URL": "\"http://twin:8765\"",
   "UPLOAD_DIR": "\"/data/uploads\"",
+  "USAGE_METER_USER_ID": "-770002",
   "WEBAPP_DEV_OPEN": "false",
   "WHISPER_LANGUAGE": "\"\"",
   "WHISPER_URL": "\"http://whisper:9000\""

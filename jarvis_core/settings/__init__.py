@@ -7,6 +7,7 @@ from .blocks import (
     OllamaCfg,
     PushCfg,
     RedisCfg,
+    UsageMeteringCfg,
 )
 from .inventory import settings_inventory
 
@@ -18,5 +19,6 @@ __all__ = [
     "OllamaCfg",
     "PushCfg",
     "RedisCfg",
+    "UsageMeteringCfg",
     "settings_inventory",
 ]
