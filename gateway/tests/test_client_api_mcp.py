@@ -6,10 +6,9 @@ asyncio_mode=auto (pyproject) → async-тести без маркера.
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
-
 from app.client_api import mcp
 from app.config import settings
+from fastapi import HTTPException
 
 
 @pytest.fixture

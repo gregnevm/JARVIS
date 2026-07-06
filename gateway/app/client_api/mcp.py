@@ -13,11 +13,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from jarvis_core.context import RequestContext
+from jarvis_core.service_client import ServiceError, call_dict
 
 from ..config import settings
 from .deps import resolve_client_context
@@ -37,11 +37,10 @@ def _require_enabled() -> None:
 
 
 async def _tools(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=30.0) as cli:
-        r = await cli.request(method, f"{settings.tools_url.rstrip('/')}{path}", json=payload)
-        r.raise_for_status()
-        out = r.json()
-    return out if isinstance(out, dict) else {}
+    # R2 «Тонкий шлюз»: увесь службовий HTTP gateway — через jarvis_core.service_client.
+    return await call_dict(
+        settings.tools_url, method, path, json=payload, timeout=30.0, service="tools"
+    )
 
 
 async def list_mcp_servers(
@@ -51,7 +50,7 @@ async def list_mcp_servers(
     _require_enabled()
     try:
         return await _tools("GET", "/mcp/servers")
-    except httpx.HTTPError as exc:
+    except ServiceError as exc:
         logger.warning("mcp servers proxy failed: %s", type(exc).__name__)
         return {"servers": [], "error": "tools_unreachable"}
 
@@ -69,7 +68,7 @@ async def call_mcp_tool(
             "POST", "/mcp/call",
             {"server": body.server, "tool": body.tool, "arguments": body.arguments},
         )
-    except httpx.HTTPError as exc:
+    except ServiceError as exc:
         logger.warning("mcp call proxy failed: %s", type(exc).__name__)
         raise HTTPException(status_code=502, detail="tools unreachable") from exc
 
