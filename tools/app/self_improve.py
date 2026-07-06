@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 import uuid
 from pathlib import Path
@@ -71,17 +72,27 @@ def turn_fingerprint(row: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
+_NEG_PASS_RE = re.compile(r"(?:\bNOT|\bNO|\bCANNOT|N'?T)\s+PASS\b")
+
+
 def _parse_verdict(text: str) -> tuple[bool, str]:
-    line = (text or "").strip().splitlines()[0] if text else ""
+    # A whitespace-only reply is truthy, so `"   ".splitlines()` is [] — guarding on the
+    # STRIPPED value (not the raw `text`) avoids an IndexError that would abort scan_sessions.
+    stripped = (text or "").strip()
+    line = stripped.splitlines()[0] if stripped else ""
     upper = line.upper()
     if upper.startswith("PASS"):
         return True, line[4:].lstrip(": ").strip() or "pass"
     if upper.startswith("FAIL"):
         return False, line[4:].lstrip(": ").strip() or "fail"
-    if "PASS" in upper:
-        return True, line
-    if "FAIL" in upper:
+    # Substring fallback for prose. Fail-closed for a quality gate: check FAIL first, and
+    # approve only on a standalone, non-negated PASS token — so a rejection that merely
+    # mentions "PASS" ("does not PASS the bar") isn't misread as approval (same class as the
+    # orchestrator critic's \bAPPROVED\b + NOT-guard).
+    if re.search(r"\bFAIL\b", upper):
         return False, line
+    if re.search(r"\bPASS\b", upper) and not _NEG_PASS_RE.search(upper):
+        return True, line
     return False, f"unparseable: {line[:120]}"
 
 
