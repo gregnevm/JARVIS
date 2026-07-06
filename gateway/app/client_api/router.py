@@ -68,10 +68,12 @@ async def refresh(body: RefreshBody) -> dict[str, Any]:
     except (jwt_auth.JWTError, KeyError, ValueError, TypeError) as exc:
         # будь-який малформ підписаного токена → чистий 401 (не 500/stack-trace)
         raise HTTPException(status_code=401, detail="invalid refresh token") from exc
-    # role/plan НЕ беремо з refresh-токена: він їх не несе й не авторитетний по них.
-    # Self-hosted → канонічні owner/studio (як у login); multi-user → з БД (PR#6).
-    # Інакше прострочений токен зі старою роллю міг би «заморозити» привілеї.
-    access = jwt_auth.issue_access(uid, org_id=claims.get("org"))
+    # org/role/plan НЕ беремо з refresh-токена: він підписаний, але не авторитетний по них.
+    # Self-hosted → канонічні org/owner/studio (як у login); multi-user → з БД (PR#6).
+    # Інакше прострочений/підмінений токен зі старим org міг би «протягти» чужий тенант
+    # у свіжий access-токен (fail-open по org, як було б і по role). issue_access() із
+    # org_id=None підставляє канонічний settings.default_org_id — теж, що й login.
+    access = jwt_auth.issue_access(uid)
     return {"access_token": access, "token_type": "bearer", "expires_in": settings.jwt_access_ttl}
 
 
