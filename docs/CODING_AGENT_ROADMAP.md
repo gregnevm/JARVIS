@@ -1,6 +1,6 @@
 # JARVIS — Coding Agent Roadmap (Стовп B)
 
-> **Версія:** 1.17 (2026-06-16)
+> **Версія:** 1.19 (2026-07-06)
 > **Статус:** Living document.
 > **Мета:** довести JARVIS від «мостів до cursor/continue» до **рідного repo-aware агента кодування
 > рівня Claude Code** — diff-edit, тест-луп, multi-file рефактор, self-review — локально й офлайн.
@@ -96,13 +96,16 @@ PS-ехо, repo-граф замість плоского RAG, тест-луп я
 
 ---
 
-## 3. Фази розвитку (CA-0…CA-6)
+## 3. Фази розвитку (CA-0…CA-7)
 
 ```
 CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-3 (test-loop)
                                                  │                      │
                                                  ▼                      ▼
                                        CA-4 (plan/refactor) ─► CA-5 (review/agents) ─► CA-6 (CLI/IDE)
+                                                                        │
+                                                                        ▼
+                                                              CA-7 (ai_tester self-test)
 ```
 
 ---
@@ -216,6 +219,26 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 ---
 
+## CA-7 — AI_tester: автономний самотест фіч · ✅ **P0 done (2026-07-06)**
+
+**Мета:** платформа тестує себе власними силами — MCP-рушій ганяє фічі client-API, симулює
+ендпоінти (декоратор підміняє джерело даних), а на падінні сам диспатчить ремедіацію в coder /
+computer-use по колу (bounded, S4). «Всі модулі — MCP»: кожен порт = MCP-тул.
+
+| # | Задача | DoD | Статус |
+|---|--------|-----|--------|
+| CA-7.1 | Engine `.claude/skills/ai_tester/` (Ports&Adapters): порти `source`/`scenario`/`oracle`/`dispatch`/`loop`/`report` | ядро без JARVIS-іменників; юніти без MCP-SDK/мережі | [x] `engine/server.py` + 46 тестів (mocked-httpx) |
+| CA-7.2 | Source-декоратори: `HttpSource` + `ReplaySource`/`FaultSource`/`RecordingSource` | підміна джерела без diff у бекенді (S2); fault-бібліотека 5 збоїв | [x] `run {mode: http\|replay\|record}` + `simulate {fault}` |
+| CA-7.3 | Adapter jarvis: реєстр 10 фіч client-API (oracle + sim + on_fail) | гейтовані фічі → `skipped_gated`, mutating лише явно | [x] `adapters/jarvis/manifest.json` + drift-тести |
+| CA-7.4 | Bounded луп test→fix→retest: dispatch у coder (`/api/v1/code/task`) / computer-use (`/api/v1/driver/exec`) | зупинка на `awaiting_confirm`; нуль авто-апрувів (S4) | [x] `loop_run` (стеля `AI_TESTER_MAX_ROUNDS`) |
+| CA-7.5 | MCP-сервер (12 тулів) + реєстрація `.mcp.json` / skills-README / SKILL.md | скіл підхоплюється хостом; артефакти в `data/artifacts/ai_tester/` | [x] stdio/http/sse (`AI_TESTER_MCP_TRANSPORT`) |
+| CA-7.6 | Розширення: покриття platform-surface (`/platform/api/*`), voice (raw-body), інтеграція в kaizen-вікно як CI-порт | нові фічі = записи manifest без зміни ядра | [ ] backlog |
+
+**Вихід CA-7:** один MCP-виклик `loop_run` = самотест усіх фіч + автономна ремедіація під людським
+confirm; офлайн-режим `replay` для детермінованих прогонів.
+
+---
+
 ## 4. KPI
 
 | KPI | Baseline (2026-06) | Ціль CA-3 | Ціль CA-6 | Як міряти |
@@ -260,6 +283,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 | CA-4 plan | Planning mode | PLATFORM P3 |
 | CA-5 review/agents | Teams, Subagents, Hooks, bg jobs | PLATFORM P8/P9/P10/P2 |
 | CA-6 CLI/IDE | `/v1` API | API_PLATFORM AP-2/AP-5 |
+| CA-7 ai_tester | client-API `/api/v1/*`, MCP-конектор, confirm S4 | API_PLATFORM AP-7, скіли `jarvis`/`erp_sa` |
 
 ---
 
@@ -267,6 +291,7 @@ CA-0 (bridges ✅) ─► CA-1 (diff-edit) ─► CA-2 (repo-context) ─► CA-
 
 | Дата | Версія | Зміна |
 |------|--------|-------|
+| 2026-07-06 | 1.19 | **CA-7 (нова фаза, P0 закрито)**: MCP-рушій `ai_tester` (.claude/skills/ai_tester) — автономний самотест фіч client-API: source-декоратори (Replay/Fault/Record підміняють джерело даних без diff у бекенді), oracle, bounded луп test→fix→retest із dispatch у coder/computer-use під S4 (нуль авто-апрувів). 12 MCP-тулів, adapter jarvis на 10 фіч, 46 юнітів без мережі/MCP-SDK; реєстрація в `.mcp.json` + skills-README; ultracode-review: 16 знахідок підтверджено і закрито (S4-маскування інʼєкцій під gate, replay-луп, BOM у .env, SSOT-редакція без sys.path, колізія імен тест-модулів тощо). CA-7.6 (platform-surface, kaizen-CI-порт) — backlog |
 | 2026-06-20 | 1.18 | CA-3.1 hardening: `_summarize_pytest` рахує лічильники з канонічного summary-рядка (інваріант tally-слово + таймінг-хвіст ` in <dur>s`, ANSI-strip, скан знизу), а не з усього блоба. Закриває false-FAIL коли tally-слово (`1 error`) у captured-виводі перевертало зелений прогін → fix-loop «лагодив» вже зелений код. Покриває `-q` голий підсумок (без рамки `=`), ANSI-кольори, трейлінг-банери; `failed:`-блок приховано на зеленому прогоні (+5 unit + 5 golden, ultracode-verified) |
 | 2026-06-16 | 1.17 | **CA-5/6 фінал**: CA-5.1 review-after-fix gate (`fix_tests(review=True)`), CA-5.3 gateway-воркер dispatch для `coding_task`, CA-6.5 Platform Coding tab (закриває CB6), CA-6.3 VS Code extension + `POST /agent/code/edit` + `jarvis code edit` (закриває CB7). **Фази CA-5/CA-6 повністю закрито** |
 | 2026-06-16 | 1.16 | follow-ups: CA-3.5 live-fix golden, CA-5.5 turnkey pre-commit lint gate, CA-4.2 session-trust auto-approve планів, CA-6.4 headless `--no-confirm` за policy-gate |

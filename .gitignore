@@ -23,6 +23,8 @@ data/twin/
 # Рантайм-артефакти: вивчений PS-whitelist і ефемерний URL quick-тунелю.
 data/computer_learned.json
 data/quick_tunnel.last_url
+# ai_tester: recordings містять (зредаговані) тіла відповідей — не для git-дерева; run-звіти = метадані, теж рантайм
+data/artifacts/ai_tester/
 vendor/sd-forge/
 
 # Логи / тимчасові

@@ -19,6 +19,7 @@
 | [`kaizen`](kaizen/SKILL.md) | **engine** | портативний рушій самопокращення (Ports&Adapters, говорить портами) | [`engine/ports.md`](kaizen/engine/ports.md) |
 | [`self-improve`](self-improve/SKILL.md) | **shim** | legacy-тригери → `kaizen` з `profile:jarvis` | — |
 | [`jarvis`](jarvis/SKILL.md) | **connector** | вихідний MCP-роз'єм до платформи (connector+adapter+skill) | [`../../docs/JARVIS_CONNECTOR_CONCEPT.md`](../../docs/JARVIS_CONNECTOR_CONCEPT.md) |
+| [`ai_tester`](ai_tester/SKILL.md) | **engine** | автономний самотест фіч платформи: source-декоратори (sim/fault/record) → oracle → test→fix→retest луп (coder/computer, S4) | [`engine/ports.md`](ai_tester/engine/ports.md) |
 
 ## `data/skills/` (рантайм-агент)
 
