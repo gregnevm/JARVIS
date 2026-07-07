@@ -1,0 +1,122 @@
+{
+  "profile": "jarvis",
+  "description": "Adapter JARVIS для engine ai_tester. Єдине місце JARVIS-конкретики: реєстр фіч (ендпоінт + oracle + sim-фікстура + on_fail-ремедіація). Engine (../../engine) лишається generic і говорить портами. Нова фіча платформи = новий запис тут, без зміни ядра (Open/Closed).",
+  "base_url_default": "http://localhost:8000",
+
+  "features": {
+    "_note": "oracle: ok_status / require_fields / nonempty_fields / forbid_fields / latency_budget_ms. sim — фікстура для ReplaySource (детермінований offline-прогін). gated_statuses + gate_flag → вердикт skipped_gated (вимкнена фіча ≠ падіння). mutating: true → у suite лише явно (S4).",
+
+    "whoami": {
+      "title": "Ідентичність клієнта (усі auth-канали)",
+      "method": "GET", "path": "/api/v1/whoami", "request": null,
+      "gate_flag": "", "gated_statuses": [], "mutating": false,
+      "oracle": {"ok_status": [200], "require_fields": ["org_id", "user_id", "role"], "nonempty_fields": ["org_id"], "forbid_fields": [], "latency_budget_ms": 15000},
+      "sim": {"status": 200, "data": {"org_id": "00000000-0000-0000-0000-000000000001", "user_id": "1", "role": "owner", "plan": "studio", "via": "basic"}},
+      "on_fail": {"dispatch": "code", "hint": "перевір gateway/app/client_api/deps.py:resolve_client_context (JWT / initData / Basic) і .env-креденшели"}
+    },
+
+    "chat": {
+      "title": "Chat-хід (локальний інференс)",
+      "method": "POST", "path": "/api/v1/chat",
+      "request": {"text": "Самотест ai_tester: дай відповідь одним словом — pong", "mode": "chat"},
+      "gate_flag": "", "gated_statuses": [], "mutating": false,
+      "oracle": {"ok_status": [200], "require_fields": ["reply", "mode"], "nonempty_fields": ["reply"], "forbid_fields": [], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"reply": "pong", "mode": "chat", "via": "basic"}},
+      "on_fail": {"dispatch": "code", "hint": "ланцюг gateway → tools.process → Ollama: перевір tools_url/OLLAMA_* і build_agent_payload (chat.py)"}
+    },
+
+    "context_ingest": {
+      "title": "Паспорт у памʼять (P9/P10)",
+      "method": "POST", "path": "/api/v1/ingest/events",
+      "request": {"events": [{"kind": "note", "summary": "ai_tester smoke probe", "tags": ["kind:ai-tester", "probe:context"], "sensitivity": "personal"}]},
+      "gate_flag": "ENABLE_CONTEXT_API", "gated_statuses": [404], "mutating": false,
+      "oracle": {"ok_status": [200], "require_fields": ["accepted"], "nonempty_fields": [], "forbid_fields": [], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"accepted": 1, "duplicates": 0, "failed": 0, "ids": [1]}},
+      "on_fail": {"dispatch": "code", "hint": "gateway/app/client_api/context.py → memory POST /context/ingest; перевір memory_url і редакцію подій"}
+    },
+
+    "context_search": {
+      "title": "Семантичний пошук у памʼяті",
+      "method": "POST", "path": "/api/v1/context/search",
+      "request": {"query": "ai_tester smoke probe", "top_k": 3},
+      "gate_flag": "ENABLE_CONTEXT_API", "gated_statuses": [404], "mutating": false,
+      "oracle": {"ok_status": [200], "require_fields": ["results"], "nonempty_fields": [], "forbid_fields": ["error"], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"results": []}},
+      "on_fail": {"dispatch": "code", "hint": "forbid error: `memory_unreachable` при 200 = деградація — перевір memory-сервіс і його url"}
+    },
+
+    "context_recent": {
+      "title": "Останні події памʼяті (прозорість)",
+      "method": "POST", "path": "/api/v1/context/recent",
+      "request": {"limit": 5},
+      "gate_flag": "ENABLE_CONTEXT_API", "gated_statuses": [404], "mutating": false,
+      "oracle": {"ok_status": [200], "require_fields": ["events"], "nonempty_fields": [], "forbid_fields": ["error"], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"events": []}},
+      "on_fail": {"dispatch": "code", "hint": "gateway/app/client_api/context.py → memory POST /context/recent"}
+    },
+
+    "confirm_pending": {
+      "title": "S4-стан: чи є дія в очікуванні",
+      "method": "GET", "path": "/api/v1/confirm/pending", "request": null,
+      "gate_flag": "", "gated_statuses": [], "mutating": false,
+      "oracle": {"ok_status": [200], "require_fields": ["pending"], "nonempty_fields": [], "forbid_fields": [], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"pending": false}},
+      "on_fail": {"dispatch": "code", "hint": "gateway/app/client_api/confirm.py; tools_unreachable у відповіді = перевір tools-сервіс"}
+    },
+
+    "driver_status": {
+      "title": "Computer-use драйвер: статус/траст",
+      "method": "GET", "path": "/api/v1/driver/status", "request": null,
+      "gate_flag": "", "gated_statuses": [], "mutating": false,
+      "_gate_note": "роут безумовний (driver.py); вимкнений computer-use видно як enabled:false у тілі, не як 404/503",
+      "oracle": {"ok_status": [200], "require_fields": ["enabled"], "nonempty_fields": [], "forbid_fields": [], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"enabled": false, "trust": {"trusted": false, "ttl_seconds": 0}}},
+      "on_fail": {"dispatch": "computer", "hint": "gateway/app/client_api/driver.py + tools computer-use; скріншот покаже живий стан"}
+    },
+
+    "mcp_servers": {
+      "title": "Керований MCP-хаб: перелік downstream-серверів",
+      "method": "GET", "path": "/api/v1/mcp/servers", "request": null,
+      "gate_flag": "ENABLE_MCP_HUB", "gated_statuses": [404], "mutating": false,
+      "oracle": {"ok_status": [200], "require_fields": ["servers"], "nonempty_fields": [], "forbid_fields": ["error"], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"servers": []}},
+      "on_fail": {"dispatch": "code", "hint": "gateway/app/client_api/mcp.py → tools /mcp/servers; forbid error: tools_unreachable = tools лежить"}
+    },
+
+    "code_task": {
+      "title": "Coding-агент: дispatch задачі (S4)",
+      "method": "POST", "path": "/api/v1/code/task",
+      "request": {"text": "Самотест ai_tester: покажи план (без правок) — перевір, що coder відповідає", "target": "local"},
+      "gate_flag": "", "gated_statuses": [], "mutating": true,
+      "_gate_note": "503 'Claude bridge disabled' існує лише для target=claude (code.py); target=local безумовний",
+      "oracle": {"ok_status": [200], "require_fields": ["reply"], "nonempty_fields": ["reply"], "forbid_fields": [], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"reply": "План: крок 1…", "target": "local"}},
+      "on_fail": {"dispatch": "code", "hint": "gateway/app/client_api/code.py → tools coder; мутації чекають confirm_approve (S4)"}
+    },
+
+    "driver_exec": {
+      "title": "Computer-use дія (S4)",
+      "method": "POST", "path": "/api/v1/driver/exec",
+      "request": {"text": "Самотест ai_tester: зроби скріншот робочого столу"},
+      "gate_flag": "", "gated_statuses": [], "mutating": true,
+      "_gate_note": "роут безумовний (driver.py: proxy у tools mode=computer); вимкнений computer-use видно у reply, не статусом",
+      "oracle": {"ok_status": [200], "require_fields": ["reply"], "nonempty_fields": ["reply"], "forbid_fields": [], "latency_budget_ms": 0},
+      "sim": {"status": 200, "data": {"reply": "Скріншот зроблено", "mode": "computer"}},
+      "on_fail": {"dispatch": "computer", "hint": "gateway/app/client_api/driver.py → tools computer-use tier-ladder (S5); мутації → confirm (S4)"}
+    }
+  },
+
+  "faults": {
+    "_note": "Бібліотека інʼєкцій FaultSource (ядро). Тут лише довідково для хост-AI.",
+    "http_500": "відповідь 500 (детермінований збій сервера)",
+    "http_404": "відповідь 404 (роут зник / гейт)",
+    "timeout": "транспортний таймаут (сервіс не відповідає)",
+    "malformed": "не-JSON відповідь (зламаний серіалізатор)",
+    "empty_reply": "200 з порожнім reply (тиха деградація LLM-ланцюга)"
+  },
+
+  "confirm": {
+    "auto_approve": "never",
+    "note": "Луп test→fix→retest ДИСПАТЧИТЬ ремедіацію, але мутуючий крок виконується лише після людського confirm_approve (S4). Рушій ніколи не апрувить сам."
+  }
+}
