@@ -55,6 +55,10 @@
 - ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
   одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
   невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
+- ✅ **S13 (multi-node authority)** маркування крос-нодових дій в аудиті: поле `node`
+  (`hostagent` | `local`) у `computer.jsonl` через `execution_node(tool)`
+  (`tools/app/computer_audit.py`) — у логу видно, що дія перетнула межу вузла
+  (Twin→Windows-хост). Вісь 10 аналізу: `docs/COMPETITIVE_ANALYSIS.md` §3.10.
 - ✅ **S12 (packaging DX)** `jarvis doctor` (`python -m app.doctor`, `tools/app/doctor.py`):
   one-command діагностика — health сервісів (критичні/некритичні), Ollama, bwrap-пісочниця
   (критична лише за enable_code_exec+require_sandbox), критичні env; `--json`, exit 1 при

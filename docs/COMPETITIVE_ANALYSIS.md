@@ -166,9 +166,10 @@ single-operator. ✅ Запозичено: `jarvis doctor` (`python -m app.docto
 ### 3.10 Мульти-нод топології
 **Best-in-class:** vierisid — сервер 24/7 + легкі sidecars на робочих машинах, з
 per-node authority і крос-нодовим аудитом.
-**Для JARVIS:** Twin+hostagent+Edge+APK — та сама топологія. Прогалина: authority
-зараз глобальна (admin/user), не **per-node**; крос-нодові дії (Twin→hostagent) варто
-маркувати в аудит-паспортах як окремий клас.
+**Для JARVIS:** Twin+hostagent+Edge+APK — та сама топологія. ✅ Крок зроблено:
+крос-нодові дії (Twin→hostagent) маркуються в аудиті полем `node` (ROADMAP S13,
+`execution_node`). Повний per-node authority-контракт (окремі ліміти на вузол) —
+наступний крок поверх цього маркера.
 
 ---
 

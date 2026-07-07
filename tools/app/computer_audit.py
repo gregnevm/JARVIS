@@ -11,6 +11,29 @@ from jarvis_core.passport import default_redactor
 
 from .config import settings
 
+# Інструменти, що виконуються на Windows-хості через hostagent — крос-нодові
+# дії (Twin-контейнер → hostagent). Маркуємо їх окремим класом в аудиті
+# (multi-node authority, `docs/COMPETITIVE_ANALYSIS.md` §3.10): у логу видно, що
+# дія перетнула межу вузла, а не лишилась у пісочниці tools-контейнера.
+_HOSTAGENT_TOOLS = frozenset(
+    {
+        "run_powershell", "run_cli",
+        "fs_list", "fs_read", "fs_write", "fs_write_bytes",
+        "capture_screenshot", "clipboard_read", "clipboard_write", "power_action",
+        "window_list", "window_focus", "uia_invoke",
+        "screen_click", "screen_type", "screen_hotkey", "screen_scroll", "see_screen",
+        "browser_open", "browser_read", "browser_click", "browser_fill", "browser_eval",
+    }
+)
+
+
+def execution_node(tool: str) -> str:
+    """`hostagent` (крос-нодова дія на Windows-хості) | `local` (у tools-контейнері).
+
+    Спостережуваність, не enforcement: невідомий інструмент → `local` (він не
+    у hostagent-контракті, тож не перетинає межу вузла)."""
+    return "hostagent" if tool in _HOSTAGENT_TOOLS else "local"
+
 
 def _log_path() -> Path:
     return Path(settings.data_dir) / "logs" / "computer.jsonl"
@@ -51,6 +74,7 @@ def log_action(
             "user_id": int(user_id),
             "tool": tool,
             "tier": tier,
+            "node": execution_node(tool),
             "args": _safe_args(args),
             "result_preview": _redact((result or "")[:500]),
             "confirmed": confirmed,
