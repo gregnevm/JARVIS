@@ -55,6 +55,11 @@
 - ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
   одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
   невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
+- ✅ **S11 (петля персоналізації)** task-success-вимір у LoRA-promote-гейті
+  (`training/eval/gate.py --with-task-success`, wired у `scripts/gate_promote_lora.ps1`):
+  адаптер промоутиться лише якщо live-стек досі проходить end-state сценарії, не лише
+  формат/стиль (fail-closed на збій стека). Замикає self-improve на користь.
+  Вісь 8 аналізу: `docs/COMPETITIVE_ANALYSIS.md` §3.8.
 - ✅ **S10 (памʼять T3)** дистильований рівень: `build_distilled` / job `context_distill`
   (`jarvis_core/passport/jobs.py`) — салієнтні факти (Mem0-паттерн) як `kind:distilled` з
   provenance (`source_passport_ids`, fail-closed C1), retention 3650д, без feedback-loop.

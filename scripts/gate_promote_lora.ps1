@@ -6,6 +6,10 @@ param(
     [string]$Holdout = "data/twin/export/sharegpt_holdout.jsonl",
     [string]$TwinUrl = "http://127.0.0.1:8765",
     [string]$ToolsUrl = "http://127.0.0.1:8300",
+    # Додатково вимагати task-success проти live-стека (COMPETITIVE_ANALYSIS §3.8):
+    # промоутимо лише якщо система досі корисна, а не лише формат-чиста.
+    [switch]$WithTaskSuccess,
+    [double]$TaskSuccessMinPct = 90,
     [switch]$SkipDeploy
 )
 
@@ -14,7 +18,11 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 if (Test-Path $Holdout) {
-    python training/eval/gate.py --holdout $Holdout
+    $gateArgs = @("training/eval/gate.py", "--holdout", $Holdout)
+    if ($WithTaskSuccess) {
+        $gateArgs += @("--with-task-success", "--task-success-min-pct", $TaskSuccessMinPct)
+    }
+    python @gateArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {
     Write-Host "[WARN] holdout missing — skip eval gate" -ForegroundColor Yellow
