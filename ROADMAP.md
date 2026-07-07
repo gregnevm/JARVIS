@@ -55,6 +55,10 @@
 - ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
   одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
   невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
+- ✅ **S12 (packaging DX)** `jarvis doctor` (`python -m app.doctor`, `tools/app/doctor.py`):
+  one-command діагностика — health сервісів (критичні/некритичні), Ollama, bwrap-пісочниця
+  (критична лише за enable_code_exec+require_sandbox), критичні env; `--json`, exit 1 при
+  провалі critical-чека. Реюз `/health`. Поле: `docs/COMPETITIVE_ANALYSIS.md` §3.9.
 - ✅ **S11 (петля персоналізації)** task-success-вимір у LoRA-promote-гейті
   (`training/eval/gate.py --with-task-success`, wired у `scripts/gate_promote_lora.ps1`):
   адаптер промоутиться лише якщо live-стек досі проходить end-state сценарії, не лише

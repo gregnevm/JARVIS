@@ -159,8 +159,8 @@ cost/latency. Це якорить і kaizen-автопілот, і LoRA-пром
 **Best-in-class:** QwenPaw — Tauri `setup.exe` zero-config (без Python/env для юзера);
 docker-compose-стартер-кіти як норма ніші.
 **Для JARVIS:** compose + `Install-JARVIS.ps1`/`FirstSetup` — адекватно для
-single-operator. Дешеве запозичення: `doctor`-команда (діагностика env/портів/моделей
-одним запуском) поверх наявних `scripts/lib/*` перевірок. Tauri — тільки якщо колись
+single-operator. ✅ Запозичено: `jarvis doctor` (`python -m app.doctor`) — health
+сервісів/Ollama/пісочниці/env одним запуском (ROADMAP S12). Tauri — тільки якщо колись
 зʼявиться зовнішній adoption-трек.
 
 ### 3.10 Мульти-нод топології
