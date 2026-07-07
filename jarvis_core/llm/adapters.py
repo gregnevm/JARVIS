@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from jarvis_core.llm.interface import LLMInterface
-from jarvis_core.llm.parsers import kobold_token, ollama_chunk
+from jarvis_core.llm.parsers import kobold_token, ollama_chunk, openai_delta
 
 # SY-6: адаптер — єдине місце, де видно сирі inference-stats бекенда (eval_count…).
 # Репортить їх нагору (MeterLLM) синхронним колбеком; None = метрика вимкнена.
@@ -41,6 +41,76 @@ class KoboldAdapter(LLMInterface):
                 tok = kobold_token(line)
                 if tok:
                     yield tok
+
+
+class OpenAICompatAdapter(LLMInterface):
+    """Будь-який OpenAI-сумісний `/v1/chat/completions` за одним `LLMInterface`.
+
+    Один адаптер покриває OpenAI, OpenRouter, vLLM, llama.cpp-server, Anthropic
+    через проксі — «100+ провайдерів під одним API», що дає LiteLLM, але БЕЗ
+    залежності (guardrail AGENTS.md проти framework-rewrite; «кращий аналог»
+    замість бібліотеки). Патерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.1.
+
+    S1: хмара — лише явний opt-in оператора (`LLM_BACKEND=openai` + ключ), ніколи
+    не дефолт. Метрику веде як Kobold — latency-only (usage-shape провайдерів
+    різний; token-облік хмари — окремий крок, не блокує цей адаптер).
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key: str = "",
+        client: httpx.Client | None = None,
+        timeout: float = 180.0,
+    ) -> None:
+        self._url = base_url.rstrip("/")
+        self._model = model
+        self._key = api_key
+        self._client = client or httpx.Client(timeout=timeout)
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self._key:
+            headers["Authorization"] = f"Bearer {self._key}"
+        return headers
+
+    def _body(self, prompt: str, max_tokens: int, *, stream: bool) -> dict[str, Any]:
+        return {
+            "model": self._model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "stream": stream,
+        }
+
+    def generate(self, prompt: str, max_tokens: int = 512) -> str:
+        resp = self._client.post(
+            f"{self._url}/chat/completions",
+            json=self._body(prompt, max_tokens, stream=False),
+            headers=self._headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        choices = data.get("choices") or [] if isinstance(data, dict) else []
+        if not choices or not isinstance(choices[0], dict):
+            return ""
+        msg = choices[0].get("message") or {}
+        return str(msg.get("content") or "") if isinstance(msg, dict) else ""
+
+    def stream(self, prompt: str, max_tokens: int = 512) -> Iterator[str]:
+        with self._client.stream(
+            "POST",
+            f"{self._url}/chat/completions",
+            json=self._body(prompt, max_tokens, stream=True),
+            headers=self._headers(),
+        ) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                text, done = openai_delta(line)
+                if text:
+                    yield text
+                if done:
+                    break
 
 
 class OllamaAdapter(LLMInterface):

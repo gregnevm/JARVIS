@@ -30,8 +30,14 @@ class Settings(
     ollama_model_chat: str = "gemma3:4b"
     ollama_model_agent: str = "qwen2.5:7b-instruct"
     # LLM_BACKEND=kobold — chat через KoboldAdapter (Edge/Twin CPU inference).
-    llm_backend: Literal["ollama", "kobold"] = "ollama"
+    # LLM_BACKEND=openai — OpenAI-сумісна хмара/vLLM (opt-in, S1; потребує CLOUD_LLM_*).
+    llm_backend: Literal["ollama", "kobold", "openai"] = "ollama"
     kobold_host: str = "http://host.docker.internal:5001"
+    # Хмарний inference (лише LLM_BACKEND=openai; S1: opt-in, ніколи не дефолт).
+    # Будь-який OpenAI-сумісний /v1: OpenAI, OpenRouter, vLLM, llama.cpp-server, Anthropic-проксі.
+    cloud_llm_base_url: str = ""   # напр. https://api.openai.com/v1
+    cloud_llm_model: str = ""      # напр. gpt-4o-mini
+    cloud_llm_api_key: str = ""    # Bearer-ключ провайдера (порожньо для локального vLLM)
     # Vision-модель для розпізнавання зображень (напр. "llava:7b", "qwen2.5vl:7b").
     # Порожньо = describe_image вимкнено.
     ollama_model_vision: str = ""

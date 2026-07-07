@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import httpx
 
-from jarvis_core.llm.adapters import KoboldAdapter, OllamaAdapter
+from jarvis_core.llm.adapters import KoboldAdapter, OllamaAdapter, OpenAICompatAdapter
 from jarvis_core.llm.interface import LLMInterface
 from jarvis_core.llm.jsonl_log import JsonlLog
 from jarvis_core.llm.parsers import ollama_inference_stats
@@ -165,10 +165,13 @@ JARVIS_STYLE_PREFIX = (
 
 def build_llm_stack(
     *,
-    backend: Literal["ollama", "kobold"] = "ollama",
+    backend: Literal["ollama", "kobold", "openai"] = "ollama",
     ollama_host: str = "http://127.0.0.1:11434",
     ollama_model: str = "qwen2.5:7b-instruct",
     kobold_host: str = "http://127.0.0.1:5001",
+    openai_base_url: str = "",
+    openai_model: str = "",
+    openai_api_key: str = "",
     timeout: float = 180.0,
     log_path: str | None = None,
     cache_ttl: float = 3600.0,
@@ -180,9 +183,14 @@ def build_llm_stack(
     """Composition root: Style → Retry → Cache → [Meter] → Logging → Adapter.
 
     `usage_meter` (SY-6, опційно): шар MeterLLM під Cache — usage-паспорти лише
-    за реальні виклики бекенда; адаптер репортить у нього сирі stats (токени)."""
+    за реальні виклики бекенда; адаптер репортить у нього сирі stats (токени).
+
+    `backend="openai"` (opt-in, S1): OpenAI-сумісна хмара/локальний vLLM за тим
+    самим інтерфейсом (`meter_model` бере openai_model). Порожній base_url при
+    цьому backend → ValueError (fail-fast, щоб не бити нікуди мовчки)."""
     base: LLMInterface
     meter_layer: MeterLLM | None = None
+    meter_model = ollama_model
 
     def _relay_stats(raw: dict[str, Any]) -> None:
         # Слот наповнює адаптер; шар Meter створюється нижче — late-bound closure.
@@ -191,6 +199,14 @@ def build_llm_stack(
 
     if backend == "kobold":
         base = KoboldAdapter(kobold_host, client=client, timeout=timeout)
+    elif backend == "openai":
+        if not openai_base_url:
+            raise ValueError("LLM_BACKEND=openai потребує CLOUD_LLM_BASE_URL (fail-fast)")
+        meter_model = openai_model or "openai"
+        base = OpenAICompatAdapter(
+            openai_base_url, openai_model, api_key=openai_api_key,
+            client=client, timeout=timeout,
+        )
     else:
         base = OllamaAdapter(
             ollama_host, ollama_model, client=client, timeout=timeout,
@@ -200,7 +216,7 @@ def build_llm_stack(
     if log_path:
         llm = LoggingLLM(llm, log_path)
     if usage_meter is not None:
-        meter_layer = MeterLLM(llm, usage_meter, model=ollama_model)
+        meter_layer = MeterLLM(llm, usage_meter, model=meter_model)
         llm = meter_layer
     llm = CacheLLM(llm, ttl_sec=cache_ttl)
     llm = RetryLLM(llm, attempts=retry_attempts)

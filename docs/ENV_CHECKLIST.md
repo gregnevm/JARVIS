@@ -158,7 +158,7 @@ docker compose up -d --build gateway tools
 
 <!-- GEN:ENV-INVENTORY:BEGIN (scripts/gen_env_docs.py — не редагуй руками) -->
 
-## Повний інвентар env-змінних (216 змінних, code-first)
+## Повний інвентар env-змінних (219 змінних, code-first)
 
 Згенеровано з Settings-класів сервісів. Оновити: `python scripts/gen_env_docs.py`.
 CI (`arch-gates`) падає, якщо таблиця/снапшоти розійшлися з кодом (drift-гейт D1).
@@ -189,6 +189,9 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `BYPASS_CONFIRMATIONS` | tools | `false` |
 | `CALENDAR_ICS_URL` | tools | `""` |
 | `CLI_WHITELIST` | tools | `""` |
+| `CLOUD_LLM_API_KEY` | tools | `""` |
+| `CLOUD_LLM_BASE_URL` | tools | `""` |
+| `CLOUD_LLM_MODEL` | tools | `""` |
 | `CODE_EXEC_DENY_PATTERNS` | tools | `""` |
 | `CODE_EXEC_MEMORY_MB` | tools | `512` |
 | `CODE_EXEC_REQUIRE_SANDBOX` | tools | `true` |

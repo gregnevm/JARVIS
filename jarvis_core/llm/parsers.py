@@ -111,6 +111,30 @@ def ollama_chat_chunk(line: str) -> tuple[str, bool, dict[str, Any] | None]:
     return content, done, stats
 
 
+def openai_delta(line: str) -> tuple[str, bool]:
+    """SSE-рядок OpenAI-сумісного /v1/chat/completions → (delta, done).
+
+    Формат: `data: {json}` з `choices[0].delta.content`; термінатор `data: [DONE]`.
+    SSOT парсингу для будь-якого OpenAI-сумісного бекенда (OpenAICompatAdapter)."""
+    line = line.strip()
+    if line.startswith("data:"):
+        line = line[5:].strip()
+    if not line:
+        return "", False
+    if line == "[DONE]":
+        return "", True
+    try:
+        data = json.loads(line)
+    except json.JSONDecodeError:
+        return "", False
+    choices = data.get("choices") or []
+    if not choices or not isinstance(choices[0], dict):
+        return "", False
+    delta = choices[0].get("delta") or {}
+    content = str(delta.get("content") or "") if isinstance(delta, dict) else ""
+    return content, bool(choices[0].get("finish_reason"))
+
+
 def ollama_inference_stats(data: dict[str, Any]) -> dict[str, Any] | None:
     """eval_count / eval_duration (ns) з відповіді Ollama /api/chat.
 

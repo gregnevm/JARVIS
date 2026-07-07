@@ -55,6 +55,10 @@
 - ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
   одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
   невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
+- ✅ **S9 (провайдер-абстракція)** `OpenAICompatAdapter` (`jarvis_core/llm/adapters.py`) —
+  будь-який OpenAI-сумісний `/v1` (OpenAI/OpenRouter/vLLM/llama.cpp/Anthropic-проксі) за наявним
+  `LLMInterface`, `LLM_BACKEND=openai`+`CLOUD_LLM_*`, opt-in (S1, дефолт ollama), без LiteLLM.
+  Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.1.
 - ✅ **S8 (skill scanner)** pre-activation скан SKILL.md (`jarvis_core/safety/skill_scan.py`,
   `SKILLS_SCAN_MODE=block|warn|off`, дефолт block): імперативні правила (download-pipe-exec,
   destructive-fs, secrets/ssh-read, prompt-injection, encoded-exec) без false positive на

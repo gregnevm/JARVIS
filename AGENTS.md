@@ -189,7 +189,9 @@ CI (`.github/workflows/ci.yml`) — matrix по `jarvis_core/gateway/memory/tool
 
 ## 6. Guardrails / Свідомо НЕ робимо
 
-- ❌ **Зовнішній AI-API як дефолт для inference** — лише явний opt-in; ламає S1.
+- ❌ **Зовнішній AI-API як дефолт для inference** — лише явний opt-in; ламає S1. Хмара доступна
+  через `OpenAICompatAdapter` (`LLM_BACKEND=openai` + `CLOUD_LLM_*`), але дефолт — `ollama`.
+  Абстракція — свій `LLMInterface`, НЕ LiteLLM/LangChain (кращий аналог замість залежності).
 - ❌ **`ENABLE_CODE_EXEC=true` без sandbox-ізоляції** — дефолт закриває це: bwrap kernel-sandbox,
   fail-closed (`CODE_EXEC_REQUIRE_SANDBOX=true`, `toolkit/sandbox.py` + guard `safety/exec_guard.py`).
   Opt-out прапором = свідоме рішення оператора; тоді діють лише `-I`+rlimits+guard.
