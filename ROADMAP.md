@@ -55,6 +55,10 @@
 - ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
   одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
   невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
+- ✅ **S10 (памʼять T3)** дистильований рівень: `build_distilled` / job `context_distill`
+  (`jarvis_core/passport/jobs.py`) — салієнтні факти (Mem0-паттерн) як `kind:distilled` з
+  provenance (`source_passport_ids`, fail-closed C1), retention 3650д, без feedback-loop.
+  AO-CTX Ф1 (`docs/proposals/AO-CTX_memory_tiers.md`); поле: `COMPETITIVE_ANALYSIS.md` §3.3.
 - ✅ **S9 (провайдер-абстракція)** `OpenAICompatAdapter` (`jarvis_core/llm/adapters.py`) —
   будь-який OpenAI-сумісний `/v1` (OpenAI/OpenRouter/vLLM/llama.cpp/Anthropic-проксі) за наявним
   `LLMInterface`, `LLM_BACKEND=openai`+`CLOUD_LLM_*`, opt-in (S1, дефолт ollama), без LiteLLM.

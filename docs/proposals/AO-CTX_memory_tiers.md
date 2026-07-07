@@ -54,7 +54,9 @@ tier-retrieval має бити плаский retrieval на цьому набо
 
 ## 5. Фази (кожна — свій PR, свій roadmap-tick)
 
-- **Ф1 (S):** `kind=distilled` + дистиляційний крок у `context_retention` + provenance. Без T1.
+- **Ф1 (S):** ✅ `kind=distilled` + `build_distilled` (job `context_distill`) + provenance
+  (`source_passport_ids` у payload, fail-closed) + retention 3650д. Без T1. Реалізовано:
+  `jarvis_core/passport/jobs.py`, `tools/app/context_jobs.py`.
 - **Ф2 (M):** `context_pins` + InputDecorator + human-gate оновлень + memory-eval набір. Go/NoGo по §4.
 - **Ф3 (опц.):** MemFS-стиль дзеркало pins у markdown (git-історія змін пам'яті — дешевий
   аудит, Letta-паттерн) — лише якщо Ф2 доведе цінність.

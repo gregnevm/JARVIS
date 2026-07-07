@@ -38,11 +38,20 @@ def _strip_marker(line: str) -> str:
 
 
 PENDING_SUMMARY_TAG = "pending:summary"
+DISTILLED_KIND = "distilled"
+LEARNED_STATUS_TAG = "status:learned"
 CONTEXT_JOB_NAMES = frozenset(
-    {"context_summarize", "context_daily", "context_retention", "context_proposal"}
+    {
+        "context_summarize",
+        "context_daily",
+        "context_retention",
+        "context_proposal",
+        "context_distill",
+    }
 )
 
-# Per-kind retention (дні). raw-сигнали — коротко; нотатки/daily — довго.
+# Per-kind retention (дні). raw-сигнали — коротко; нотатки/daily/distilled — довго.
+# distilled = найдовговічніший рівень (T3, дистильоване знання) → як daily.
 DEFAULT_RETENTION_DAYS: dict[str, int] = {
     "notification": 14,
     "sms": 30,
@@ -50,6 +59,7 @@ DEFAULT_RETENTION_DAYS: dict[str, int] = {
     "usage": 7,
     "note": 365,
     "daily": 3650,
+    "distilled": 3650,
 }
 
 
@@ -167,6 +177,62 @@ async def build_proposals(
             }
         )
     return proposals
+
+
+async def build_distilled(
+    store: ContextStore,
+    distiller: Summarizer,
+    user_id: int,
+    *,
+    recent_limit: int = 50,
+    max_n: int = 5,
+) -> list[str]:
+    """Дистилює недавні паспорти у стабільні салієнтні факти → `kind:distilled` (T3).
+
+    Рівень T3 памʼяті (AO-CTX §2, Mem0-паттерн salience): не сирі події, а
+    витягнуті довговічні факти про оператора/бізнес. Дзеркалить `build_proposals`
+    (реюз інфри, YAGNI): факт — звичайний паспорт із `status:learned`.
+
+    **Provenance FAIL-CLOSED (C1):** без source-id жоден факт не пишеться —
+    `source_passport_ids` у payload обовʼязковий (інакше «голий» дистилят =
+    неперевірюване знання). Виключає власні (distilled/daily/proposal) паспорти
+    з входу, щоб не дистилювати дистилят (feedback loop)."""
+    items = await store.recent(user_id, recent_limit)
+    src = [
+        it
+        for it in items
+        if not _has_kind(it.get("tags") or [], DISTILLED_KIND)
+        and not _has_kind(it.get("tags") or [], "daily")
+        and not _has_kind(it.get("tags") or [], "proposal")
+    ]
+    source_ids = [
+        str(it.get("id") if it.get("id") is not None else it.get("event_id"))
+        for it in src
+        if it.get("id") is not None or it.get("event_id")
+    ]
+    ctx = "\n".join(f"- {it.get('summary', '')}" for it in src if it.get("summary"))
+    if not ctx.strip() or not source_ids:  # provenance fail-closed
+        return []
+    raw = await distiller(ctx)
+    facts: list[str] = []
+    for line in raw.splitlines():
+        text = _strip_marker(line)
+        if text:
+            facts.append(text)
+        if len(facts) >= max_n:
+            break
+    for fact in facts:
+        await store.ingest(
+            {
+                "user_id": user_id,
+                "kind": DISTILLED_KIND,
+                "summary": fact,
+                "tags": normalize_tags([LEARNED_STATUS_TAG], DISTILLED_KIND),
+                "source": "context_distill",
+                "payload": {"source_passport_ids": source_ids},
+            }
+        )
+    return facts
 
 
 async def run_retention(

@@ -1,6 +1,7 @@
 """Context-maintenance jobs — ручний тригер (ADR-008: maintenance із нагляду, не auto-cron).
 
-POST /context/jobs/{name} — name ∈ {context_summarize, context_daily, context_retention}.
+POST /context/jobs/{name} — name ∈ {context_summarize, context_daily, context_retention,
+context_proposal, context_distill}.
 Виконавець із реальним memory+Ollama — у `context_jobs.run_context_job`.
 """
 from __future__ import annotations

@@ -4,7 +4,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from jarvis_core.passport import build_daily, build_proposals, run_retention, summarize_pending
+from jarvis_core.passport import (
+    build_daily,
+    build_distilled,
+    build_proposals,
+    run_retention,
+    summarize_pending,
+)
 
 
 class FakeStore:
@@ -173,6 +179,70 @@ def test_strip_marker_edge_cases():
     assert _strip_marker("1. ") == ""                     # маркер + хвостовий пробіл → ""
     assert _strip_marker("") == ""
     assert _strip_marker("   ") == ""
+
+
+# --- context_distill (T3 memory tier, AO-CTX Ф1) ---
+
+async def _distiller(text: str) -> str:
+    return "Оператор працює з дрон-поставками\nПлатить через IBAN, не готівкою"
+
+
+async def test_build_distilled_ingests_kind_distilled_with_provenance():
+    store = FakeStore(recent=[
+        {"id": 11, "summary": "рахунок від постачальника FPV", "tags": ["kind:note"]},
+        {"id": 12, "summary": "оплата по IBAN", "tags": ["kind:note"]},
+    ])
+    out = await build_distilled(store, _distiller, 42, max_n=5)
+    assert out == ["Оператор працює з дрон-поставками", "Платить через IBAN, не готівкою"]
+    assert len(store.ingested) == 2
+    rec = store.ingested[0]
+    assert rec["kind"] == "distilled"
+    assert "status:learned" in rec["tags"] and "kind:distilled" in rec["tags"]
+    # provenance — обовʼязковий (fail-closed C1)
+    assert rec["payload"]["source_passport_ids"] == ["11", "12"]
+
+
+async def test_build_distilled_fail_closed_without_source_ids():
+    # Паспорти без id/event_id → provenance неможлива → нічого не пишемо.
+    store = FakeStore(recent=[{"summary": "факт без id", "tags": ["kind:note"]}])
+    assert await build_distilled(store, _distiller, 1) == []
+    assert store.ingested == []
+
+
+async def test_build_distilled_excludes_own_kinds_no_feedback_loop():
+    # distilled/daily/proposal не йдуть на вхід дистиляції (інакше рекурсивний дрейф).
+    store = FakeStore(recent=[
+        {"id": 1, "summary": "старий дистилят", "tags": ["kind:distilled"]},
+        {"id": 2, "summary": "денний звіт", "tags": ["kind:daily"]},
+        {"id": 3, "summary": "пропозиція", "tags": ["kind:proposal"]},
+    ])
+    assert await build_distilled(store, _distiller, 1) == []
+    assert store.ingested == []
+
+
+async def test_build_distilled_uses_event_id_when_no_numeric_id():
+    store = FakeStore(recent=[
+        {"event_id": "sig:abc", "summary": "подія з event_id", "tags": ["kind:sms"]},
+    ])
+    out = await build_distilled(store, _distiller, 7, max_n=1)
+    assert len(out) == 1
+    assert store.ingested[0]["payload"]["source_passport_ids"] == ["sig:abc"]
+
+
+async def test_build_distilled_respects_max_n():
+    async def _many(text: str) -> str:
+        return "\n".join(f"факт {i}" for i in range(10))
+
+    store = FakeStore(recent=[{"id": 5, "summary": "щось", "tags": ["kind:note"]}])
+    out = await build_distilled(store, _many, 1, max_n=3)
+    assert out == ["факт 0", "факт 1", "факт 2"]
+    assert len(store.ingested) == 3
+
+
+async def test_distilled_retention_is_long_lived():
+    from jarvis_core.passport import DEFAULT_RETENTION_DAYS
+
+    assert DEFAULT_RETENTION_DAYS["distilled"] == 3650
 
 
 # --- context_retention ---
