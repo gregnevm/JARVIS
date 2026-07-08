@@ -68,6 +68,17 @@ def test_upsert_rejects_blank_or_long_name(client, monkeypatch):
     monkeypatch.setattr(apps, "_MAX_NAME_LEN", 4)
     assert client.post("/api/v1/apps/n2", auth=AUTH,
                        json={"name": "toolong", "html": "y"}).status_code == 400
+    # межа рівно на стелі (len == cap) — приймається (пін проти off-by-one > vs >=)
+    assert client.post("/api/v1/apps/n3", auth=AUTH,
+                       json={"name": "abcd", "html": "y"}).status_code == 200
+
+
+def test_upsert_clamps_long_version(client, monkeypatch):
+    from app.client_api import apps
+    monkeypatch.setattr(apps, "_MAX_VERSION_LEN", 5)
+    r = client.post("/api/v1/apps/ver", auth=AUTH,
+                    json={"name": "V", "html": "y", "version": "x" * 50})
+    assert r.status_code == 200 and r.json()["version"] == "xxxxx"
 
 
 def test_upsert_app_count_cap(client, monkeypatch):
