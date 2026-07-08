@@ -70,6 +70,32 @@ async def test_get_job_ownership_blocks_cross_user(monkeypatch: pytest.MonkeyPat
     assert (await bg_jobs.get_job(job_id)) is not None  # системний доступ збережено
 
 
+async def test_finish_job_rejects_foreign_user_idor(monkeypatch: pytest.MonkeyPatch):
+    """Anti-IDOR: route-forwarded job_id + чужий user_id → finish_job/update_progress
+    no-op (owner-gate → None), запис власника A недоторканий; власник і системний
+    (user_id=None) worker-доступ працюють. Закриває write-IDOR на finish_job/update_progress."""
+    _inject(monkeypatch)
+    rec = await bg_jobs.create_job(42, "owner A task", "agent")
+    job_id = rec["id"]
+
+    # user B (999) намагається перезаписати job користувача A
+    assert (await bg_jobs.finish_job(job_id, result="pwned", status="done", user_id=999)) is None
+    assert (await bg_jobs.update_progress(job_id, 100, "x", user_id=999)) is None
+    # запис A недоторканий: досі queued, без чужого result
+    still = await bg_jobs.get_job(job_id, 42)
+    assert still is not None
+    assert still["status"] == "queued"
+    assert not still.get("result")
+
+    # власник A — мутація проходить
+    done = await bg_jobs.finish_job(job_id, result="ok", status="done", user_id=42)
+    assert done is not None and done["status"] == "done" and done["result"] == "ok"
+
+    # системний/worker доступ (user_id=None) — незмінний
+    prog = await bg_jobs.update_progress(job_id, 50, "half", user_id=None)
+    assert prog is not None and prog["progress"] == 50
+
+
 async def test_dequeue_and_finish(monkeypatch: pytest.MonkeyPatch):
     _inject(monkeypatch)
     rec = await bg_jobs.create_job(1, "task", "auto")

@@ -16,7 +16,7 @@ def register(router: APIRouter) -> None:
 
         async def _prog(pct: int, msg: str) -> None:
             if body.job_id:
-                await bg_jobs.update_progress(body.job_id, pct, msg)
+                await bg_jobs.update_progress(body.job_id, pct, msg, user_id=body.user_id)
 
         result = await teams.run_team_pipeline(
             request.app.state.agent,
@@ -26,11 +26,13 @@ def register(router: APIRouter) -> None:
         )
         if result.get("error"):
             if body.job_id:
-                await bg_jobs.finish_job(body.job_id, error=str(result["error"])[:500], status="failed")
+                await bg_jobs.finish_job(
+                    body.job_id, error=str(result["error"])[:500], status="failed", user_id=body.user_id
+                )
             raise HTTPException(status_code=502, detail=str(result["error"]))
         final = str(result.get("result") or "")
         if body.job_id:
-            await bg_jobs.finish_job(body.job_id, result=final, status="done")
+            await bg_jobs.finish_job(body.job_id, result=final, status="done", user_id=body.user_id)
         return result
 
     @router.post("/teams/spawn")
