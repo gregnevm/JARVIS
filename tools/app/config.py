@@ -30,8 +30,14 @@ class Settings(
     ollama_model_chat: str = "gemma3:4b"
     ollama_model_agent: str = "qwen2.5:7b-instruct"
     # LLM_BACKEND=kobold — chat через KoboldAdapter (Edge/Twin CPU inference).
-    llm_backend: Literal["ollama", "kobold"] = "ollama"
+    # LLM_BACKEND=openai — OpenAI-сумісна хмара/vLLM (opt-in, S1; потребує CLOUD_LLM_*).
+    llm_backend: Literal["ollama", "kobold", "openai"] = "ollama"
     kobold_host: str = "http://host.docker.internal:5001"
+    # Хмарний inference (лише LLM_BACKEND=openai; S1: opt-in, ніколи не дефолт).
+    # Будь-який OpenAI-сумісний /v1: OpenAI, OpenRouter, vLLM, llama.cpp-server, Anthropic-проксі.
+    cloud_llm_base_url: str = ""   # напр. https://api.openai.com/v1
+    cloud_llm_model: str = ""      # напр. gpt-4o-mini
+    cloud_llm_api_key: str = ""    # Bearer-ключ провайдера (порожньо для локального vLLM)
     # Vision-модель для розпізнавання зображень (напр. "llava:7b", "qwen2.5vl:7b").
     # Порожньо = describe_image вимкнено.
     ollama_model_vision: str = ""
@@ -56,6 +62,17 @@ class Settings(
 
     # Безпека / ліміти
     enable_code_exec: bool = False
+    # Kernel-sandbox для code_exec (bwrap). true = fail-closed: нема пісочниці →
+    # відмова замість виконання (toolkit/sandbox.py). false = legacy `-I`+rlimits.
+    code_exec_require_sandbox: bool = True
+    code_exec_memory_mb: int = 512
+    # Додаткові guard-регекси (CSV `regex` або `regex=label`) до вбудованих
+    # (jarvis_core/safety/exec_guard.py) — домен-правила профілю.
+    code_exec_deny_patterns: str = ""
+    # Іменована approval-драбина (computer_policy.py): "" = гранулярні прапори
+    # нижче як є (back-compat) | strict | smart | auto | off. Задана політика —
+    # SSOT, перекриває require_confirm/auto_trust/bypass (P7: один факт — одне місце).
+    computer_approval_policy: str = ""
     # Computer Use — керування Windows-хостом через host-agent (поза Docker).
     enable_computer_use: bool = False
     computer_allow_admin: bool = False
@@ -109,6 +126,9 @@ class Settings(
 
     # P7 Skills
     skills_max_chars: int = 4000
+    # Pre-activation скан SKILL.md (jarvis_core/safety/skill_scan.py):
+    # block (дефолт, fail-closed: hit → скіл не активується) | warn (лише лог) | off.
+    skills_scan_mode: str = "block"
 
     # P8 Subagents
     subagent_default_budget: int = 3

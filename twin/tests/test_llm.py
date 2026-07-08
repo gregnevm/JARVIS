@@ -109,6 +109,20 @@ def test_create_llm_kobold():
     assert isinstance(create_llm(cfg), StyleLLM)
 
 
+def test_settings_accepts_shared_openai_backend_without_crash():
+    # СПІЛЬНИЙ LLM_BACKEND=openai (для tools) не має валити валідацію твіна…
+    cfg = Settings(llm_backend="openai", ollama_host="http://h", ollama_model="m")
+    assert cfg.llm_backend == "openai"
+
+
+def test_create_llm_coerces_openai_to_ollama():
+    # …і твін (без CLOUD_LLM_*) відкатується на ollama-стек, не падаючи на build.
+    from jarvis_core.llm.decorators import StyleLLM
+
+    cfg = Settings(llm_backend="openai", ollama_host="http://h", ollama_model="m")
+    assert isinstance(create_llm(cfg), StyleLLM)
+
+
 def test_logging_llm_writes_jsonl(tmp_path):
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"results": [{"text": "x"}]})

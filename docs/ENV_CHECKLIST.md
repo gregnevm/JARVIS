@@ -158,7 +158,7 @@ docker compose up -d --build gateway tools
 
 <!-- GEN:ENV-INVENTORY:BEGIN (scripts/gen_env_docs.py — не редагуй руками) -->
 
-## Повний інвентар env-змінних (211 змінних, code-first)
+## Повний інвентар env-змінних (219 змінних, code-first)
 
 Згенеровано з Settings-класів сервісів. Оновити: `python scripts/gen_env_docs.py`.
 CI (`arch-gates`) падає, якщо таблиця/снапшоти розійшлися з кодом (drift-гейт D1).
@@ -189,6 +189,12 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `BYPASS_CONFIRMATIONS` | tools | `false` |
 | `CALENDAR_ICS_URL` | tools | `""` |
 | `CLI_WHITELIST` | tools | `""` |
+| `CLOUD_LLM_API_KEY` | tools | `""` |
+| `CLOUD_LLM_BASE_URL` | tools | `""` |
+| `CLOUD_LLM_MODEL` | tools | `""` |
+| `CODE_EXEC_DENY_PATTERNS` | tools | `""` |
+| `CODE_EXEC_MEMORY_MB` | tools | `512` |
+| `CODE_EXEC_REQUIRE_SANDBOX` | tools | `true` |
 | `CODE_EXEC_TIMEOUT` | tools | `8.0` |
 | `CODING_FIX_MAX_ROUNDS` | tools | `4` |
 | `CODING_GREP_MAX_RESULTS` | tools | `60` |
@@ -202,6 +208,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `CODING_TREE_MAX_ENTRIES` | tools | `300` |
 | `COMPUTER_ALLOW_ADMIN` | tools | `false` |
 | `COMPUTER_ALLOW_POWER` | tools | `false` |
+| `COMPUTER_APPROVAL_POLICY` | tools | `""` |
 | `COMPUTER_AUTO_LEARN_WHITELIST` | tools | `true` |
 | `COMPUTER_AUTO_TRUST_LEARNED` | tools | `true` |
 | `COMPUTER_AUTO_VISION` | tools | `true` |
@@ -347,6 +354,7 @@ CI (`arch-gates`) падає, якщо таблиця/снапшоти розі�
 | `SELF_IMPROVE_SCAN_LIMIT` | tools | `50` |
 | `SHORT_TERM_LIMIT` | memory | `10` |
 | `SKILLS_MAX_CHARS` | tools | `4000` |
+| `SKILLS_SCAN_MODE` | tools | `"block"` |
 | `SLACK_BOT_TOKEN` | tools | `""` |
 | `SLACK_DEFAULT_CHANNEL` | tools | `""` |
 | `SUBAGENT_DEFAULT_BUDGET` | tools | `3` |

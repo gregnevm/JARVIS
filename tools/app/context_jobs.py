@@ -10,7 +10,13 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from jarvis_core.passport import build_daily, build_proposals, run_retention, summarize_pending
+from jarvis_core.passport import (
+    build_daily,
+    build_distilled,
+    build_proposals,
+    run_retention,
+    summarize_pending,
+)
 from jarvis_core.passport.jobs import Summarizer
 
 from .config import settings
@@ -19,7 +25,13 @@ from .memory_client import MemoryClient
 logger = logging.getLogger("jarvis.tools.context_jobs")
 
 CONTEXT_JOB_NAMES = frozenset(
-    {"context_summarize", "context_daily", "context_retention", "context_proposal"}
+    {
+        "context_summarize",
+        "context_daily",
+        "context_retention",
+        "context_proposal",
+        "context_distill",
+    }
 )
 
 
@@ -84,6 +96,25 @@ def make_proposer(chat_backend: Any) -> Summarizer:
     return propose
 
 
+def make_distiller(chat_backend: Any) -> Summarizer:
+    """LLM-екстрактор салієнтних фактів (T3, Mem0-паттерн): стабільні факти про
+    оператора/бізнес, не переказ подій. По одному факту на рядок (реюз _strip_marker)."""
+
+    async def distill(text: str) -> str:
+        prompt = (
+            "Ось контекст користувача за останній час. Вибери до 5 СТАБІЛЬНИХ, "
+            "довговічних фактів про користувача, його бізнес, уподобання чи правила "
+            "(не разові події!). По одному факту на рядок, стисло, українською. "
+            "Тільки факти, без преамбул:\n\n" + text
+        )
+        msg = await chat_backend.chat(
+            settings.ollama_model_chat, [{"role": "user", "content": prompt}]
+        )
+        return str((msg or {}).get("content") or "").strip()
+
+    return distill
+
+
 async def run_context_job(
     name: str,
     memory: MemoryClient,
@@ -115,4 +146,7 @@ async def run_context_job(
 
             await push.publish("Пропозиції: " + "; ".join(proposals), title="JARVIS")
         return {"job": name, "proposals": proposals, "count": len(proposals)}
+    if name == "context_distill":
+        facts = await build_distilled(store, make_distiller(chat_backend), user_id)
+        return {"job": name, "distilled": facts, "count": len(facts)}
     raise ValueError(f"unknown context job: {name}")

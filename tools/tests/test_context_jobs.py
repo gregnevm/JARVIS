@@ -23,7 +23,7 @@ class FakeMemory:
                  "payload": {"raw": "сирий текст для дозведення"}}]
 
     async def context_recent(self, user_id, limit, kind=None, tags=None) -> list[dict]:
-        return [{"summary": "купив молоко", "tags": ["kind:note"]}]
+        return [{"id": 9, "summary": "купив молоко", "tags": ["kind:note"]}]
 
     async def context_update(self, event_db_id, user_id, summary, tags, kind) -> dict:
         self.updated.append((event_db_id, summary, tags, kind))
@@ -81,6 +81,16 @@ async def test_run_proposal_ingests_proposals():
                                 day="2026-06-16", now=_NOW)
     assert out["count"] >= 1
     assert mem.ingested[0]["kind"] == "proposal"
+
+
+async def test_run_distill_ingests_facts_with_provenance():
+    mem = FakeMemory()
+    out = await run_context_job("context_distill", mem, FakeChat(), 42,
+                                day="2026-06-16", now=_NOW)
+    assert out["count"] >= 1
+    rec = mem.ingested[0]
+    assert rec["kind"] == "distilled"
+    assert rec["payload"]["source_passport_ids"] == ["9"]   # provenance із recent-паспорта
 
 
 async def test_run_unknown_job_raises():

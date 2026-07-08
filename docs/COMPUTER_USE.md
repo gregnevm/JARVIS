@@ -99,6 +99,8 @@ Telegram ─► gateway ─► tools /agent (агент-луп, AGENT_MODE=compu
    - `COMPUTER_ALLOW_ADMIN=false` (окремо для admin-PowerShell — найнебезпечніше);
    - `HOSTAGENT_URL=http://host.docker.internal:8400`, `HOSTAGENT_TOKEN=…`;
    - `COMPUTER_REQUIRE_CONFIRM=true` (підтвердження в Telegram перед мутуючими діями);
+   - `COMPUTER_APPROVAL_POLICY=` — іменована драбина `strict|smart|auto|off` поверх
+     confirm/auto-trust/bypass (`computer_policy.py`, SSOT; невідоме → strict fail-closed);
    - `PS_WHITELIST` / `CLI_WHITELIST` — перелік дозволених команд/exe.
 3. **Новий режим у `decide_mode`/`AGENT_MODE`** — `computer` (завжди тул-луп з повним
    computer-toolkit). Додати `SYSTEM_COMPUTER` промпт, що навчає «драбини швидкодії» з §0.

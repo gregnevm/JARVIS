@@ -24,7 +24,9 @@ class Settings(OllamaCfg):
     )
 
     # ollama_host — спільний блок OllamaCfg (ті самі env, що й tools/memory).
-    llm_backend: Literal["ollama", "kobold"] = "ollama"
+    # "openai" приймаємо, щоб СПІЛЬНИЙ LLM_BACKEND=openai (для tools) не крашив
+    # твін на валідації; твін не має CLOUD_LLM_* → відкат на ollama у create_llm.
+    llm_backend: Literal["ollama", "kobold", "openai"] = "ollama"
     ollama_model: str = "qwen2.5:7b-instruct"
     kobold_host: str = "http://127.0.0.1:5001"
     llm_timeout: float = 180.0
@@ -35,8 +37,11 @@ class Settings(OllamaCfg):
 
 def create_llm(cfg: Settings, client: httpx.Client | None = None) -> LLMInterface:
     log = cfg.llm_log_path or f"{cfg.data_dir.rstrip('/')}/logs/llm.jsonl"
+    # Твін не обслуговує хмару (нема CLOUD_LLM_*): спільний "openai" → ollama-стек,
+    # інакше build_llm_stack(backend="openai") впав би на порожньому base_url.
+    backend = cfg.llm_backend if cfg.llm_backend in ("ollama", "kobold") else "ollama"
     return build_llm_stack(
-        backend=cfg.llm_backend,
+        backend=backend,
         ollama_host=cfg.ollama_host,
         ollama_model=cfg.ollama_model,
         kobold_host=cfg.kobold_host,

@@ -6,6 +6,7 @@ import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from . import computer_policy
 from .computer_access import computer_denied_message
 from .computer_audit import log_action
 from .computer_learned import is_cli_trusted, is_ps_trusted, learn_from_action
@@ -361,8 +362,8 @@ async def wrap_execute(
             return blocked
     if (
         mutating
-        and settings.computer_require_confirm
-        and not settings.bypass_confirmations
+        and computer_policy.require_confirm()
+        and not computer_policy.bypass_confirmations()
         and int(user_id) > 0
     ):
         # Не споживаємо квоту лише за видачу CONFIRM_MARKER — дію ще не застосовано.

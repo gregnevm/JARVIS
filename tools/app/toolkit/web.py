@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import html
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 import httpx
 
+from jarvis_core.safety import exec_guard
+
 from ..config import settings
+from . import sandbox
 
 _UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 JARVIS/1.0"
 
@@ -172,15 +173,14 @@ def code_exec(code: str) -> str:
     code = (code or "").strip()
     if not code:
         return "Порожній код."
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-I", "-c", code],
-            capture_output=True,
-            text=True,
-            timeout=settings.code_exec_timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return f"Таймаут ({settings.code_exec_timeout}s)."
-    out = (proc.stdout or "") + (("\n[stderr] " + proc.stderr) if proc.stderr else "")
+    allowed, reason = exec_guard.screen(
+        code, extra=exec_guard.parse_extra_rules(settings.code_exec_deny_patterns)
+    )
+    if not allowed:
+        return f"Код відхилено guard-правилом ({reason})."
+    result = sandbox.run_python(code)
+    if isinstance(result, str):
+        return result
+    out = (result.stdout or "") + (("\n[stderr] " + result.stderr) if result.stderr else "")
     out = out.strip()
     return out[: settings.fetch_max_chars] or "(порожній вивід)"

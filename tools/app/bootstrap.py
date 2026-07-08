@@ -12,6 +12,7 @@ from jarvis_core.llm.decorators import build_llm_stack
 from jarvis_core.llm.usage import UsageMeter
 from jarvis_core.pipeline.handlers import build_agent_pipeline
 
+from . import computer_policy
 from .agent import AgentRunner, decide_mode
 from .config import settings
 from .memory_client import MemoryClient
@@ -36,8 +37,9 @@ async def _fetch_status(memory: MemoryClient, twin_url: str) -> dict[str, Any]:
         "enable_browser": settings.enable_browser,
         "computer_profile": settings.computer_profile,
         "computer_session_trust_minutes": settings.computer_session_trust_minutes,
-        "computer_require_confirm": settings.computer_require_confirm,
-        "bypass_confirmations": settings.bypass_confirmations,
+        "computer_approval_policy": computer_policy.policy() or "(flags)",
+        "computer_require_confirm": computer_policy.require_confirm(),
+        "bypass_confirmations": computer_policy.bypass_confirmations(),
         "computer_auto_vision": settings.computer_auto_vision,
         "computer_allow_power": settings.computer_allow_power,
         "image_gen": (settings.image_gen_url or "—") + (
@@ -125,6 +127,9 @@ def build_jarvis(memory: MemoryClient, twin_url: str = "") -> tuple[JARVIS, Agen
         ollama_host=settings.ollama_host,
         ollama_model=settings.ollama_model_chat,
         kobold_host=settings.kobold_host,
+        openai_base_url=settings.cloud_llm_base_url,
+        openai_model=settings.cloud_llm_model,
+        openai_api_key=settings.cloud_llm_api_key,
         timeout=settings.ollama_timeout,
         log_path=str(log_path),
         usage_meter=usage_meter,

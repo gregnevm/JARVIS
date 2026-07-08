@@ -189,8 +189,12 @@ CI (`.github/workflows/ci.yml`) — matrix по `jarvis_core/gateway/memory/tool
 
 ## 6. Guardrails / Свідомо НЕ робимо
 
-- ❌ **Зовнішній AI-API як дефолт для inference** — лише явний opt-in; ламає S1.
-- ❌ **`ENABLE_CODE_EXEC=true` без sandbox-ізоляції** — поточний `subprocess -I` не повний sandbox.
+- ❌ **Зовнішній AI-API як дефолт для inference** — лише явний opt-in; ламає S1. Хмара доступна
+  через `OpenAICompatAdapter` (`LLM_BACKEND=openai` + `CLOUD_LLM_*`), але дефолт — `ollama`.
+  Абстракція — свій `LLMInterface`, НЕ LiteLLM/LangChain (кращий аналог замість залежності).
+- ❌ **`ENABLE_CODE_EXEC=true` без sandbox-ізоляції** — дефолт закриває це: bwrap kernel-sandbox,
+  fail-closed (`CODE_EXEC_REQUIRE_SANDBOX=true`, `toolkit/sandbox.py` + guard `safety/exec_guard.py`).
+  Opt-out прапором = свідоме рішення оператора; тоді діють лише `-I`+rlimits+guard.
 - ❌ **Зміна embed-моделі без міграції** — `nomic-embed-text`=768D жорстко; зміна = повний re-embed (Alembic).
 - ❌ **Ollama в Docker на AMD/Windows** — немає `/dev/dri`/`/dev/kfd` у WSL2 (ADR-E2). Ollama лишається на хості.
 - ❌ **Auto-confirm для admin/power computer-дій** — завжди double confirm (C5).
@@ -218,6 +222,7 @@ CI (`.github/workflows/ci.yml`) — matrix по `jarvis_core/gateway/memory/tool
 | [`ROADMAP.md`](ROADMAP.md) | Короткий ops-backlog (M/N/E/S) | Ops |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Архітектура PortableAI (Edge+Twin+LoRA), ADR | Архітектура |
 | [`docs/GAP_ANALYSIS.md`](docs/GAP_ANALYSIS.md) | PortableAI vs поточний стек | Аналіз |
+| [`docs/COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) | JARVIS vs відкриті аналоги (07.2026): матриця, best practices по 10 осях, шортлист адаптації | Аналіз |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) · [`docs/ENV_CHECKLIST.md`](docs/ENV_CHECKLIST.md) · [`docs/COMPUTER_USE.md`](docs/COMPUTER_USE.md) | Безпека · env · tier-контракт | Ops |
 | [`docs/IMPROVEMENT_PROPOSALS.md`](docs/IMPROVEMENT_PROPOSALS.md) | Інженерний лог дедуплікації/тестів (не продуктовий) | Інженерний |
 

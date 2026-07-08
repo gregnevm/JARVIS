@@ -21,6 +21,7 @@ from jarvis_core.agent.trace import tool_trace_entry
 from jarvis_core.llm.chat import ChatBackend
 from jarvis_core.llm.parsers import extract_json_object, scan_balanced_json
 
+from . import computer_policy
 from .config import settings
 from .friction import REASON_LOOP_EXHAUSTED, record_friction
 from .memory_client import MemoryClient
@@ -802,7 +803,7 @@ class AgentRunner:
         from .computer_trust import trust_level
 
         # bypass_confirmations → план авто-апрувиться завжди; інакше — лише в trust-вікні.
-        auto = settings.bypass_confirmations or (await trust_level(user_id)) is not None
+        auto = computer_policy.bypass_confirmations() or (await trust_level(user_id)) is not None
         rec = await plans.create_plan(
             user_id,
             summary=str(parsed.get("summary") or text[:500]),

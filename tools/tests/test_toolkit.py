@@ -188,12 +188,30 @@ async def test_dispatch_calc_via_name():
     assert await toolkit.dispatch("calc", {"expression": "3*3"}) == "9"
 
 
-# --- code_exec ---
+# --- code_exec (sandbox: детально в test_toolkit_sandbox.py) ---
 def test_code_exec_disabled_by_default(monkeypatch):
     monkeypatch.setattr(settings, "enable_code_exec", False)
     assert toolkit.code_exec("print(1)").startswith("Виконання коду вимкнено")
 
 
 def test_code_exec_enabled_runs(monkeypatch):
+    # legacy-режим (без bwrap): свідомий opt-out — суто щоб виконати реальний код у CI
     monkeypatch.setattr(settings, "enable_code_exec", True)
+    monkeypatch.setattr(settings, "code_exec_require_sandbox", False)
+    monkeypatch.setattr("app.toolkit.sandbox.bwrap_path", lambda: None)
     assert toolkit.code_exec("print(2+2)") == "4"
+
+
+def test_code_exec_fail_closed_without_sandbox(monkeypatch):
+    monkeypatch.setattr(settings, "enable_code_exec", True)
+    monkeypatch.setattr(settings, "code_exec_require_sandbox", True)
+    monkeypatch.setattr("app.toolkit.sandbox.bwrap_path", lambda: None)
+    assert toolkit.code_exec("print(1)").startswith("Пісочниця недоступна")
+
+
+def test_code_exec_guard_rejects_env_exfiltration(monkeypatch):
+    # guard спрацьовує ДО спроби запуску — навіть без пісочниці
+    monkeypatch.setattr(settings, "enable_code_exec", True)
+    assert toolkit.code_exec("import os; print(os.environ)").startswith(
+        "Код відхилено guard-правилом (deny:env-exfiltration)"
+    )

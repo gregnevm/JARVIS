@@ -48,6 +48,42 @@
   gateway `editMessageText`. Покрито тестами (на live чека ребілд `gateway`+`tools`).
 - ⏳ **E1** llama.cpp benchmark, **E2** Ollama-in-Docker GPU (вердикт: НІ на цій машині) — експерименти.
 - ⏳ **Twin Етап B/C/D** (Edge MVP · курація даних+eval · RunPod-training) — `docs/GAP_ANALYSIS.md`.
+- ✅ **S5 (sandbox)** kernel-sandbox для code_exec — bwrap fail-closed
+  (`CODE_EXEC_REQUIRE_SANDBOX=true`, `toolkit/sandbox.py`) + pre-exec guard
+  (`jarvis_core/safety/exec_guard.py`, розширюваний `CODE_EXEC_DENY_PATTERNS`) + rlimits.
+  Закриває guardrail-борг «subprocess -I не sandbox». Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.5.
+- ✅ **S6 (approval-драбина)** `COMPUTER_APPROVAL_POLICY` strict|smart|auto|off —
+  одна іменована ручка поверх confirm/auto-trust/bypass (`computer_policy.py`, SSOT P7,
+  невідоме → strict fail-closed). Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.4.
+- ✅ **S13 (multi-node authority)** маркування крос-нодових дій в аудиті: поле `node`
+  (`hostagent` | `local`) у `computer.jsonl` через `execution_node(tool)`
+  (`tools/app/computer_audit.py`) — у логу видно, що дія перетнула межу вузла
+  (Twin→Windows-хост). Вісь 10 аналізу: `docs/COMPETITIVE_ANALYSIS.md` §3.10.
+- ✅ **S12 (packaging DX)** `jarvis doctor` (`python -m app.doctor`, `tools/app/doctor.py`):
+  one-command діагностика — health сервісів (критичні/некритичні), Ollama, bwrap-пісочниця
+  (критична лише за enable_code_exec+require_sandbox), критичні env; `--json`, exit 1 при
+  провалі critical-чека. Реюз `/health`. Поле: `docs/COMPETITIVE_ANALYSIS.md` §3.9.
+- ✅ **S11 (петля персоналізації)** task-success-вимір у LoRA-promote-гейті
+  (`training/eval/gate.py --with-task-success`, wired у `scripts/gate_promote_lora.ps1`):
+  адаптер промоутиться лише якщо live-стек досі проходить end-state сценарії, не лише
+  формат/стиль (fail-closed на збій стека). Замикає self-improve на користь.
+  Вісь 8 аналізу: `docs/COMPETITIVE_ANALYSIS.md` §3.8.
+- ✅ **S10 (памʼять T3)** дистильований рівень: `build_distilled` / job `context_distill`
+  (`jarvis_core/passport/jobs.py`) — салієнтні факти (Mem0-паттерн) як `kind:distilled` з
+  provenance (`source_passport_ids`, fail-closed C1), retention 3650д, без feedback-loop.
+  AO-CTX Ф1 (`docs/proposals/AO-CTX_memory_tiers.md`); поле: `COMPETITIVE_ANALYSIS.md` §3.3.
+- ✅ **S9 (провайдер-абстракція)** `OpenAICompatAdapter` (`jarvis_core/llm/adapters.py`) —
+  будь-який OpenAI-сумісний `/v1` (OpenAI/OpenRouter/vLLM/llama.cpp/Anthropic-проксі) за наявним
+  `LLMInterface`, `LLM_BACKEND=openai`+`CLOUD_LLM_*`, opt-in (S1, дефолт ollama), без LiteLLM.
+  Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.1.
+- ✅ **S8 (skill scanner)** pre-activation скан SKILL.md (`jarvis_core/safety/skill_scan.py`,
+  `SKILLS_SCAN_MODE=block|warn|off`, дефолт block): імперативні правила (download-pipe-exec,
+  destructive-fs, secrets/ssh-read, prompt-injection, encoded-exec) без false positive на
+  згадках у guardrail-текстах. Паттерн поля: `docs/COMPETITIVE_ANALYSIS.md` §3.2 (QwenPaw).
+- ✅ **S7 (task-success eval)** `training/eval/task_success.py` + 20 read-only сценаріїв
+  (`task_scenarios.json`): end-state перевірки live-контрактів (health / tools / security-guard /
+  authority / ops) з latency і gate `--min-pass-pct` (Terminal-Bench-паттерн,
+  `docs/COMPETITIVE_ANALYSIS.md` §3.7). Доповнює format-eval; підключений опцією в kaizen ci-gate.
 
 ---
 
@@ -247,9 +283,10 @@ UIA lite, admin gate, vision/screenshot, cursor_task, cascade routing.
 
 - **Не міняти модель ембедингів** без міграції pgvector. `nomic-embed-text` = 768D,
   таблиця жорстко на `vector(768)`. Зміна = повний re-embed усього історії.
-- **Не вмикати `ENABLE_CODE_EXEC=true`** без sandbox-isolation. Зараз код виконується
-  через `subprocess [sys.executable, "-I", "-c", code]` у tools-контейнері — це
-  обмежений, але не повний sandbox.
+- **`ENABLE_CODE_EXEC=true`** тепер безпечніший за замовчуванням: bwrap kernel-sandbox
+  fail-closed (`CODE_EXEC_REQUIRE_SANDBOX=true`) + pre-exec guard (`safety/exec_guard.py`).
+  Не вимикати require-sandbox без свідомої причини; у Docker дефолтний seccomp може
+  блокувати bwrap → тоді або compose-override, або свідомий opt-out (лишаються `-I`+rlimits+guard).
 - **Не починати "переписати на FastStream/Celery/тощо"** — поточний async-стек на
   FastAPI + httpx обробляє Telegram-навантаження одного користувача із запасом 100x.
 - **Не вмикати `EnableDockerAI=true`** у Docker Desktop ≤4.76 без фіксу від Docker.
