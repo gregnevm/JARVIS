@@ -30,6 +30,13 @@ logger = logging.getLogger("jarvis.gateway.client_api.apps")
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
+# Вхідні межі (P2 Fail-Fast): валідуємо на вході, не в середині запису на диск.
+# Не прапори (не фіча) — стелі проти self-DoS/роздування стору; дефолти щедрі.
+_MAX_BUNDLE_BYTES = 5 * 1024 * 1024   # 5 MiB на single-file web-бандл
+_MAX_NAME_LEN = 200
+_MAX_VERSION_LEN = 64
+_MAX_APPS_PER_USER = 200              # стеля кількості апок на користувача
+
 
 class AppBody(BaseModel):
     name: str
@@ -39,6 +46,12 @@ class AppBody(BaseModel):
 
 def _apps_root(uid: int) -> Path:
     return Path(settings.data_dir) / "apps" / str(uid)
+
+
+def _count_apps(root: Path) -> int:
+    if not root.is_dir():
+        return 0
+    return sum(1 for d in root.iterdir() if d.is_dir() and (d / "index.html").is_file())
 
 
 def _safe_id(app_id: str) -> str:
@@ -82,17 +95,30 @@ def register(router: APIRouter) -> None:
                          ctx: RequestContext = Depends(resolve_client_context)) -> dict[str, Any]:
         """Створити/оновити бандл (авторинг із чату/артефактів). Версія авто-інкремент."""
         aid = _safe_id(app_id)
-        d = _apps_root(_uid(ctx)) / aid
+        name = body.name.strip()
+        if not name or len(name) > _MAX_NAME_LEN:
+            raise HTTPException(status_code=400, detail=f"name required, <= {_MAX_NAME_LEN} chars")
+        if len(body.html.encode("utf-8")) > _MAX_BUNDLE_BYTES:
+            raise HTTPException(status_code=413, detail=f"bundle too large (> {_MAX_BUNDLE_BYTES} bytes)")
+        root = _apps_root(_uid(ctx))
+        d = root / aid
+        # Стеля кількості — лише коли створюємо НОВУ апку (оновлення наявної не росте стор).
+        if not (d / "index.html").is_file() and _count_apps(root) >= _MAX_APPS_PER_USER:
+            raise HTTPException(status_code=409, detail=f"app limit reached ({_MAX_APPS_PER_USER})")
         d.mkdir(parents=True, exist_ok=True)
         prev = _read_manifest(d)
         if body.version.strip():
-            version = body.version.strip()
+            version = body.version.strip()[:_MAX_VERSION_LEN]
         elif str(prev.get("version", "")).isdigit():
-            version = str(int(prev["version"]) + 1)  # авто-інкремент
+            version = str(int(prev["version"]) + 1)  # авто-інкремент числової версії
+        elif prev.get("version"):
+            # Ненумерична попередня версія (напр. semver "1.2.0") — зберегти, НЕ скидати
+            # на "1": скидання втратило б інфо версії й збило б in-app update-детект.
+            version = str(prev["version"])[:_MAX_VERSION_LEN]
         else:
             version = "1"
         (d / "index.html").write_text(body.html, encoding="utf-8")
-        manifest = {"name": body.name, "version": version, "updated": int(time.time())}
+        manifest = {"name": name, "version": version, "updated": int(time.time())}
         (d / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
         return {"id": aid, **manifest}
 
