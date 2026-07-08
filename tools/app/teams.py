@@ -131,7 +131,12 @@ async def run_team_pipeline(
     progress_cb: Any = None,
 ) -> dict[str, Any]:
     """Sequential role execution; mutates Redis team record."""
-    rec = await get_team(team_id)
+    # Anti-IDOR (AGENTS §5, mirrors orchestrator.py:167): `POST /teams/run` forwards a
+    # caller-supplied team_id and this pipeline mutates the record (mark_running/
+    # append_step/finish_team). Scope the load to the caller so user A cannot run and
+    # overwrite user B's team + read back its result. get_team returns None on owner
+    # mismatch (redis_store owner_user_id gate) → fail closed to "team not found".
+    rec = await get_team(team_id, user_id)
     if rec is None:
         return {"error": "team not found"}
     await mark_running(team_id)

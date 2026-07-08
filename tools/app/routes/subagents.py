@@ -61,6 +61,13 @@ def register(router: APIRouter) -> None:
         from .. import bg_jobs, subagents
 
         task = require_text(body.task)
+        # Anti-IDOR (AGENTS §5, mirrors orchestrator.py:167): the body forwards a
+        # caller-supplied run_id, and mark_running/finish_run below rewrite the
+        # record (status/result/error/iters). Without the owner filter user A could
+        # overwrite user B's subagent run + leak the slot. get_run returns None on
+        # owner mismatch (redis_store owner_user_id gate) → fail closed to 404.
+        if await subagents.get_run(body.run_id, body.user_id) is None:
+            raise HTTPException(status_code=404, detail="subagent run not found")
         await subagents.mark_running(body.run_id)
         try:
             result = await request.app.state.agent.run(
