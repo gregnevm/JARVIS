@@ -74,6 +74,19 @@ async def test_pattern_normalized_case_and_blank():
     assert len(spy.got) == 1
 
 
+async def test_passport_tags_normalized_on_match_no_silent_drop():
+    # Дзеркало до test_pattern_normalized_case_and_blank: тепер НЕнормалізована
+    # have-сторона (сирий uppercase-тег у паспорті, що проминув normalize_tags)
+    # теж матчиться проти канонічного lowercase-патерну — інакше подія тихо
+    # зникала б із шини (регресія на tags_contain have-side, bus.py:140).
+    bus = InProcBus()
+    spy = _Spy()
+    bus.subscribe(["priority:high"], spy, name="norm")
+    await bus.emit(_p("sms", tags=["Kind:SMS", "  Priority:HIGH "]))
+    await bus.drain()
+    assert len(spy.got) == 1
+
+
 # --- фан-аут та ізоляція ---
 
 async def test_fanout_to_all_matching_subscribers():

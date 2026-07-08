@@ -47,6 +47,21 @@ def test_tags_contain_and_semantics():
     assert tags_contain(tags, ["person:dad"]) is False
 
 
+def test_tags_contain_case_insensitive_on_have_side():
+    # have-сторона теж нормалізується → паспорт із сирим (uppercase/space) тегом
+    # не випадає з матчингу проти канонічного (lowercase) required.
+    raw = ["Kind:Invoice", "  Sensitivity:Finance "]
+    assert tags_contain(raw, ["kind:invoice"]) is True
+    assert tags_contain(raw, ["kind:invoice", "sensitivity:finance"]) is True
+    # і навпаки — сирий required проти канонічного have (симетрія)
+    assert tags_contain(["kind:invoice"], ["KIND:INVOICE"]) is True
+
+
+def test_tags_contain_empty_required_is_wildcard():
+    assert tags_contain(["kind:note"], []) is True
+    assert tags_contain([], []) is True
+
+
 # --- models / sensitivity ---
 
 def test_normalize_sensitivity_falls_back_to_personal():
