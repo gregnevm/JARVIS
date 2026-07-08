@@ -29,7 +29,7 @@ def register(router: APIRouter) -> None:
         query = require_text(req.query, field="query")
 
         async def _prog(pct: int, msg: str) -> None:
-            await bg_jobs.update_progress(req.job_id, pct, msg)
+            await bg_jobs.update_progress(req.job_id, pct, msg, user_id=req.user_id)
 
         result = await research.deep_research_with_llm(
             query,
@@ -39,5 +39,5 @@ def register(router: APIRouter) -> None:
         )
         report = str(result.get("report") or "")
         payload = json.dumps(result, ensure_ascii=False)
-        await bg_jobs.finish_job(req.job_id, result=payload, status="done")
+        await bg_jobs.finish_job(req.job_id, result=payload, status="done", user_id=req.user_id)
         return {"report": report, "sources": result.get("sources") or []}

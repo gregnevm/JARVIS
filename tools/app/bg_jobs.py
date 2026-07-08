@@ -146,8 +146,14 @@ async def create_orchestrator_job(
     )
 
 
-async def update_progress(job_id: str, progress: int, message: str = "") -> dict[str, Any] | None:
-    rec = await get_job(job_id)
+async def update_progress(
+    job_id: str, progress: int, message: str = "", *, user_id: int | None = None
+) -> dict[str, Any] | None:
+    # Anti-IDOR (AGENTS §5): route handlers forward a caller-supplied job_id; pass the
+    # caller's user_id so a mismatch no-ops (get_job owner-gate → None) instead of
+    # letting user A overwrite user B's job progress. user_id=None keeps the internal
+    # worker's system access (redis_store.get docstring) — never gate the dequeue path.
+    rec = await get_job(job_id, user_id)
     if rec is None:
         return None
     rec["progress"] = max(0, min(int(progress), 99))
@@ -198,8 +204,13 @@ async def finish_job(
     result: str = "",
     error: str = "",
     status: str = "done",
+    user_id: int | None = None,
 ) -> dict[str, Any] | None:
-    rec = await get_job(job_id)
+    # Anti-IDOR (AGENTS §5): route handlers forward a caller-supplied job_id; pass the
+    # caller's user_id so a mismatch no-ops (get_job owner-gate → None) instead of
+    # letting user A overwrite user B's job record (status/result/progress). user_id=None
+    # keeps the internal worker's system access (redis_store.get docstring) unchanged.
+    rec = await get_job(job_id, user_id)
     if rec is None:
         return None
     rec["status"] = status

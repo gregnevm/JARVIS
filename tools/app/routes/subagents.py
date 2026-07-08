@@ -84,10 +84,12 @@ def register(router: APIRouter) -> None:
                 status="done",
             )
             if body.job_id:
-                await bg_jobs.finish_job(body.job_id, result=text, status="done")
+                await bg_jobs.finish_job(body.job_id, result=text, status="done", user_id=body.user_id)
             return {"result": text, "iters": result.get("iters", 0)}
         except Exception as exc:  # noqa: BLE001
             await subagents.finish_run(body.run_id, error=str(exc), status="failed")
             if body.job_id:
-                await bg_jobs.finish_job(body.job_id, error=str(exc)[:500], status="failed")
+                await bg_jobs.finish_job(
+                    body.job_id, error=str(exc)[:500], status="failed", user_id=body.user_id
+                )
             raise HTTPException(status_code=502, detail=str(exc)) from exc
