@@ -82,7 +82,10 @@ def get_skill(skill_id: str) -> dict[str, Any] | None:
         return None
     raw = path.read_text(encoding="utf-8", errors="replace")
     meta, body = _parse_frontmatter(raw)
-    allowed, hits = skill_scan.verdict(body, settings.skills_scan_mode)
+    # Скануємо і `name`: він інжектиться в промпт (skill_prompt_block), тож
+    # prompt-injection у frontmatter-назві оминав би скан лише по тілу.
+    scan_target = f"{meta.get('name', '')}\n{body}"
+    allowed, hits = skill_scan.verdict(scan_target, settings.skills_scan_mode)
     if hits:
         logger.warning("skill %s: scan hits %s (mode=%s)", skill_id, hits, settings.skills_scan_mode)
     if not allowed:

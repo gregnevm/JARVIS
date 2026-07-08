@@ -1,6 +1,7 @@
 """Kernel-sandbox code_exec: argv-конструкція, fail-closed деградація, rlimits."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 
@@ -68,6 +69,40 @@ def test_run_python_bwrap_failure_falls_back_when_opted_out(monkeypatch):
     assert not isinstance(result, str)
     assert result.stdout.strip() == "4"
     assert len(calls) == 2 and calls[1][0] == sys.executable
+
+
+def test_run_python_forged_bwrap_stderr_does_not_escape_sandbox(monkeypatch):
+    """Дитина підробляє 'bwrap:' у stderr, АЛЕ bwrap реально її запустив (написав
+    у status-fd) → НЕ вважаємо це збоєм старту й НЕ ре-ранимо код поза пісочницею."""
+    monkeypatch.setattr(sandbox, "bwrap_path", lambda: "/usr/bin/bwrap")
+    monkeypatch.setattr(settings, "code_exec_require_sandbox", False)
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(list(argv))
+        for fd in kwargs.get("pass_fds", ()):  # bwrap запустив дитину → пише статус
+            os.write(fd, b'{"exit-code":1}\n')
+        return subprocess.CompletedProcess(argv, 1, stdout="sandboxed-out", stderr="bwrap:\n")
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    result = sandbox.run_python("print('x')")
+    assert not isinstance(result, str)          # ні SANDBOX_UNAVAILABLE, ні таймаут
+    assert result.stdout == "sandboxed-out"
+    assert len(calls) == 1                       # жодного unsandboxed ре-рану
+
+
+def test_run_python_fallback_timeout_caught(monkeypatch):
+    """Опт-аут: bwrap не стартував, а фолбек зависає → 'Таймаут', не виняток (#2)."""
+    monkeypatch.setattr(sandbox, "bwrap_path", lambda: "/usr/bin/bwrap")
+    monkeypatch.setattr(settings, "code_exec_require_sandbox", False)
+
+    def fake_run(argv, **kwargs):
+        if "pass_fds" in kwargs:                 # bwrap-виклик: статус не пишемо → збій старту
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="bwrap: fail")
+        raise subprocess.TimeoutExpired(argv, settings.code_exec_timeout)  # фолбек зависає
+
+    monkeypatch.setattr(sandbox.subprocess, "run", fake_run)
+    assert "Таймаут" in str(sandbox.run_python("while True: pass"))
 
 
 def test_run_python_timeout_message(monkeypatch):

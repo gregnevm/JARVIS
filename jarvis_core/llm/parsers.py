@@ -127,8 +127,10 @@ def openai_delta(line: str) -> tuple[str, bool]:
         data = json.loads(line)
     except json.JSONDecodeError:
         return "", False
-    choices = data.get("choices") or []
-    if not choices or not isinstance(choices[0], dict):
+    if not isinstance(data, dict):  # валідний JSON, але не об'єкт (null/рядок/масив) — keepalive тощо
+        return "", False
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
         return "", False
     delta = choices[0].get("delta") or {}
     content = str(delta.get("content") or "") if isinstance(delta, dict) else ""

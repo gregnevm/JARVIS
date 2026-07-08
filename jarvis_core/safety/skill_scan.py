@@ -19,8 +19,11 @@ from collections.abc import Iterable
 _RULES: tuple[tuple[str, str], ...] = (
     (r"(curl|wget|iwr|invoke-webrequest)[^\n]*\|\s*(ba|z)?sh\b", "download-pipe-exec"),
     (r"rm\s+-rf\s+[/~]|remove-item\b[^\n]*-recurse[^\n]*-force", "destructive-fs"),
-    (r"(cat|type|get-content|open\(|read_text)[^\n]{0,40}\.env\b", "secrets-read"),
-    (r"(cat|type|copy|scp|get-content)[^\n]{0,40}(id_rsa|\.ssh)", "sshkey-read"),
+    # \b-межі: read-дієслова матчаться як цілі токени, не як підрядки звичайних слів
+    # ('type' у 'prototype', 'cat' у 'Locate'/'indicates'/'Concatenate') — інакше
+    # легітимний скіл, що просто згадує .env/.ssh, блокувався б у block-режимі.
+    (r"\b(cat|type|get-content|read_text)\b[^\n]{0,40}\.env\b|\bopen\([^\n]{0,40}\.env\b", "secrets-read"),
+    (r"\b(cat|type|copy|scp|get-content)\b[^\n]{0,40}(id_rsa|\.ssh)", "sshkey-read"),
     (
         r"ignore\s+(all\s+)?(previous|prior)\s+instructions"
         r"|disregard\s+(the\s+)?system\s+prompt"

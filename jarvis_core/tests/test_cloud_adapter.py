@@ -23,9 +23,28 @@ def test_openai_delta_finish_reason():
     assert openai_delta(line) == ("", True)
 
 
-@pytest.mark.parametrize("line", ["", "data:", "data: not-json", 'data: {"choices":[]}', "data: {}"])
+@pytest.mark.parametrize(
+    "line",
+    [
+        "", "data:", "data: not-json", 'data: {"choices":[]}', "data: {}",
+        # валідний JSON, але НЕ обʼєкт (keepalive/масив/рядок) — не має падати з AttributeError
+        "data: null", 'data: "keepalive"', "data: [1,2]", "data: 42",
+        # choices не список
+        'data: {"choices":{"0":{"delta":{"content":"x"}}}}',
+    ],
+)
 def test_openai_delta_robust(line: str):
     assert openai_delta(line) == ("", False)
+
+
+def test_generate_choices_as_object_returns_empty():
+    # малформед провайдер: choices — обʼєкт, не масив → порожній рядок, не KeyError
+    ad_client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda r: httpx.Response(200, json={"choices": {"0": {"message": {"content": "x"}}}})
+        )
+    )
+    assert OpenAICompatAdapter("https://api.x/v1", "m", client=ad_client).generate("q") == ""
 
 
 # --- адаптер через MockTransport ---

@@ -91,8 +91,8 @@ class OpenAICompatAdapter(LLMInterface):
         )
         resp.raise_for_status()
         data = resp.json()
-        choices = data.get("choices") or [] if isinstance(data, dict) else []
-        if not choices or not isinstance(choices[0], dict):
+        choices = data.get("choices") if isinstance(data, dict) else None
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
             return ""
         msg = choices[0].get("message") or {}
         return str(msg.get("content") or "") if isinstance(msg, dict) else ""

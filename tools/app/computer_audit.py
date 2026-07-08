@@ -15,14 +15,17 @@ from .config import settings
 # дії (Twin-контейнер → hostagent). Маркуємо їх окремим класом в аудиті
 # (multi-node authority, `docs/COMPETITIVE_ANALYSIS.md` §3.10): у логу видно, що
 # дія перетнула межу вузла, а не лишилась у пісочниці tools-контейнера.
+# Джерело істини — hostagent-контракт (hostagent_contract.TOOLS_HOSTAGENT_ROUTES):
+# code_edit/code_edit_batch → /fs/edit(_batch) на хості (крос-нодові). browser_* НЕ
+# у контракті — Playwright крутиться в tools-контейнері (browser.py), тож local.
 _HOSTAGENT_TOOLS = frozenset(
     {
         "run_powershell", "run_cli",
         "fs_list", "fs_read", "fs_write", "fs_write_bytes",
+        "code_edit", "code_edit_batch",
         "capture_screenshot", "clipboard_read", "clipboard_write", "power_action",
         "window_list", "window_focus", "uia_invoke",
         "screen_click", "screen_type", "screen_hotkey", "screen_scroll", "see_screen",
-        "browser_open", "browser_read", "browser_click", "browser_fill", "browser_eval",
     }
 )
 
