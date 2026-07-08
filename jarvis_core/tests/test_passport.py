@@ -62,6 +62,14 @@ def test_tags_contain_empty_required_is_wildcard():
     assert tags_contain([], []) is True
 
 
+def test_tags_contain_tolerates_non_str_element():
+    # RedisBus будує Passport із untrusted JSON без per-element str-cast; тег-null
+    # даватиме None у списку. str(t) толерує його (не крашить матчинг), а решта
+    # тегів досі матчиться — інакше AttributeError валив би listener шини.
+    assert tags_contain(["kind:x", None], ["kind:x"]) is True  # type: ignore[list-item]
+    assert tags_contain(["kind:x", None], ["kind:y"]) is False  # type: ignore[list-item]
+
+
 # --- models / sensitivity ---
 
 def test_normalize_sensitivity_falls_back_to_personal():
