@@ -57,6 +57,19 @@ def normalize_tags(tags: list[str] | None, kind: str) -> list[str]:
 
 
 def tags_contain(tags: list[str], required: list[str]) -> bool:
-    """Containment: усі `required` присутні в `tags` (AND-семантика ретриву)."""
-    have = set(tags)
+    """Containment: усі `required` присутні в `tags` (AND-семантика ретриву).
+
+    Case-insensitive **симетрично**: обидві сторони зводяться до канонічної форми
+    `normalize_tags` (strip+lower). Інакше have-сторона лишалась сирою, і паспорт
+    із ненормалізованим тегом (напр. `Passport(tags=["Kind:Invoice"])`, що йде в
+    BUS-emit повз `normalize_tags`) тихо випадав би з матчингу підписки —
+    silent-drop на шині (bus.py:140/258). Порожній `required` → wildcard (True).
+
+    `str(t)` (як `normalize_tags` на tags.py:48) толерує не-str елемент: RedisBus
+    будує Passport із cross-service JSON (`from_store` не робить per-element cast),
+    тож `tags:[...,null]` дав би `None` у списку; без str-cast `.strip()` кинув би
+    AttributeError на untrusted-ingress (поза parse-try/except) → crash listener'а +
+    reconnect-шторм. Зі `str(t)` елемент стає `"none"` і просто не матчиться.
+    """
+    have = {str(t).strip().lower() for t in tags}
     return all(r.strip().lower() in have for r in required)
