@@ -42,6 +42,45 @@ def test_upsert_autoincrements_version(client):
     assert "v2" in client.get("/api/v1/apps/tool/bundle", auth=AUTH).text
 
 
+def test_upsert_preserves_nonnumeric_version(client):
+    # semver-версія задана явно, далі оновлення без версії → НЕ скидається на "1"
+    client.post("/api/v1/apps/semv", auth=AUTH,
+                json={"name": "S", "html": "v1", "version": "1.2.0"})
+    r = client.post("/api/v1/apps/semv", auth=AUTH, json={"name": "S", "html": "v2"})
+    assert r.json()["version"] == "1.2.0"
+
+
+def test_upsert_rejects_oversized_bundle(client, monkeypatch):
+    from app.client_api import apps
+    monkeypatch.setattr(apps, "_MAX_BUNDLE_BYTES", 8)
+    r = client.post("/api/v1/apps/big", auth=AUTH,
+                    json={"name": "B", "html": "x" * 9})
+    assert r.status_code == 413
+    # межа рівно на стелі — ок
+    assert client.post("/api/v1/apps/big", auth=AUTH,
+                       json={"name": "B", "html": "x" * 8}).status_code == 200
+
+
+def test_upsert_rejects_blank_or_long_name(client, monkeypatch):
+    from app.client_api import apps
+    assert client.post("/api/v1/apps/n1", auth=AUTH,
+                       json={"name": "  ", "html": "y"}).status_code == 400
+    monkeypatch.setattr(apps, "_MAX_NAME_LEN", 4)
+    assert client.post("/api/v1/apps/n2", auth=AUTH,
+                       json={"name": "toolong", "html": "y"}).status_code == 400
+
+
+def test_upsert_app_count_cap(client, monkeypatch):
+    from app.client_api import apps
+    monkeypatch.setattr(apps, "_MAX_APPS_PER_USER", 2)
+    assert client.post("/api/v1/apps/a1", auth=AUTH, json={"name": "A", "html": "y"}).status_code == 200
+    assert client.post("/api/v1/apps/a2", auth=AUTH, json={"name": "A", "html": "y"}).status_code == 200
+    # 3-тя НОВА апка → 409
+    assert client.post("/api/v1/apps/a3", auth=AUTH, json={"name": "A", "html": "y"}).status_code == 409
+    # оновлення НАЯВНОЇ (не росте кількість) — досі дозволено
+    assert client.post("/api/v1/apps/a1", auth=AUTH, json={"name": "A", "html": "y2"}).status_code == 200
+
+
 def test_invalid_id_400(client):
     assert client.post("/api/v1/apps/Bad ID!", auth=AUTH,
                        json={"name": "x", "html": "y"}).status_code == 400
