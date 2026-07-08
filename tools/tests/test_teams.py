@@ -1,4 +1,6 @@
 """P9 agent teams storage."""
+from unittest.mock import AsyncMock
+
 import pytest
 from app import teams
 
@@ -56,3 +58,36 @@ async def test_create_coding_team_roles(monkeypatch: pytest.MonkeyPatch):
 def test_tester_role_prompt():
     assert "Tester" in teams.role_system_prompt("tester")
     assert teams.CODING_ROLES == ("coder", "reviewer", "tester")
+
+
+async def test_run_team_pipeline_rejects_foreign_team_idor(monkeypatch: pytest.MonkeyPatch):
+    """Anti-IDOR: user B не може прогнати/перезаписати team користувача A.
+
+    `POST /teams/run` форвардить caller-supplied team_id; без owner-scope у
+    run_team_pipeline user B завантажив би team A, виконав ролі й finish_team
+    перезаписав би чужий запис (+ прочитав result). get_team(team_id, user_id)
+    фейлить закрито (redis_store owner-gate) → 'team not found', жодної мутації."""
+    _inject(monkeypatch)
+    agent = AsyncMock()
+    agent.run = AsyncMock(return_value={"text": "leaked", "iters": 1})
+
+    rec = await teams.create_team(1, "Owner A task", budget_per_role=2)
+    team_id = rec["id"]
+
+    # user 2 намагається прогнати team користувача 1
+    out = await teams.run_team_pipeline(agent, 2, team_id)
+    assert out == {"error": "team not found"}
+    # жодної ролі не виконано — пайплайн не торкнувся agent
+    assert agent.run.call_count == 0
+    # запис власника A не змінено (лишився 'queued', без result)
+    owned = await teams.get_team(team_id, 1)
+    assert owned is not None
+    assert owned["status"] == "queued"
+    assert not owned.get("result")
+
+    # positive: власник A проганяє свою ж team → owner-guard НЕ over-block'ає
+    owner_out = await teams.run_team_pipeline(agent, 1, team_id)
+    assert owner_out.get("result")
+    assert agent.run.call_count == len(owned["roles"])
+    done = await teams.get_team(team_id, 1)
+    assert done is not None and done["status"] == "done"
