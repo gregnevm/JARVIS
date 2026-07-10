@@ -65,7 +65,7 @@
 |---|-------|------|
 | P2-1 | `jarvis_core/context.py:40` `to_headers()`/`from_headers()` | Мертвий код: 0 прод-консюмерів (тільки тести). PR#4 «X-JARVIS-* propagation» НЕ підключений — `tools_request` шле лише `X-Request-ID`; user_id йде в JSON-body. → Або підключити, або відмітити PR#4 як not-done. |
 | P2-2 | `memory/app/main.py:119` `/store` | «Naked» rows (без kind/summary/tags). Це **scope-неузгодженість**, не баг: C1-паспорт стосується `context_events`, raw-RAG — субстрат під ним. Форсувати summary на кожен меседж = LLM-виклик на меседж (ламає P6). → Уточнити C1-scope в AGENTS.md. |
-| P2-3 | `jarvis_core/passport/tags.py` (P10 addressing) | Tag-as-handle («виклик `module:scam-shield`») — 0 резолверів у коді, лише index-роль. → Реалізувати dispatch або знизити claim. |
+| ✅ P2-3 | `jarvis_core/passport/addressing.py` (P10 addressing) | ~~Tag-as-handle («виклик `module:scam-shield`») — 0 резолверів у коді, лише index-роль.~~ **ЗАКРИТО (SY-B3.1):** `resolve(tag) → Handle` (`ModuleRef` для `module:`, `ContextQuery` для решти) + `context_of(tag, days)` — резолвер реалізовано, тег став хендлом. Живий диспатч модулів — SY-B3.2. |
 | P2-4 | `memory` redaction | `default_redactor()` імпортнутий, але не викликається в `/context/ingest`. → Застосувати на summary/payload. |
 | P2-5 | `edge/rag.py` + AGENTS:134 | «SQLite-vec» — дрейф: насправді pure-Python cosine/keyword full-scan (cap 5000), дефолт = keyword. → Виправити доку або інтегрувати sqlite-vec. |
 | P2-6 | `gateway/app/openai_api.py:152` | `/v1/models` hardcoded (не з ModelRegistry, P7); `/v1/embeddings`/`/v1/responses` відсутні (коректно `[ ]` в roadmap). |

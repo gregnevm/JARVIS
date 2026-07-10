@@ -171,8 +171,9 @@ class PassportBus(Protocol):
 
 **Мета:** тег стає хендлом. Одна адресна книга для пам'яті, модулів і рутин.
 
-- [ ] **SY-B3.1** `jarvis_core/passport/addressing.py`: `resolve(tag) -> Handle`
-      (`ContextQuery | ModuleRef`); `context_of("person:mom", days=7)`
+- [x] **SY-B3.1** `jarvis_core/passport/addressing.py`: `resolve(tag) -> Handle`
+      (`ContextQuery | ModuleRef`); `context_of("person:mom", days=7)` ✅ чистий
+      резолвер (тег→хендл), 25 тестів; закриває FEATURE_AUDIT P2-3
 - [ ] **SY-B3.2** реєстрація модулів: при старті модуль інжестить паспорт `kind:module`
       з тегами `module:<name>`, `capability:*`, `tier:<0..4>`; `mcp_list` = tag-запит
 - [ ] **SY-B3.3** `normalize_tags`: нові неймспейси `module:`, `capability:`, `tier:`,
