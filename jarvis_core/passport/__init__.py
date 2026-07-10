@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from .addressing import ContextQuery, Handle, ModuleRef, context_of, resolve
 from .build import PROVISIONAL_SUMMARY_LEN, build_store_event
 from .jobs import (
     CONTEXT_JOB_NAMES,
@@ -54,4 +55,9 @@ __all__ = [
     "format_context_block",
     "build_store_event",
     "PROVISIONAL_SUMMARY_LEN",
+    "resolve",
+    "context_of",
+    "ContextQuery",
+    "ModuleRef",
+    "Handle",
 ]
