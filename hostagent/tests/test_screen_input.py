@@ -31,6 +31,31 @@ def test_build_scroll_ps():
     ps = build_scroll_ps(-3)
     assert "0x0800" in ps
     assert "-360" in ps
+    # Регресія: wheel-дельта `dwData` для MOUSEEVENTF_WHEEL — ЗНАКОВА. Раніше
+    # P/Invoke оголошував її `uint`, тож scroll-down (від'ємна дельта) кидав на
+    # bind-і → /screen/scroll віддавав 500. Пінимо ТОЧНУ сигнатуру (не підрядок
+    # "int d," — він є і в "uint d,").
+    assert "uint dy, int d, uint e)" in ps       # wheel-параметр знаковий
+    assert "uint dy, uint d, uint e)" not in ps  # жодної uint-сигнатури не лишилось
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="windows only")
+def test_scroll_down_pinvoke_binds_negative_delta():
+    # Доводить фікс на реальній платформі: генерований PS Add-Type-ить сигнатуру
+    # й біндить від'ємну дельту з flags=0 (безпечний no-op — біт WHEEL не
+    # виставлений, події колеса не буде). До фіксу (`uint d`) це кидало
+    # "Cannot convert ... -120 ... to System.UInt32"; після — exit 0.
+    import subprocess
+
+    snippet = build_scroll_ps(-1).replace(
+        "[WinMouse]::mouse_event(0x0800, 0, 0, -120, 0)",
+        "[WinMouse]::mouse_event(0, 0, 0, -120, 0)",  # flags=0 → no-op біндинг
+    )
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", snippet],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert r.returncode == 0, f"negative wheel delta failed to bind: {r.stderr}"
 
 
 @pytest.fixture
