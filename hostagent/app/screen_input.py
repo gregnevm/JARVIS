@@ -109,7 +109,13 @@ def build_hotkey_ps(keys: list[str]) -> str:
 
 
 def build_scroll_ps(clicks: int, x: int | None = None, y: int | None = None) -> str:
-    """Scroll wheel at optional position. clicks: positive=up, negative=down."""
+    """Scroll wheel at optional position. clicks: positive=up, negative=down.
+
+    NB: `mouse_event`'s wheel param (`dwData`) is declared `int`, not `uint` —
+    for MOUSEEVENTF_WHEEL it is SIGNED (negative = scroll down). A `uint`
+    declaration makes PowerShell throw at bind time on any negative delta, so
+    scroll-down would 500 the /screen/scroll endpoint. Keep it `int`.
+    """
     clicks = max(-50, min(int(clicks), 50))
     delta = clicks * 120
     move = ""
@@ -120,7 +126,7 @@ using System;
 using System.Runtime.InteropServices;
 public class WinMouse {{
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int X, int Y);
-  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, uint e);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, int d, uint e);
 }}
 "@
 [WinMouse]::SetCursorPos({int(x)}, {int(y)}) | Out-Null
@@ -133,7 +139,7 @@ Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 public class WinMouse {{
-  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, uint e);
+  [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, int d, uint e);
 }}
 "@
 [WinMouse]::mouse_event(0x0800, 0, 0, {delta}, 0)
