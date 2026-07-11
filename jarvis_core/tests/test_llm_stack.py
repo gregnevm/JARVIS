@@ -92,6 +92,38 @@ async def test_ollama_chat_stream_yields_deltas():
     await client.aclose()
 
 
+async def test_ollama_chat_stream_emits_prompt_eval_count():
+    # Регресія (SY-6, usage==billing): стрім-шлях реконструював stats-dict для
+    # _emit_stats БЕЗ `prompt_eval_count` → кожен стрімлений хід писав tokens_in=0.
+    # Фінальний done-чанк несе і вихід (eval_count), і вхід (prompt_eval_count).
+    lines = [
+        json.dumps({"message": {"content": "hi"}, "done": False}),
+        json.dumps({
+            "message": {"content": ""}, "done": True,
+            "eval_count": 50, "eval_duration": 1_000_000_000,
+            "prompt_eval_count": 120, "model": "qwen",
+        }),
+    ]
+    body = "\n".join(lines).encode()
+
+    def handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body)
+
+    captured: list[dict] = []
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    backend = OllamaChatBackend(
+        "http://o", client=client,
+        on_inference_stats=lambda s: captured.append(s),  # sync-callback дозволено
+    )
+    async for _ in backend.chat_stream("m", [{"role": "user", "content": "hi"}]):
+        pass
+    await client.aclose()
+
+    assert captured, "стрім має емітити inference-stats на done-чанку"
+    assert captured[0]["prompt_eval_count"] == 120   # до фіксу: 0 (реконструйовано без ключа)
+    assert captured[0]["eval_count"] == 50           # регрес-guard на наявний ключ
+
+
 async def test_ollama_chat_stream_trips_breaker_on_error():
     def handler(_req: httpx.Request) -> httpx.Response:
         return httpx.Response(500)

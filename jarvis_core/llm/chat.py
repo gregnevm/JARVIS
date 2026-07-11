@@ -172,6 +172,10 @@ class OllamaChatBackend:
                             {
                                 "eval_count": stats["eval_count"],
                                 "eval_duration": stats["eval_duration_ns"],
+                                # Вхідні токени: без цього ключа _emit_stats re-parse
+                                # давав 0 → кожен стрімлений хід писав tokens_in=0
+                                # (розбіжність із non-stream chat(); SY-6 usage==billing).
+                                "prompt_eval_count": stats["prompt_eval_count"],
                                 "model": stats.get("model") or model,
                             }
                         )
