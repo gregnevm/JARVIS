@@ -513,7 +513,10 @@ class DB:
                 user_id,
             )
             recent = await con.fetch(
-                "SELECT id, kind, source, summary, tags, created_at FROM context_events "
+                # Повна проєкція паспорта — той самий набір, що читає `_context_json`
+                # (як у search_context/recent_context). Вужчий SELECT = KeyError у мапері.
+                "SELECT id, kind, source, summary, tags, sensitivity, ref, "
+                "       event_ts, created_at FROM context_events "
                 "WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2",
                 user_id,
                 recent_limit,

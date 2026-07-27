@@ -112,7 +112,7 @@ class ContextQuery:
 | **Редакція** | дворівнева: device pre-redact + серверний `Redactor` перед store; правила за `sensitivity` | Strategy |
 | **Рівні чутливості** | `sensitivity:` керує глибиною редакції, retention і **чи зберігати raw** (health/finance → summary-only) | — |
 | **Retention** | per-kind TTL; джоб `context_retention` чистить прострочений raw, summary живе довше | scheduled bg_job |
-| **Privacy ledger** | `/context/ledger` = read-model над `context_events` (що зібрано/відправлено) | — |
+| **Privacy ledger** | `/context/ledger` = read-model над `context_events` (що зібрано/відправлено); `recent` віддає **повну** проєкцію паспорта — той самий контракт, що `/search` і `/recent` (спільний мапер `DB._context_json`, лок: `memory/tests/test_context_projection.py`) | — |
 | **Observability** | лічильники: ingest/source, embed-success-rate, passports/kind → metrics | — |
 | **Offline-first** | embed best-effort (store без вектора, доембедити пізніше); черга на продюсері | (готово) |
 
